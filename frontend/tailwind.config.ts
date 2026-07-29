@@ -5,14 +5,13 @@ export default {
   theme: {
     extend: {
       colors: {
-        ink: "#17202f",
-        navy: "#173c58",
-        teal: "#0d9488",
-        mist: "#f4f7f8",
+        ink: "#f7fbff",
+        navy: "#050a12",
+        teal: "#00d7e6",
+        mist: "#050a12",
       },
-      boxShadow: { soft: "0 18px 50px rgba(23, 60, 88, 0.08)" },
+      boxShadow: { soft: "0 24px 80px rgba(0, 215, 230, 0.10)" },
     },
   },
   plugins: [],
 } satisfies Config;
-

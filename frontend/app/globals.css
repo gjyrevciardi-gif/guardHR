@@ -2,17 +2,38 @@
 @tailwind components;
 @tailwind utilities;
 
-:root { color: #17202f; background: #f4f7f8; }
+:root { color: #f7fbff; background: #050a12; }
 * { box-sizing: border-box; }
-body { margin: 0; font-family: Arial, Helvetica, sans-serif; }
+body {
+  margin: 0;
+  font-family: Arial, Helvetica, sans-serif;
+  background:
+    radial-gradient(circle at 18% 20%, rgba(0, 215, 230, 0.12), transparent 24rem),
+    radial-gradient(circle at 78% 12%, rgba(75, 115, 255, 0.10), transparent 22rem),
+    #050a12;
+  color: #f7fbff;
+}
 button, input, textarea, select { font: inherit; }
-button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-visible { outline: 3px solid rgba(13,148,136,.35); outline-offset: 2px; }
+button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-visible { outline: 3px solid rgba(0,215,230,.35); outline-offset: 2px; }
 
-@layer components {
-  .card { @apply rounded-2xl border border-slate-200 bg-white shadow-soft; }
-  .input { @apply w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm outline-none transition focus:border-teal focus:ring-2 focus:ring-teal/15; }
-  .btn-primary { @apply inline-flex items-center justify-center gap-2 rounded-xl bg-navy px-5 py-3 text-sm font-semibold text-white transition hover:bg-[#0e2f47] disabled:cursor-not-allowed disabled:opacity-50; }
-  .btn-secondary { @apply inline-flex items-center justify-center gap-2 rounded-xl border border-slate-300 bg-white px-5 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50; }
-  .label { @apply mb-2 block text-sm font-semibold text-slate-700; }
+.constellation {
+  background-image:
+    linear-gradient(rgba(0, 215, 230, 0.08) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0, 215, 230, 0.08) 1px, transparent 1px),
+    radial-gradient(circle, rgba(148, 163, 184, 0.42) 1px, transparent 1.5px);
+  background-size: 110px 110px, 110px 110px, 130px 130px;
+  background-position: -30px -20px, -30px -20px, 0 0;
 }
 
+.display-tech {
+  font-family: "Courier New", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  letter-spacing: -0.06em;
+}
+
+@layer components {
+  .card { @apply rounded-3xl border border-white/10 bg-[#0a111d]/85 shadow-soft backdrop-blur-xl; }
+  .input { @apply w-full rounded-2xl border border-white/10 bg-black/30 px-4 py-3 text-sm text-white outline-none transition placeholder:text-slate-500 focus:border-teal focus:ring-2 focus:ring-teal/20; }
+  .btn-primary { @apply inline-flex items-center justify-center gap-2 rounded-full border border-teal/40 bg-teal/15 px-5 py-3 text-sm font-semibold text-teal transition hover:bg-teal/25 disabled:cursor-not-allowed disabled:opacity-50; }
+  .btn-secondary { @apply inline-flex items-center justify-center gap-2 rounded-full border border-white/15 bg-white/5 px-5 py-3 text-sm font-semibold text-slate-200 transition hover:bg-white/10; }
+  .label { @apply mb-2 block text-sm font-semibold text-slate-300; }
+}
