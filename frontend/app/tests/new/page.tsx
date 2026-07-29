@@ -1,10 +1,11 @@
 "use client";
 
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { ArrowLeft, Plus, Save, Trash2 } from "lucide-react";
 import { AppShell } from "@/components/AppShell";
-import { api } from "@/lib/api";
+import { api, getToken } from "@/lib/api";
 import { Test } from "@/lib/types";
 
 type DraftQuestion = { prompt: string; options: string[]; correct_option_index: number };
@@ -16,6 +17,7 @@ const emptyQuestion = (): DraftQuestion => ({
 });
 
 export default function NewTestPage() {
+  const router = useRouter();
   const [title, setTitle] = useState("Test teknik");
   const [description, setDescription] = useState("");
   const [questions, setQuestions] = useState<DraftQuestion[]>([emptyQuestion()]);
@@ -56,6 +58,10 @@ export default function NewTestPage() {
       setLoading(false);
     }
   }
+
+  useEffect(() => {
+    if (!getToken()) router.replace("/login");
+  }, [router]);
 
   return (
     <AppShell>
