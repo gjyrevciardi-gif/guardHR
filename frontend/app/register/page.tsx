@@ -34,19 +34,19 @@ export default function RegisterPage() {
   return (
     <main className="grid min-h-screen lg:grid-cols-2">
       <section className="hidden bg-navy p-16 text-white lg:flex lg:flex-col lg:justify-between">
-        <Link href="/" className="flex items-center gap-3 text-xl font-bold"><ShieldCheck /> InterviewGuard</Link>
+        <Link href="/" className="flex items-center gap-3 text-xl font-bold"><ShieldCheck /> Nemo Call</Link>
         <div className="max-w-xl">
-          <p className="mb-5 text-sm font-semibold uppercase tracking-[.24em] text-teal-300">HR/Admin account</p>
-          <h1 className="text-5xl font-semibold leading-tight">Krijo sesione dhe teste me një dashboard të qartë.</h1>
-          <p className="mt-6 text-lg leading-8 text-slate-300">Kandidatët hyjnë pa account. Vetëm HR ka regjistrim për menaxhim dhe audit log.</p>
+          <p className="mb-5 text-sm font-semibold uppercase tracking-[.24em] text-teal-300">Host/Admin account</p>
+          <h1 className="text-5xl font-semibold leading-tight">Krijo call, fto njerëz dhe shfaq teste live.</h1>
+          <p className="mt-6 text-lg leading-8 text-slate-300">Pjesëmarrësit hyjnë pa account. Host-i regjistrohet për të krijuar call, teste dhe për të parë activity signals.</p>
         </div>
-        <p className="text-sm text-slate-400">Manual review · Neutral labels · No automatic rejection</p>
+        <p className="text-sm text-slate-400">Email invites · Live signals · No automatic accusations</p>
       </section>
       <section className="flex items-center justify-center bg-mist p-6">
         <form onSubmit={submit} className="card w-full max-w-md p-8 sm:p-10">
           <span className="mb-6 inline-flex rounded-2xl bg-teal/10 p-3 text-teal"><UserPlus /></span>
-          <h2 className="text-3xl font-bold text-ink">Register për HR</h2>
-          <p className="mb-8 mt-2 text-sm text-slate-500">Ky account përdoret për krijim meeting, teste dhe review.</p>
+          <h2 className="text-3xl font-bold text-ink">Register për host</h2>
+          <p className="mb-8 mt-2 text-sm text-slate-500">Ky account përdoret për krijim call, teste dhe monitorim të sinjaleve live.</p>
           <label className="label" htmlFor="name">Emri</label>
           <input id="name" className="input mb-5" value={form.full_name} onChange={(e) => setForm({ ...form, full_name: e.target.value })} required minLength={2} />
           <label className="label" htmlFor="email">Email</label>

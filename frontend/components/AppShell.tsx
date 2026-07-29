@@ -17,7 +17,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-5 py-4">
           <Link href="/dashboard" className="flex items-center gap-3 font-bold">
             <span className="rounded-full border border-teal/40 bg-teal/10 p-2 text-teal"><ShieldCheck size={18} /></span>
-            InterviewGuard
+            Nemo Call
           </Link>
           <nav className="flex items-center gap-2 text-sm">
             <Link href="/dashboard" className={navClass(pathname === "/dashboard")}>Dashboard</Link>

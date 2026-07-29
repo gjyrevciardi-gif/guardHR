@@ -48,7 +48,7 @@ class UserOut(BaseModel):
 class SessionCreate(BaseModel):
     title: str = Field(min_length=2, max_length=200)
     candidate_name: str = Field(min_length=2, max_length=160)
-    candidate_email: EmailStr | None = None
+    candidate_email: EmailStr
     expires_at: datetime
     require_screen_share: bool = False
     test_id: str | None = None

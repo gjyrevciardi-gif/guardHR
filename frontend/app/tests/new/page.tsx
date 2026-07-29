@@ -70,14 +70,14 @@ export default function NewTestPage() {
       </Link>
       <div className="mx-auto max-w-4xl">
         <h1 className="text-3xl font-bold">Krijo test me zgjedhje</h1>
-        <p className="mt-2 text-slate-500">Pyetjet lidhen me sesionin dhe kandidati i plotëson brenda InterviewGuard.</p>
+        <p className="mt-2 text-slate-500">Pyetjet lidhen me call-in dhe pjesëmarrësi i plotëson brenda Nemo Call.</p>
 
         {created ? (
           <section className="card mt-8 p-8 text-center">
             <h2 className="text-2xl font-bold">Testi u krijua</h2>
             <p className="mt-2 text-slate-500">{created.title} · {created.question_count} pyetje</p>
             <div className="mt-6 flex justify-center gap-3">
-              <Link href="/sessions/new" className="btn-primary">Krijo sesion me këtë test</Link>
+              <Link href="/sessions/new" className="btn-primary">Krijo call me këtë test</Link>
               <button onClick={() => { setCreated(null); setQuestions([emptyQuestion()]); }} className="btn-secondary">Krijo tjetër</button>
             </div>
           </section>

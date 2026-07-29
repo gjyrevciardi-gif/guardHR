@@ -37,8 +37,8 @@ def create_session(payload: SessionCreate, request: Request, db: Session = Depen
         assigned_test = db.scalar(select(Test).where(Test.id == payload.test_id, Test.created_by == user.id))
         if not assigned_test:
             raise HTTPException(status_code=404, detail="Test not found")
-    candidate_email = payload.candidate_email.lower() if payload.candidate_email else None
-    candidate = db.scalar(select(Candidate).where(Candidate.email == candidate_email)) if candidate_email else None
+    candidate_email = payload.candidate_email.lower()
+    candidate = db.scalar(select(Candidate).where(Candidate.email == candidate_email))
     if not candidate:
         candidate = Candidate(email=candidate_email, full_name=payload.candidate_name)
         db.add(candidate)
@@ -51,17 +51,13 @@ def create_session(payload: SessionCreate, request: Request, db: Session = Depen
     audit(db, user, request, "session.created", "interview_session", session.id, session.id, {"candidate_id": candidate.id})
     invite_email_sent = False
     invite_email_error = None
-    if candidate.email:
-        try:
-            candidate_link = send_candidate_invite(session)
-            invite_email_sent = True
-            audit(db, user, request, "candidate.invite.email_sent", "interview_session", session.id, session.id, {"candidate_email": candidate.email, "candidate_link": candidate_link})
-        except Exception as exc:
-            invite_email_error = str(exc)
-            audit(db, user, request, "candidate.invite.email_failed", "interview_session", session.id, session.id, {"candidate_email": candidate.email, "error": invite_email_error})
-    else:
-        invite_email_error = "Candidate email was not provided; invite link must be shared manually."
-        audit(db, user, request, "candidate.invite.email_skipped", "interview_session", session.id, session.id, {"reason": "candidate_email_missing"})
+    try:
+        candidate_link = send_candidate_invite(session)
+        invite_email_sent = True
+        audit(db, user, request, "participant.invite.email_sent", "call", session.id, session.id, {"participant_email": candidate.email, "participant_link": candidate_link})
+    except Exception as exc:
+        invite_email_error = str(exc)
+        audit(db, user, request, "participant.invite.email_failed", "call", session.id, session.id, {"participant_email": candidate.email, "error": invite_email_error})
     db.commit()
     db.refresh(session)
     session.candidate = candidate

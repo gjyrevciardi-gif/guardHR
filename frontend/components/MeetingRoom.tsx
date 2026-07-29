@@ -34,14 +34,14 @@ function liveEventTitle(event: LiveEvent) {
   const reason = String(event.metadata?.reason || "");
   const phase = String(event.metadata?.phase || "");
   if (event.event_type === "tab_hidden" && reason.includes("window_blur")) {
-    return phase === "started" ? "Kandidati humbi focus/minimizoi" : "Kandidati u kthye në faqe";
+    return phase === "started" ? "Pjesëmarrësi humbi focus/minimizoi" : "Pjesëmarrësi u kthye në faqe";
   }
   if (event.event_type === "tab_hidden") {
-    return phase === "started" ? "Kandidati hapi tab/app tjetër" : "Kandidati u kthye nga tab/app tjetër";
+    return phase === "started" ? "Pjesëmarrësi hapi tab/app tjetër" : "Pjesëmarrësi u kthye nga tab/app tjetër";
   }
-  if (event.event_type === "fullscreen_exit") return "Kandidati doli nga fullscreen";
+  if (event.event_type === "fullscreen_exit") return "Pjesëmarrësi doli nga fullscreen";
   if (event.event_type === "copy_paste") return "Copy/paste u përdor";
-  if (event.event_type === "camera_disabled") return "Kamera e kandidatit u ndal";
+  if (event.event_type === "camera_disabled") return "Kamera e pjesëmarrësit u ndal";
   if (event.event_type === "screen_share_stopped") return "Screen share u ndal";
   if (event.event_type === "face_not_visible") return "Fytyra nuk u pa mbi 5 sekonda";
   if (event.event_type === "multiple_people") return "U panë më shumë se një person";
@@ -64,17 +64,17 @@ function hrLiveEventTitle(event: LiveEvent) {
   const height = event.metadata?.height_percent;
 
   if (event.event_type === "tab_hidden" && reason.includes("window_blur")) {
-    return phase === "started" ? "Kandidati humbi focus/minimizoi" : "Kandidati u kthye në faqe";
+    return phase === "started" ? "Pjesëmarrësi humbi focus/minimizoi" : "Pjesëmarrësi u kthye në faqe";
   }
   if (event.event_type === "tab_hidden") {
-    return phase === "started" ? "Kandidati hapi tab/app tjetër" : "Kandidati u kthye nga tab/app tjetër";
+    return phase === "started" ? "Pjesëmarrësi hapi tab/app tjetër" : "Pjesëmarrësi u kthye nga tab/app tjetër";
   }
   if (event.event_type === "window_resized") return `Dritarja u ndryshua në ${width || "?"}% width dhe ${height || "?"}% height`;
   if (event.event_type === "copy_paste" && lines) return `Tekst/kod u paste (${lines} rreshta)`;
   if (event.event_type === "multiple_monitors") return "U detektuan monitorë shtesë";
-  if (event.event_type === "fullscreen_exit") return "Kandidati doli nga fullscreen";
+  if (event.event_type === "fullscreen_exit") return "Pjesëmarrësi doli nga fullscreen";
   if (event.event_type === "copy_paste") return "Copy/paste u përdor";
-  if (event.event_type === "camera_disabled") return "Kamera e kandidatit u ndal";
+  if (event.event_type === "camera_disabled") return "Kamera e pjesëmarrësit u ndal";
   if (event.event_type === "screen_share_stopped") return "Screen share u ndal";
   if (event.event_type === "face_not_visible") return "Fytyra nuk u pa mbi 5 sekonda";
   if (event.event_type === "multiple_people") return "U panë më shumë se një person";
@@ -463,7 +463,7 @@ export function MeetingRoom({ token, role, session, onFinish }: Props) {
       )}
       <header className="flex flex-wrap items-center justify-between gap-4 border-b border-white/10 px-5 py-4">
         <div className="flex items-center gap-3 font-bold">
-          <ShieldCheck className="text-teal-300" /> InterviewGuard
+          <ShieldCheck className="text-teal-300" /> Nemo Call
           <span className="hidden text-sm font-normal text-slate-400 sm:inline">· {session.title}</span>
         </div>
         <div className="flex items-center gap-4">
@@ -479,12 +479,12 @@ export function MeetingRoom({ token, role, session, onFinish }: Props) {
       <main className="mx-auto grid max-w-7xl gap-5 p-5 lg:grid-cols-[1fr_320px]">
         <audio ref={remoteAudioRef} autoPlay playsInline className="hidden" />
         <section className="grid gap-4 md:grid-cols-2">
-          <VideoPanel label={role === "hr" ? "You (HR)" : session.candidate_name} videoRef={localVideoRef} active={!!localStream && cameraEnabled} speaking={localSpeaking} muted />
-          <VideoPanel label={role === "hr" ? session.candidate_name : "HR"} videoRef={remoteVideoRef} active={!!remoteCameraStream} present={peerPresent} speaking={remoteSpeaking} />
+          <VideoPanel label={role === "hr" ? "You (Host)" : session.candidate_name} videoRef={localVideoRef} active={!!localStream && cameraEnabled} speaking={localSpeaking} muted />
+          <VideoPanel label={role === "hr" ? session.candidate_name : "Host"} videoRef={remoteVideoRef} active={!!remoteCameraStream} present={peerPresent} speaking={remoteSpeaking} />
           {(screenStream || remoteScreenStream) && (
             <>
               <VideoPanel label="Your screen" videoRef={localScreenRef} active={!!screenStream} muted />
-              <VideoPanel label={role === "hr" ? "Candidate screen" : "HR screen"} videoRef={remoteScreenRef} active={!!remoteScreenStream} />
+              <VideoPanel label={role === "hr" ? "Participant screen" : "Host screen"} videoRef={remoteScreenRef} active={!!remoteScreenStream} />
             </>
           )}
         </section>
@@ -493,8 +493,8 @@ export function MeetingRoom({ token, role, session, onFinish }: Props) {
           {!active && (
             <section className="rounded-2xl border border-white/10 bg-white/5 p-5 text-center">
               <Eye className="mx-auto text-teal-300" size={34} />
-              <h1 className="mt-4 text-xl font-bold">{role === "hr" ? "Hyr si HR" : "Nis monitorimin"}</h1>
-              <p className="mt-2 text-sm leading-6 text-slate-400">Kamera dhe mikrofoni jane opsionale. Monitorimi kryesor kap nese kandidati del nga faqja ose humb fokusin.</p>
+              <h1 className="mt-4 text-xl font-bold">{role === "hr" ? "Hyr si host" : "Join Nemo Call"}</h1>
+              <p className="mt-2 text-sm leading-6 text-slate-400">Kamera dhe mikrofoni janë opsionale. Nemo Call kap sinjale si tab tjetër, minimize/focus loss, resize dhe copy/paste.</p>
               {mediaBlockedByBrowser && (
                 <p className="mt-3 rounded-xl border border-amber-300/30 bg-amber-300/10 p-3 text-left text-xs leading-5 text-amber-100">
                   {mediaBlockedMessage}
@@ -504,7 +504,7 @@ export function MeetingRoom({ token, role, session, onFinish }: Props) {
                 <DeviceSelect label="Kamera" kind="videoinput" devices={devices} value={cameraDeviceId} onChange={setCameraDeviceId} />
                 <DeviceSelect label="Mikrofoni" kind="audioinput" devices={devices} value={micDeviceId} onChange={setMicDeviceId} />
               </div>
-              <button onClick={start} className="btn-primary mt-5 w-full bg-teal hover:bg-teal/90"><Eye size={18} /> {role === "candidate" ? "Nis monitorimin" : "Hyr ne room"}</button>
+              <button onClick={start} className="btn-primary mt-5 w-full"><Eye size={18} /> {role === "candidate" ? "Join call" : "Hyr në call"}</button>
               {error && <p className="mt-3 text-sm text-red-300">{error}</p>}
             </section>
           )}
@@ -532,7 +532,7 @@ export function MeetingRoom({ token, role, session, onFinish }: Props) {
 
           <section className="rounded-2xl border border-white/10 bg-white/5 p-5">
             <h2 className="font-semibold">Status</h2>
-            <p className="mt-2 text-xs leading-5 text-slate-400">Kamera/screen share jane opsionale. Eventet kryesore regjistrojne kur kandidati del nga tab-i, kalon ne app tjeter, humb fullscreen, ose humb lidhjen.</p>
+            <p className="mt-2 text-xs leading-5 text-slate-400">Kamera/screen share janë opsionale. Sinjalet regjistrohen kur pjesëmarrësi hap tab/app tjetër, minimizon, humb fullscreen, përdor copy/paste, ose humb lidhjen.</p>
             {lastSignal && <p className="mt-3 rounded-lg bg-amber-400/10 p-2 text-xs text-amber-200">Sinjali i fundit u regjistrua per shqyrtim.</p>}
             {error && <p className="mt-3 rounded-lg bg-red-400/10 p-2 text-xs text-red-200">{error}</p>}
           </section>
@@ -540,10 +540,10 @@ export function MeetingRoom({ token, role, session, onFinish }: Props) {
           {role === "hr" && active && (
             <section className="rounded-2xl border border-white/10 bg-white/5 p-5">
               <div className="flex items-center justify-between gap-3">
-                <h2 className="font-semibold">Live alerts për HR</h2>
+                <h2 className="font-semibold">Live alerts për host</h2>
                 <span className="rounded-full bg-amber-300/10 px-2 py-1 text-xs font-semibold text-amber-200">{liveEvents.length}</span>
               </div>
-              <p className="mt-2 text-xs leading-5 text-slate-400">Këtu të del direkt kur kandidati hap tab/app tjetër, minimizon/humb focus, del nga fullscreen, përdor copy/paste, ose ndalet kamera.</p>
+              <p className="mt-2 text-xs leading-5 text-slate-400">Këtu të del direkt kur pjesëmarrësi hap tab/app tjetër, minimizon/humb focus, del nga fullscreen, përdor copy/paste, resize dritaren, ose ndalet kamera.</p>
               {liveEvents.length === 0 ? (
                 <div className="mt-4 rounded-xl border border-dashed border-white/10 p-4 text-center text-xs text-slate-400">
                   Ende nuk ka sinjale live.
@@ -565,7 +565,7 @@ export function MeetingRoom({ token, role, session, onFinish }: Props) {
             <CandidateTestPanel token={token} test={session.test} />
           )}
 
-          {active && <button onClick={finish} className="flex w-full items-center justify-center gap-2 rounded-xl bg-red-500 px-4 py-3 text-sm font-semibold"><PhoneOff size={17} /> Dil nga meeting</button>}
+          {active && <button onClick={finish} className="flex w-full items-center justify-center gap-2 rounded-xl bg-red-500 px-4 py-3 text-sm font-semibold"><PhoneOff size={17} /> Dil nga call</button>}
         </aside>
       </main>
     </div>

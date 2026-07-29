@@ -17,7 +17,7 @@ def send_candidate_invite(session: InterviewSession) -> str:
         raise ValueError("Candidate email is missing")
 
     message = EmailMessage()
-    message["Subject"] = f"InterviewGuard link: {session.title}"
+    message["Subject"] = f"Nemo Call invite: {session.title}"
     message["From"] = settings.smtp_from_email
     message["To"] = session.candidate.email
     message.set_content(
@@ -25,13 +25,13 @@ def send_candidate_invite(session: InterviewSession) -> str:
             [
                 f"Hello {session.candidate.full_name},",
                 "",
-                "You have been invited to an online interview session.",
-                "Please open this link to review the consent notice and join:",
+                "You have been invited to a Nemo Call session.",
+                "Please open this link to review the consent notice and join the call:",
                 "",
                 candidate_link,
                 "",
-                "InterviewGuard records integrity events for manual HR review only.",
-                "It does not automatically reject candidates or label anyone as cheating.",
+                "Nemo Call records activity signals such as tab changes, focus loss, copy/paste, and test activity for the host to review.",
+                "It does not automatically accuse, reject, or label participants.",
                 "",
                 f"This link expires at: {session.expires_at.isoformat()}",
             ]

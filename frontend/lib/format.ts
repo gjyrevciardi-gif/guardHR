@@ -1,5 +1,5 @@
 export const eventLabels: Record<string, string> = {
-  tab_hidden: "Kandidati doli nga faqja",
+  tab_hidden: "Pjesëmarrësi doli nga faqja",
   fullscreen_exit: "Dalje nga fullscreen",
   camera_disabled: "Kamera u çaktivizua",
   face_not_visible: "Fytyra nuk u pa",

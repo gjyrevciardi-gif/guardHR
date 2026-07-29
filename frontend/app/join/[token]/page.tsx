@@ -34,42 +34,42 @@ export default function ConsentPage() {
 
   if (loading) return <Centered>Duke verifikuar linkun...</Centered>;
   if (!session) return <Centered><strong>Linku nuk mund te hapet.</strong><span className="text-sm text-slate-500">{error}</span></Centered>;
-  if (session.status === "expired") return <Centered><strong>Ky link ka skaduar.</strong><span className="text-sm text-slate-500">Kontakto personin e HR-it.</span></Centered>;
+  if (session.status === "expired") return <Centered><strong>Ky link ka skaduar.</strong><span className="text-sm text-slate-500">Kontakto host-in që ta ka dërguar ftesën.</span></Centered>;
 
   return (
     <main className="min-h-screen bg-mist px-5 py-10">
       <div className="mx-auto max-w-3xl">
         <div className="mb-8 flex items-center justify-center gap-3 font-bold text-navy">
           <span className="rounded-xl bg-navy p-2 text-white"><ShieldCheck size={20} /></span>
-          InterviewGuard
+          Nemo Call
         </div>
         <section className="card overflow-hidden">
           <div className="border-b border-slate-200 p-7 sm:p-9">
-            <p className="text-sm font-semibold text-teal">CONSENT & PRIVACY</p>
-            <h1 className="mt-2 text-3xl font-bold">Perpara se te filloni</h1>
+            <p className="text-sm font-semibold text-teal">JOIN CALL · CONSENT</p>
+            <h1 className="mt-2 text-3xl font-bold">Para se të hysh në Nemo Call</h1>
             <p className="mt-3 text-slate-600">
-              Pershendetje {session.candidate_name}. Per sesionin "{session.title}", sistemi regjistron sinjale teknike qe shqyrtohen manualisht nga HR.
+              Përshëndetje {session.candidate_name}. Për call-in "{session.title}", sistemi regjistron sinjale aktiviteti që i shfaqen host-it live.
             </p>
           </div>
           <div className="grid gap-4 p-7 sm:grid-cols-2 sm:p-9">
-            <Info icon={<Eye />} title="Fokusi ne faqe">Regjistrohet kur dilni nga faqja, kaloni ne tab/app tjeter, ose humbet fokusi i dritares.</Info>
-            <Info icon={<MonitorUp />} title="Aktiviteti i browser-it">Regjistrohen fullscreen exit, copy/paste dhe nderprerjet e lidhjes.</Info>
-            <Info icon={<Camera />} title="Kamera dhe mikrofoni">Jane opsionale per meeting live. Video/audio nuk ruhen ne kete MVP.</Info>
+            <Info icon={<Eye />} title="Fokusi në faqe">Regjistrohet kur dilni nga faqja, kaloni në tab/app tjetër, minimizoni ose humbet fokusi i dritares.</Info>
+            <Info icon={<MonitorUp />} title="Aktiviteti i browser-it">Regjistrohen resize dritareje, fullscreen exit, copy/paste dhe ndërprerje lidhjeje.</Info>
+            <Info icon={<Camera />} title="Kamera dhe mikrofoni">Janë opsionale për call live. Video/audio nuk ruhen në këtë MVP.</Info>
             <Info icon={<Trash2 />} title="Ruajtja e te dhenave">Eventet kane retention policy te organizates dhe pastrohen pas afatit.</Info>
           </div>
           <div className="mx-7 mb-7 rounded-xl border border-teal/20 bg-teal/5 p-4 text-sm leading-6 text-slate-700 sm:mx-9">
-            <strong>Nuk perdoret</strong> emotion recognition, lie detection, analize personaliteti ose refuzim automatik. Eventet jane sinjale per shqyrtim manual.
+            <strong>Nuk përdoret</strong> emotion recognition, lie detection, analizë personaliteti ose akuzim automatik. Eventet janë sinjale për host-in.
           </div>
           <div className="border-t border-slate-200 bg-slate-50 p-7 sm:p-9">
             <p className="mb-4 text-sm text-slate-500">Linku skadon: {dateTime(session.expires_at)}</p>
             {!session.consented_at && (
               <label className="flex cursor-pointer items-start gap-3">
                 <input type="checkbox" className="mt-1 h-5 w-5 accent-teal" checked={accepted} onChange={(event) => setAccepted(event.target.checked)} />
-                <span className="text-sm leading-6">E kam lexuar informacionin dhe pranoj monitorimin e pershkruar gjate ketij sesioni.</span>
+                <span className="text-sm leading-6">E kam lexuar informacionin dhe pranoj sinjalet e aktivitetit gjatë këtij call/test.</span>
               </label>
             )}
             <button onClick={continueToRoom} disabled={!session.consented_at && !accepted} className="btn-primary mt-6 w-full">
-              <CheckCircle2 size={18} /> {session.consented_at ? "Vazhdo ne sesion" : "Pranoj dhe vazhdoj"}
+              <CheckCircle2 size={18} /> {session.consented_at ? "Vazhdo në call" : "Pranoj dhe vazhdoj"}
             </button>
             {error && <p className="mt-3 text-sm text-red-700">{error}</p>}
           </div>

@@ -41,7 +41,7 @@ export default function HrMeetingRoom() {
     <div>
       <div className="bg-[#0b1520] px-5 py-3">
         <Link href={`/sessions/${session.id}`} className="inline-flex items-center gap-2 text-sm font-semibold text-slate-300">
-          <ArrowLeft size={16} /> Kthehu te sesioni
+          <ArrowLeft size={16} /> Kthehu te call-i
         </Link>
       </div>
       <MeetingRoom token={session.public_token} role="hr" session={publicSession} />

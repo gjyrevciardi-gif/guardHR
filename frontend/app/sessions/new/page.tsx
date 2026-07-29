@@ -14,7 +14,7 @@ function defaultExpiry() {
 
 export default function NewSessionPage() {
   const [form, setForm] = useState({
-    title: "Interviste teknike",
+    title: "Nemo Call session",
     candidate_name: "",
     candidate_email: "",
     expires_at: defaultExpiry(),
@@ -42,14 +42,14 @@ export default function NewSessionPage() {
           method: "POST",
           body: JSON.stringify({
             ...form,
-            candidate_email: form.candidate_email.trim() || null,
+            candidate_email: form.candidate_email.trim(),
             test_id: form.test_id || null,
             expires_at: new Date(form.expires_at).toISOString(),
           }),
         }),
       );
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Nuk u krijua sesioni");
+      setError(err instanceof Error ? err.message : "Nuk u krijua call-i");
     } finally {
       setLoading(false);
     }
@@ -61,8 +61,8 @@ export default function NewSessionPage() {
         <ArrowLeft size={17} /> Dashboard
       </Link>
       <div className="mx-auto max-w-2xl">
-        <h1 className="text-3xl font-bold">Krijo sesion te ri</h1>
-        <p className="mt-2 text-slate-500">Email-i eshte opsional. Pa email, linku krijohet dhe e ndan manualisht.</p>
+        <h1 className="text-3xl font-bold">Krijo Nemo Call</h1>
+        <p className="mt-2 text-slate-500">Fut të dhënat e pjesëmarrësit. Linku i join dërgohet në email dhe shfaqet si backup.</p>
 
         {created ? (
           <div className="card mt-8 p-8 text-center">
@@ -70,12 +70,12 @@ export default function NewSessionPage() {
               {created.invite_email_sent ? <MailCheck /> : <AlertTriangle />}
             </span>
             <h2 className="mt-5 text-2xl font-bold">
-              {created.invite_email_sent ? "Sesioni u krijua dhe email-i u dergua" : "Sesioni u krijua"}
+              {created.invite_email_sent ? "Call-i u krijua dhe email-i u dërgua" : "Call-i u krijua"}
             </h2>
             <p className="mt-2 text-sm text-slate-500">
               {created.invite_email_sent
-                ? "Kandidati merr linkun ne email dhe fillon me faqen e consent-it. Linku mbetet ketu si backup."
-                : "Kopjo linkun dhe dergoja kandidatit manualisht, ose futu si HR ne meeting nga faqja e sesionit."}
+                ? "Pjesëmarrësi merr linkun në email dhe hyn pa account. Linku mbetet këtu si backup."
+                : "Email-i nuk u dërgua. Kopjo linkun si backup ose kontrollo SMTP settings."}
             </p>
             {created.invite_email_error && (
               <p className="mt-4 rounded-xl bg-amber-50 p-3 text-left text-sm text-amber-800">
@@ -95,7 +95,7 @@ export default function NewSessionPage() {
             </div>
             <div className="mt-6 flex justify-center gap-3">
               <Link href={`/sessions/${created.id}`} className="btn-primary">
-                Hap sesionin
+                Hap call-in
               </Link>
               <Link href="/dashboard" className="btn-secondary">
                 Dashboard
@@ -116,7 +116,7 @@ export default function NewSessionPage() {
             </div>
             <div className="grid gap-5 sm:grid-cols-2">
               <div>
-                <label className="label">Emri i kandidatit</label>
+                <label className="label">Emri i pjesëmarrësit</label>
                 <input
                   className="input"
                   value={form.candidate_name}
@@ -125,12 +125,13 @@ export default function NewSessionPage() {
                 />
               </div>
               <div>
-                <label className="label">Email-i i kandidatit (opsional)</label>
+                <label className="label">Email-i i pjesëmarrësit</label>
                 <input
                   className="input"
                   type="email"
                   value={form.candidate_email}
                   onChange={(e) => setForm({ ...form, candidate_email: e.target.value })}
+                  required
                 />
               </div>
             </div>
@@ -145,7 +146,7 @@ export default function NewSessionPage() {
               />
             </div>
             <div>
-              <label className="label">Test me zgjedhje (opsional)</label>
+              <label className="label">Test me zgjedhje brenda call-it (opsional)</label>
               <select className="input" value={form.test_id} onChange={(e) => setForm({ ...form, test_id: e.target.value })}>
                 <option value="">Pa test</option>
                 {tests.map((test) => (
@@ -157,11 +158,11 @@ export default function NewSessionPage() {
               </p>
             </div>
             <p className="rounded-xl border border-teal/20 bg-teal/5 p-4 text-sm text-slate-600">
-              Monitorimi kryesor regjistron daljen nga faqja, humbjen e fokusit, fullscreen exit, copy/paste dhe nderprerjet e lidhjes. Kamera dhe screen sharing jane opsionale ne room.
+              Nemo Call regjistron sinjale live si tab tjetër, minimize/focus loss, resize dritareje, fullscreen exit, copy/paste dhe ndërprerje lidhjeje. Kamera/mikrofoni janë opsionale.
             </p>
             {error && <p className="rounded-xl bg-red-50 p-3 text-sm text-red-700">{error}</p>}
             <button className="btn-primary w-full" disabled={loading}>
-              {loading ? "Duke krijuar..." : "Krijo dhe dergo emailin"}
+              {loading ? "Duke krijuar..." : "Krijo call dhe dërgo email"}
             </button>
           </form>
         )}

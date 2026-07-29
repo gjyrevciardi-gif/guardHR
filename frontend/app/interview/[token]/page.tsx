@@ -28,8 +28,8 @@ export default function InterviewRoom() {
       <main className="flex min-h-screen items-center justify-center bg-mist p-6">
         <div className="card max-w-md p-10 text-center">
           <CheckCircle2 className="mx-auto text-emerald-600" size={48} />
-          <h1 className="mt-5 text-2xl font-bold">Sesioni perfundoi</h1>
-          <p className="mt-3 text-slate-500">Faleminderit. Eventet teknike do te shqyrtohen manualisht nga HR.</p>
+          <h1 className="mt-5 text-2xl font-bold">Call-i përfundoi</h1>
+          <p className="mt-3 text-slate-500">Faleminderit. Activity signals ruhen për host-in e call-it.</p>
         </div>
       </main>
     );

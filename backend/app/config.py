@@ -3,7 +3,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    app_name: str = "InterviewGuard API"
+    app_name: str = "Nemo Call API"
     database_url: str = "sqlite:///./interviewguard.db"
     jwt_secret: str = "development-only-secret-change-me-now"
     jwt_algorithm: str = "HS256"
@@ -17,7 +17,7 @@ class Settings(BaseSettings):
     smtp_port: int = 1025
     smtp_username: str = ""
     smtp_password: str = ""
-    smtp_from_email: str = "InterviewGuard <no-reply@interviewguard.test>"
+    smtp_from_email: str = "Nemo Call <no-reply@nemocall.test>"
     smtp_use_tls: bool = False
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")

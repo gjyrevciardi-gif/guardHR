@@ -16,7 +16,7 @@ async def lifespan(_: FastAPI):
     yield
 
 
-app = FastAPI(title="InterviewGuard API", version="0.1.0", lifespan=lifespan)
+app = FastAPI(title="Nemo Call API", version="0.1.0", lifespan=lifespan)
 app.add_middleware(CORSMiddleware, allow_origins=get_settings().cors_origin_list, allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
 app.include_router(auth.router, prefix="/api")
 app.include_router(sessions.router, prefix="/api")
@@ -28,4 +28,4 @@ app.include_router(tests.router, prefix="/api")
 
 @app.get("/api/health")
 def health():
-    return {"status": "ok", "service": "InterviewGuard API"}
+    return {"status": "ok", "service": "Nemo Call API"}

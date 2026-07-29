@@ -27,7 +27,7 @@ export function CandidateTestPanel({ token, test }: { token: string; test: Test 
     return (
       <section className="rounded-2xl border border-emerald-300/30 bg-emerald-300/10 p-5">
         <div className="flex items-center gap-2 text-emerald-100"><CheckCircle2 size={18} /><h2 className="font-semibold">Testi u dorëzua</h2></div>
-        <p className="mt-2 text-xs leading-5 text-slate-300">Rezultati: {submission.score}/{submission.total}. HR e shqyrton bashkë me sinjalet tjera.</p>
+        <p className="mt-2 text-xs leading-5 text-slate-300">Rezultati: {submission.score}/{submission.total}. Host-i e sheh bashkë me activity signals tjera.</p>
       </section>
     );
   }

@@ -31,7 +31,7 @@ services:
       SMTP_PORT: ${SMTP_PORT:-1025}
       SMTP_USERNAME: ${SMTP_USERNAME:-}
       SMTP_PASSWORD: ${SMTP_PASSWORD:-}
-      SMTP_FROM_EMAIL: ${SMTP_FROM_EMAIL:-InterviewGuard <no-reply@interviewguard.test>}
+      SMTP_FROM_EMAIL: ${SMTP_FROM_EMAIL:-Nemo Call <no-reply@nemocall.test>}
       SMTP_USE_TLS: ${SMTP_USE_TLS:-false}
     ports:
       - "${BACKEND_PORT:-8100}:8000"

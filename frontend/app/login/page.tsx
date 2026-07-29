@@ -35,19 +35,19 @@ export default function LoginPage() {
   return (
     <main className="grid min-h-screen lg:grid-cols-2">
       <section className="hidden bg-navy p-16 text-white lg:flex lg:flex-col lg:justify-between">
-        <Link href="/" className="flex items-center gap-3 text-xl font-bold"><ShieldCheck /> InterviewGuard</Link>
+        <Link href="/" className="flex items-center gap-3 text-xl font-bold"><ShieldCheck /> Nemo Call</Link>
         <div className="max-w-xl">
-          <p className="mb-5 text-sm font-semibold uppercase tracking-[.24em] text-teal-300">Integritet me mbikëqyrje njerëzore</p>
-          <h1 className="text-5xl font-semibold leading-tight">Sinjale të qarta. Vendime njerëzore.</h1>
-          <p className="mt-6 text-lg leading-8 text-slate-300">Ky login është vetëm për HR/Admin. Kandidatët hyjnë pa account përmes linkut të sesionit.</p>
+          <p className="mb-5 text-sm font-semibold uppercase tracking-[.24em] text-teal-300">Nemo Call host access</p>
+          <h1 className="text-5xl font-semibold leading-tight">Create calls. Watch signals. Launch tests.</h1>
+          <p className="mt-6 text-lg leading-8 text-slate-300">Ky login është vetëm për host/admin. Pjesëmarrësit hyjnë pa account përmes email invite link.</p>
         </div>
-        <p className="text-sm text-slate-400">Privacy-first · Neutral labels · Manual review</p>
+        <p className="text-sm text-slate-400">Invite links · Live signals · No automatic accusations</p>
       </section>
       <section className="flex items-center justify-center bg-mist p-6">
         <form onSubmit={submit} className="card w-full max-w-md p-8 sm:p-10">
           <span className="mb-6 inline-flex rounded-2xl bg-teal/10 p-3 text-teal"><LockKeyhole /></span>
-          <h2 className="text-3xl font-bold text-ink">Hyrje për HR</h2>
-          <p className="mb-8 mt-2 text-sm text-slate-500">Përdor account-in për të krijuar meeting/teste dhe për review.</p>
+          <h2 className="text-3xl font-bold text-ink">Hyrje për host</h2>
+          <p className="mb-8 mt-2 text-sm text-slate-500">Përdor account-in për të krijuar call/teste dhe për të parë live activity signals.</p>
           <label className="label" htmlFor="email">Email</label>
           <input id="email" className="input mb-5" type="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
           <label className="label" htmlFor="password">Fjalëkalimi</label>
@@ -55,7 +55,7 @@ export default function LoginPage() {
           {error && <p role="alert" className="mt-4 rounded-xl bg-red-50 p-3 text-sm text-red-700">{error}</p>}
           <button className="btn-primary mt-6 w-full" disabled={loading}>{loading ? "Duke hyrë..." : "Hyr në dashboard"}</button>
           <p className="mt-5 text-center text-sm text-slate-500">
-            S’ke account HR? <Link href="/register" className="font-semibold text-teal">Regjistrohu</Link>
+            S’ke host account? <Link href="/register" className="font-semibold text-teal">Regjistrohu</Link>
           </p>
         </form>
       </section>
