@@ -5,12 +5,12 @@ export default {
   theme: {
     extend: {
       colors: {
-        ink: "#f7fbff",
-        navy: "#050a12",
-        teal: "#00d7e6",
-        mist: "#050a12",
+        ink: "#0f2540",
+        navy: "#0f2540",
+        teal: "#0d7bd7",
+        mist: "#eaf7fb",
       },
-      boxShadow: { soft: "0 24px 80px rgba(0, 215, 230, 0.10)" },
+      boxShadow: { soft: "0 24px 80px rgba(13, 123, 215, 0.14)" },
     },
   },
   plugins: [],

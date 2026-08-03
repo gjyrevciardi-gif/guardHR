@@ -83,7 +83,7 @@ export default function NewTestPage() {
 
   return (
     <AppShell>
-      <Link href="/dashboard" className="mb-6 inline-flex items-center gap-2 text-sm font-semibold text-slate-400 hover:text-white">
+      <Link href="/dashboard" className="mb-6 inline-flex items-center gap-2 text-sm font-semibold text-slate-500 hover:text-teal">
         <ArrowLeft size={17} /> Dashboard
       </Link>
       <div className="mx-auto max-w-4xl">
@@ -127,7 +127,7 @@ export default function NewTestPage() {
                   </label>
                 </div>
               </div>
-              <p className="mt-4 rounded-2xl border border-amber-300/20 bg-amber-300/10 p-3 text-xs leading-5 text-amber-100">
+              <p className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 p-3 text-xs leading-5 text-amber-800">
                 MVP gjeneron pyetje lokale nga teksti, pa AI external key. Kontrollo pyetjet para se ta përdorësh testin në call.
               </p>
             </section>
@@ -143,7 +143,7 @@ export default function NewTestPage() {
               </div>
               <div className="space-y-4">
                 {questions.map((question, questionIndex) => (
-                  <section key={questionIndex} className="rounded-2xl border border-white/10 p-4">
+                  <section key={questionIndex} className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4">
                     <div className="flex items-center justify-between gap-3">
                       <h2 className="font-bold">Pyetja {questionIndex + 1}</h2>
                       {questions.length > 1 && (

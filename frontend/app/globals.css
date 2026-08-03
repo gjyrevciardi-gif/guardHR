@@ -2,38 +2,36 @@
 @tailwind components;
 @tailwind utilities;
 
-:root { color: #f7fbff; background: #050a12; }
+:root { color: #0f2540; background: #eaf7fb; }
 * { box-sizing: border-box; }
 body {
   margin: 0;
   font-family: Arial, Helvetica, sans-serif;
   background:
-    radial-gradient(circle at 18% 20%, rgba(0, 215, 230, 0.12), transparent 24rem),
-    radial-gradient(circle at 78% 12%, rgba(75, 115, 255, 0.10), transparent 22rem),
-    #050a12;
-  color: #f7fbff;
+    radial-gradient(circle at 12% 10%, rgba(125, 211, 252, 0.35), transparent 28rem),
+    radial-gradient(circle at 80% 12%, rgba(191, 219, 254, 0.55), transparent 30rem),
+    linear-gradient(135deg, #dff7fb 0%, #f5fbff 48%, #e9f6ff 100%);
+  color: #0f2540;
 }
 button, input, textarea, select { font: inherit; }
-button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-visible { outline: 3px solid rgba(0,215,230,.35); outline-offset: 2px; }
+button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-visible { outline: 3px solid rgba(13,123,215,.28); outline-offset: 2px; }
 
 .constellation {
-  background-image:
-    linear-gradient(rgba(0, 215, 230, 0.08) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(0, 215, 230, 0.08) 1px, transparent 1px),
-    radial-gradient(circle, rgba(148, 163, 184, 0.42) 1px, transparent 1.5px);
-  background-size: 110px 110px, 110px 110px, 130px 130px;
-  background-position: -30px -20px, -30px -20px, 0 0;
+  background:
+    radial-gradient(circle at 10% 5%, rgba(186, 230, 253, 0.55), transparent 26rem),
+    radial-gradient(circle at 84% 20%, rgba(219, 234, 254, 0.7), transparent 30rem),
+    linear-gradient(135deg, #dff6fb 0%, #f4fbff 52%, #e8f4ff 100%);
 }
 
 .display-tech {
-  font-family: "Courier New", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-  letter-spacing: -0.06em;
+  font-family: Arial, Helvetica, sans-serif;
+  letter-spacing: -0.055em;
 }
 
 @layer components {
-  .card { @apply rounded-3xl border border-white/10 bg-[#0a111d]/85 shadow-soft backdrop-blur-xl; }
-  .input { @apply w-full rounded-2xl border border-white/10 bg-black/30 px-4 py-3 text-sm text-white outline-none transition placeholder:text-slate-500 focus:border-teal focus:ring-2 focus:ring-teal/20; }
-  .btn-primary { @apply inline-flex items-center justify-center gap-2 rounded-full border border-teal/40 bg-teal/15 px-5 py-3 text-sm font-semibold text-teal transition hover:bg-teal/25 disabled:cursor-not-allowed disabled:opacity-50; }
-  .btn-secondary { @apply inline-flex items-center justify-center gap-2 rounded-full border border-white/15 bg-white/5 px-5 py-3 text-sm font-semibold text-slate-200 transition hover:bg-white/10; }
-  .label { @apply mb-2 block text-sm font-semibold text-slate-300; }
+  .card { @apply rounded-3xl border border-slate-200/80 bg-white/90 shadow-soft backdrop-blur-xl; }
+  .input { @apply w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-navy outline-none transition placeholder:text-slate-400 focus:border-teal focus:ring-2 focus:ring-teal/15; }
+  .btn-primary { @apply inline-flex items-center justify-center gap-2 rounded-full bg-teal px-5 py-3 text-sm font-semibold text-white shadow-soft transition hover:bg-[#086fc4] disabled:cursor-not-allowed disabled:opacity-50; }
+  .btn-secondary { @apply inline-flex items-center justify-center gap-2 rounded-full border border-slate-200 bg-white px-5 py-3 text-sm font-semibold text-navy transition hover:bg-slate-50; }
+  .label { @apply mb-2 block text-sm font-semibold text-slate-700; }
 }
