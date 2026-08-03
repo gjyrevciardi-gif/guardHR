@@ -1,9 +1,10 @@
 "use client";
 
-import { LogOut, Waves } from "lucide-react";
+import { LogOut } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { clearToken } from "@/lib/api";
+import { NemoMark } from "@/components/NemoMark";
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const router = useRouter();
@@ -16,7 +17,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       <header className="sticky top-0 z-40 border-b border-white/70 bg-white/75 backdrop-blur-xl">
         <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-5 py-4">
           <Link href="/dashboard" className="flex items-center gap-3 font-bold">
-            <span className="rounded-full bg-sky-100 p-2 text-teal"><Waves size={18} /></span>
+            <span className="flex h-10 w-10 items-center justify-center rounded-full bg-sky-100">
+              <NemoMark className="h-7 w-9" />
+            </span>
             Nemo Call
           </Link>
           <nav className="flex items-center gap-2 text-sm">

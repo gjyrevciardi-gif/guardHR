@@ -3,9 +3,10 @@
 import { FormEvent, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ShieldCheck, UserPlus } from "lucide-react";
+import { UserPlus } from "lucide-react";
 import { api, saveToken } from "@/lib/api";
 import { User } from "@/lib/types";
+import { NemoMark } from "@/components/NemoMark";
 
 export default function RegisterPage() {
   const router = useRouter();
@@ -25,7 +26,7 @@ export default function RegisterPage() {
       saveToken(response.access_token);
       router.push("/dashboard");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Regjistrimi dështoi");
+      setError(err instanceof Error ? err.message : "Regjistrimi deshtoi");
     } finally {
       setLoading(false);
     }
@@ -33,30 +34,59 @@ export default function RegisterPage() {
 
   return (
     <main className="grid min-h-screen lg:grid-cols-2">
-      <section className="hidden bg-navy p-16 text-white lg:flex lg:flex-col lg:justify-between">
-        <Link href="/" className="flex items-center gap-3 text-xl font-bold"><ShieldCheck /> Nemo Call</Link>
-        <div className="max-w-xl">
-          <p className="mb-5 text-sm font-semibold uppercase tracking-[.24em] text-teal-300">Host/Admin account</p>
-          <h1 className="text-5xl font-semibold leading-tight">Krijo call, fto njerëz dhe shfaq teste live.</h1>
-          <p className="mt-6 text-lg leading-8 text-slate-300">Pjesëmarrësit hyjnë pa account. Host-i regjistrohet për të krijuar call, teste dhe për të parë activity signals.</p>
+      <section className="constellation relative hidden overflow-hidden p-16 text-navy lg:flex lg:flex-col lg:justify-between">
+        <Link href="/" className="relative z-10 flex items-center gap-3 text-xl font-black">
+          <span className="flex h-12 w-12 items-center justify-center rounded-full bg-white/75 shadow-sm">
+            <NemoMark className="h-9 w-11" />
+          </span>
+          Nemo Call
+        </Link>
+
+        <div className="relative z-10 max-w-xl">
+          <p className="mb-5 text-sm font-bold uppercase tracking-[.24em] text-teal">Host/Admin account</p>
+          <h1 className="display-tech text-5xl font-black leading-tight">
+            Create the room.
+            <br />
+            Keep review human.
+          </h1>
+          <p className="mt-6 text-lg leading-8 text-slate-600">
+            Host-i regjistrohet per te krijuar call, per te ftuar pjesemarres me email dhe per te shfaqur teste live.
+          </p>
+          <div className="mt-10 rounded-[2rem] border border-white/80 bg-white/65 p-8 shadow-soft backdrop-blur-xl">
+            <NemoMark animated className="mx-auto h-40 w-64" />
+          </div>
         </div>
-        <p className="text-sm text-slate-400">Email invites · Live signals · No automatic accusations</p>
+
+        <p className="relative z-10 text-sm font-semibold text-slate-600">
+          Email invites - Live signals - Manual review
+        </p>
       </section>
+
       <section className="flex items-center justify-center bg-mist p-6">
         <form onSubmit={submit} className="card w-full max-w-md p-8 sm:p-10">
           <span className="mb-6 inline-flex rounded-2xl bg-teal/10 p-3 text-teal"><UserPlus /></span>
-          <h2 className="text-3xl font-bold text-ink">Register për host</h2>
-          <p className="mb-8 mt-2 text-sm text-slate-500">Ky account përdoret për krijim call, teste dhe monitorim të sinjaleve live.</p>
+          <h2 className="text-3xl font-black text-ink">Register per host</h2>
+          <p className="mb-8 mt-2 text-sm leading-6 text-slate-500">
+            Ky account perdoret per krijim call, teste dhe monitorim te sinjaleve live.
+          </p>
+
           <label className="label" htmlFor="name">Emri</label>
           <input id="name" className="input mb-5" value={form.full_name} onChange={(e) => setForm({ ...form, full_name: e.target.value })} required minLength={2} />
+
           <label className="label" htmlFor="email">Email</label>
           <input id="email" className="input mb-5" type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} required />
-          <label className="label" htmlFor="password">Fjalëkalimi</label>
+
+          <label className="label" htmlFor="password">Fjalekalimi</label>
           <input id="password" className="input" type="password" minLength={8} value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} required />
+
           {error && <p role="alert" className="mt-4 rounded-xl bg-red-50 p-3 text-sm text-red-700">{error}</p>}
-          <button className="btn-primary mt-6 w-full" disabled={loading}>{loading ? "Duke krijuar..." : "Krijo account"}</button>
+
+          <button className="btn-primary mt-6 w-full" disabled={loading}>
+            {loading ? "Duke krijuar..." : "Krijo account"}
+          </button>
+
           <p className="mt-5 text-center text-sm text-slate-500">
-            Ke account? <Link href="/login" className="font-semibold text-teal">Hyr këtu</Link>
+            Ke account? <Link href="/login" className="font-semibold text-teal">Hyr ketu</Link>
           </p>
         </form>
       </section>

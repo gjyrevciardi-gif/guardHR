@@ -28,6 +28,112 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
   letter-spacing: -0.055em;
 }
 
+.ocean-card {
+  background:
+    radial-gradient(circle at 32% 30%, rgba(255, 255, 255, 0.96), transparent 13rem),
+    radial-gradient(circle at 72% 20%, rgba(125, 211, 252, 0.42), transparent 18rem),
+    linear-gradient(160deg, rgba(232, 249, 255, 0.98) 0%, rgba(194, 236, 255, 0.82) 47%, rgba(230, 247, 255, 0.95) 100%);
+}
+
+.ocean-card::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(120deg, transparent 10%, rgba(255, 255, 255, 0.32) 38%, transparent 62%),
+    radial-gradient(circle at 85% 92%, rgba(13, 123, 215, 0.13), transparent 15rem);
+  animation: shimmer-drift 10s ease-in-out infinite alternate;
+  pointer-events: none;
+}
+
+.ocean-current {
+  position: absolute;
+  left: -16%;
+  right: -16%;
+  height: 13rem;
+  border-radius: 999px;
+  filter: blur(1px);
+  opacity: 0.48;
+  pointer-events: none;
+}
+
+.ocean-current-one {
+  bottom: 7.5rem;
+  background: linear-gradient(90deg, transparent, rgba(14, 165, 233, 0.22), rgba(255, 255, 255, 0.55), transparent);
+  transform: rotate(-7deg);
+  animation: ocean-drift 12s ease-in-out infinite;
+}
+
+.ocean-current-two {
+  bottom: -2rem;
+  background: linear-gradient(90deg, transparent, rgba(125, 211, 252, 0.38), rgba(13, 123, 215, 0.2), transparent);
+  transform: rotate(4deg);
+  animation: ocean-drift 15s ease-in-out infinite reverse;
+}
+
+.nemo-swimmer {
+  transform-origin: center;
+  animation: nemo-glide 7.5s ease-in-out infinite;
+}
+
+.nemo-tail {
+  transform-origin: 32px 82px;
+  animation: nemo-tail-swish 1.9s ease-in-out infinite;
+}
+
+.ocean-bubble {
+  position: absolute;
+  bottom: -2rem;
+  left: var(--bubble-left);
+  z-index: 1;
+  width: var(--bubble-size);
+  height: var(--bubble-size);
+  border-radius: 9999px;
+  border: 1px solid rgba(255, 255, 255, 0.72);
+  background: radial-gradient(circle at 32% 28%, rgba(255, 255, 255, 0.95), rgba(125, 211, 252, 0.28));
+  box-shadow: 0 10px 24px rgba(13, 123, 215, 0.12);
+  opacity: 0;
+  animation: bubble-rise var(--bubble-duration) ease-in infinite;
+  animation-delay: var(--bubble-delay);
+}
+
+@keyframes nemo-glide {
+  0%, 100% { transform: translate3d(-8px, 4px, 0) rotate(-1.2deg); }
+  50% { transform: translate3d(10px, -7px, 0) rotate(1.4deg); }
+}
+
+@keyframes nemo-tail-swish {
+  0%, 100% { transform: rotate(0deg); }
+  50% { transform: rotate(-4deg); }
+}
+
+@keyframes bubble-rise {
+  0% { transform: translate3d(0, 0, 0) scale(0.7); opacity: 0; }
+  15% { opacity: 0.62; }
+  85% { opacity: 0.42; }
+  100% { transform: translate3d(22px, -34rem, 0) scale(1.25); opacity: 0; }
+}
+
+@keyframes ocean-drift {
+  0%, 100% { transform: translateX(-2%) rotate(-6deg); }
+  50% { transform: translateX(4%) rotate(-4deg); }
+}
+
+@keyframes shimmer-drift {
+  0% { transform: translateX(-3%); opacity: 0.72; }
+  100% { transform: translateX(3%); opacity: 0.95; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .nemo-swimmer,
+  .nemo-tail,
+  .ocean-bubble,
+  .ocean-current,
+  .ocean-card::before {
+    animation: none !important;
+  }
+}
+
 @layer components {
   .card { @apply rounded-3xl border border-slate-200/80 bg-white/90 shadow-soft backdrop-blur-xl; }
   .input { @apply w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-navy outline-none transition placeholder:text-slate-400 focus:border-teal focus:ring-2 focus:ring-teal/15; }
