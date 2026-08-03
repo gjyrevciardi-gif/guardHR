@@ -36,10 +36,11 @@ export default function SessionDetailPage() {
         data.events
           .filter((event) => !knownEventIds.current.has(event.id))
           .forEach((event) => {
+            const label = eventLabels[event.event_type] || event.event_type;
             pushAlert({
               id: event.id,
-              title: eventLabels[event.event_type] || event.event_type,
-              message: `${eventLabels[event.event_type] || event.event_type} · ${event.duration_seconds != null ? `${event.duration_seconds.toFixed(1)}s` : "pa kohezgjatje"} · ${dateTime(event.started_at)}`,
+              title: label,
+              message: `${label} - ${event.duration_seconds != null ? `${event.duration_seconds.toFixed(1)}s` : "pa kohezgjatje"} - ${dateTime(event.started_at)}`,
             });
           });
       }
@@ -57,7 +58,7 @@ export default function SessionDetailPage() {
   }, [id, pushAlert, router]);
 
   useEffect(() => {
-    load();
+    void load();
   }, [load]);
 
   useEffect(() => {
@@ -96,38 +97,41 @@ export default function SessionDetailPage() {
           ))}
         </div>
       )}
-      <Link href="/dashboard" className="mb-6 inline-flex items-center gap-2 text-sm font-semibold text-slate-600">
+
+      <Link href="/dashboard" className="mb-6 inline-flex items-center gap-2 text-sm font-semibold text-slate-600 hover:text-teal">
         <ArrowLeft size={17} /> Dashboard
       </Link>
+
       <div className="flex flex-col gap-5 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <div className="flex flex-wrap items-center gap-3">
-            <h1 className="text-3xl font-bold">{session.candidate.full_name}</h1>
+            <h1 className="text-3xl font-black">{session.candidate.full_name}</h1>
             <StatusBadge status={session.review_status} />
           </div>
-          <p className="mt-2 text-slate-500">{session.title} · {session.candidate.email || "Pa email"}</p>
+          <p className="mt-2 text-slate-500">{session.title} - {session.candidate.email || "Pa email"}</p>
         </div>
         <div className="flex flex-col gap-3 sm:items-end">
           <div className="text-sm text-slate-500">Krijuar {dateTime(session.created_at)}</div>
           <Link href={`/sessions/${session.id}/room`} className="btn-primary">
-            <Video size={18} /> Hyr në Nemo Call si host
+            <Video size={18} /> Hyr ne Nemo Call si host
           </Link>
         </div>
       </div>
 
       <div className="mt-8 grid gap-6 lg:grid-cols-[1.6fr_1fr]">
         <section className="card p-6">
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between gap-4">
             <div>
-              <h2 className="text-lg font-bold">Live activity timeline</h2>
-              <p className="text-sm text-slate-500">Rifreskohet automatikisht. Sinjale për host-in, jo akuza automatike.</p>
+              <h2 className="text-lg font-black">Live activity timeline</h2>
+              <p className="text-sm text-slate-500">Rifreskohet automatikisht. Sinjale per host-in, jo akuza automatike.</p>
             </div>
             <span className="rounded-lg bg-slate-100 px-3 py-2 text-sm font-semibold">{session.events.length} evente</span>
           </div>
+
           {session.events.length === 0 ? (
             <div className="mt-8 rounded-xl border border-dashed border-slate-300 p-10 text-center">
               <p className="font-semibold text-emerald-700">No events detected</p>
-              <p className="mt-1 text-sm text-slate-500">Nuk ka activity signals të regjistruara në këtë call.</p>
+              <p className="mt-1 text-sm text-slate-500">Nuk ka activity signals te regjistruara ne kete call.</p>
             </div>
           ) : (
             <ol className="relative mt-8 border-l border-slate-200">
@@ -150,7 +154,7 @@ export default function SessionDetailPage() {
 
         <div className="space-y-6">
           <section className="card p-6">
-            <h2 className="font-bold">Detajet e call-it</h2>
+            <h2 className="font-black">Detajet e call-it</h2>
             <dl className="mt-4 space-y-3 text-sm">
               <Row label="Status" value={session.status.replace("_", " ")} />
               <Row label="Filluar" value={dateTime(session.started_at)} />
@@ -166,25 +170,33 @@ export default function SessionDetailPage() {
 
           {session.test && (
             <section className="card p-6">
-              <h2 className="font-bold">Testi me zgjedhje</h2>
-              <p className="mt-2 text-sm text-slate-600">{session.test.title}</p>
-              <p className="mt-1 text-xs text-slate-500">{session.test.question_count} pyetje</p>
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <h2 className="font-black">Testi me zgjedhje</h2>
+                  <p className="mt-2 text-sm text-slate-600">{session.test.title}</p>
+                  <p className="mt-1 text-xs text-slate-500">{session.test.question_count} pyetje</p>
+                </div>
+                <Link href={`/tests/${session.test.id}`} className="btn-secondary">
+                  Review/Edit <ExternalLink size={16} />
+                </Link>
+              </div>
+
               {session.test_submission ? (
                 <div className="mt-4 rounded-xl bg-emerald-50 p-4 text-sm text-emerald-800">
-                  Pjesëmarrësi e dorëzoi testin: <strong>{session.test_submission.score}/{session.test_submission.total}</strong>
-                  <div className="mt-1 text-xs">Dorëzuar: {dateTime(session.test_submission.submitted_at)}</div>
+                  Pjesemarresi e dorezoi testin: <strong>{session.test_submission.score}/{session.test_submission.total}</strong>
+                  <div className="mt-1 text-xs">Dorezuar: {dateTime(session.test_submission.submitted_at)}</div>
                 </div>
               ) : (
                 <div className="mt-4 rounded-xl bg-amber-50 p-4 text-sm text-amber-800">
-                  Pjesëmarrësi ende nuk e ka dorëzuar testin.
+                  Pjesemarresi ende nuk e ka dorezuar testin.
                 </div>
               )}
             </section>
           )}
 
           <form onSubmit={review} className="card p-6">
-            <div className="flex items-center gap-2"><FileCheck2 className="text-teal" /><h2 className="font-bold">Host notes</h2></div>
-            <p className="mt-2 text-xs leading-5 text-slate-500">Sistemi nuk akuzon automatikisht. Shëno kontekstin e call/test signals për evidencë.</p>
+            <div className="flex items-center gap-2"><FileCheck2 className="text-teal" /><h2 className="font-black">Host notes</h2></div>
+            <p className="mt-2 text-xs leading-5 text-slate-500">Sistemi nuk akuzon automatikisht. Sheno kontekstin e call/test signals per evidence.</p>
             <label className="label mt-5">Rezultati</label>
             <select className="input" value={outcome} onChange={(e) => setOutcome(e.target.value)}>
               <option>Review completed</option>
@@ -193,7 +205,7 @@ export default function SessionDetailPage() {
             <label className="label mt-4">Shenime</label>
             <textarea className="input min-h-32 resize-y" value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Konteksti dhe arsyetimi i shqyrtimit..." required minLength={3} />
             {message && <p className="mt-3 text-sm text-emerald-700">{message}</p>}
-            <button className="btn-primary mt-4 w-full">Ruaj shënimet</button>
+            <button className="btn-primary mt-4 w-full">Ruaj shenimet</button>
           </form>
         </div>
       </div>

@@ -60,10 +60,20 @@ class TestQuestionCreate(BaseModel):
     correct_option_index: int = Field(ge=0)
 
 
+class TestQuestionUpdate(TestQuestionCreate):
+    id: str | None = None
+
+
 class TestCreate(BaseModel):
     title: str = Field(min_length=2, max_length=200)
     description: str | None = Field(default=None, max_length=2000)
     questions: list[TestQuestionCreate] = Field(min_length=1, max_length=100)
+
+
+class TestUpdate(BaseModel):
+    title: str = Field(min_length=2, max_length=200)
+    description: str | None = Field(default=None, max_length=2000)
+    questions: list[TestQuestionUpdate] = Field(min_length=1, max_length=100)
 
 
 class TestQuestionOut(BaseModel):
@@ -71,6 +81,10 @@ class TestQuestionOut(BaseModel):
     position: int
     prompt: str
     options: list[str]
+
+
+class TestQuestionHostOut(TestQuestionOut):
+    correct_option_index: int
 
 
 class TestOut(BaseModel):
@@ -93,6 +107,31 @@ class TestSubmissionOut(BaseModel):
     total: int
     answers: dict[str, int]
     submitted_at: datetime
+
+
+class TestReviewSessionOut(BaseModel):
+    session_id: str
+    session_title: str
+    candidate_name: str
+    candidate_email: EmailStr | None
+    status: str
+    review_status: ReviewLabel
+    event_count: int
+    event_summary: dict[str, int] = Field(default_factory=dict)
+    submitted_at: datetime | None = None
+    score: int | None = None
+    total: int | None = None
+    answers: dict[str, int] | None = None
+
+
+class TestDetailOut(BaseModel):
+    id: str
+    title: str
+    description: str | None
+    created_at: datetime
+    question_count: int = 0
+    questions: list[TestQuestionHostOut] = Field(default_factory=list)
+    sessions: list[TestReviewSessionOut] = Field(default_factory=list)
 
 
 class CandidateOut(BaseModel):

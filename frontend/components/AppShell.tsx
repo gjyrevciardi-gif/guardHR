@@ -24,7 +24,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           </Link>
           <nav className="flex items-center gap-2 text-sm">
             <Link href="/dashboard" className={navClass(pathname === "/dashboard")}>Dashboard</Link>
-            <Link href="/tests/new" className={navClass(pathname.startsWith("/tests"))}>Teste</Link>
+            <Link href="/tests" className={navClass(pathname.startsWith("/tests"))}>Teste</Link>
             <button
               onClick={() => { clearToken(); router.push("/login"); }}
               className="flex items-center gap-2 rounded-full px-4 py-2 text-slate-600 hover:bg-sky-50 hover:text-navy"

@@ -5,9 +5,24 @@ export interface User { id: string; email: string; full_name: string; role: stri
 export interface Candidate { id: string; email: string | null; full_name: string }
 export interface IntegrityEvent { id: string; event_type: EventType; started_at: string; ended_at: string | null; duration_seconds: number | null; confidence_score: number | null; metadata: Record<string, unknown> }
 export interface Review { id: string; outcome: string; notes: string; created_at: string; updated_at: string }
-export interface TestQuestion { id: string; position: number; prompt: string; options: string[] }
+export interface TestQuestion { id: string; position: number; prompt: string; options: string[]; correct_option_index?: number }
 export interface Test { id: string; title: string; description: string | null; created_at: string; question_count: number; questions: TestQuestion[] }
 export interface TestSubmission { id: string; test_id: string; score: number; total: number; answers: Record<string, number>; submitted_at: string }
+export interface TestReviewSession {
+  session_id: string;
+  session_title: string;
+  candidate_name: string;
+  candidate_email: string | null;
+  status: string;
+  review_status: ReviewStatus;
+  event_count: number;
+  event_summary: Record<string, number>;
+  submitted_at: string | null;
+  score: number | null;
+  total: number | null;
+  answers: Record<string, number> | null;
+}
+export interface TestDetail extends Test { sessions: TestReviewSession[]; questions: Required<TestQuestion>[] }
 export interface InterviewSession {
   id: string; title: string; public_token: string; status: string; review_status: ReviewStatus;
   invite_email_sent: boolean | null; invite_email_error: string | null;
