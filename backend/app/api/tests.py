@@ -4,23 +4,38 @@ from sqlalchemy.orm import Session, selectinload
 
 from ..database import get_db
 from ..models import InterviewSession, Test, TestQuestion, TestSubmission, User
-from ..schemas import TestCreate, TestDetailOut, TestOut, TestQuestionHostOut, TestQuestionOut, TestReviewSessionOut, TestUpdate
+from ..schemas import (
+    PublicTestSubmit,
+    TestCreate,
+    TestDetailOut,
+    TestOut,
+    TestQuestionHostOut,
+    TestQuestionOut,
+    TestReviewSessionOut,
+    TestStandaloneSubmissionOut,
+    TestSubmissionOut,
+    TestUpdate,
+)
 from ..security import get_current_user
-from ..services import audit
+from ..services import audit, request_ip
 from ..test_generator import extract_text_from_upload, generate_questions, infer_title
 
 router = APIRouter(prefix="/tests", tags=["tests"])
+public_router = APIRouter(prefix="/public/tests", tags=["public-tests"])
 
 
 def test_to_out(test: Test, include_questions: bool = True) -> TestOut:
     return TestOut(
         id=test.id,
+        public_token=test.public_token,
         title=test.title,
         description=test.description,
+        is_public=test.is_public,
+        form_mode=test.form_mode,
         created_at=test.created_at,
         question_count=len(test.questions),
         questions=[
-            TestQuestionOut(id=q.id, position=q.position, prompt=q.prompt, options=q.options)
+            TestQuestionOut(id=q.id, position=q.position, question_type=q.question_type, prompt=q.prompt, options=q.options)
             for q in test.questions
         ] if include_questions else [],
     )
@@ -39,11 +54,58 @@ def owned_test(db: Session, test_id: str, user: User) -> Test:
 
 def validate_questions(payload: TestCreate | TestUpdate) -> None:
     for index, question in enumerate(payload.questions):
+        if question.question_type == "short_text":
+            continue
         cleaned_options = [option.strip() for option in question.options if option.strip()]
         if len(cleaned_options) < 2:
             raise HTTPException(status_code=422, detail=f"Question {index + 1} needs at least 2 options")
-        if question.correct_option_index >= len(cleaned_options):
+        if question.correct_option_index is None and not payload.form_mode:
+            raise HTTPException(status_code=422, detail=f"Correct answer is required for question {index + 1}")
+        if question.correct_option_index is not None and question.correct_option_index >= len(cleaned_options):
             raise HTTPException(status_code=422, detail=f"Correct answer is invalid for question {index + 1}")
+
+
+def build_question(test_id: str, index: int, question) -> TestQuestion:
+    options = [option.strip() for option in question.options if option.strip()] if question.question_type == "multiple_choice" else []
+    return TestQuestion(
+        test_id=test_id,
+        position=index + 1,
+        question_type=question.question_type,
+        prompt=question.prompt.strip(),
+        options=options,
+        correct_option_index=question.correct_option_index if question.question_type == "multiple_choice" else None,
+    )
+
+
+def grade_answers(questions: list[TestQuestion], answers: dict) -> tuple[dict, int, int]:
+    checked_answers: dict = {}
+    score = 0
+    total = 0
+    for question in questions:
+        answer = answers.get(question.id)
+        if question.question_type == "short_text":
+            if answer is None:
+                continue
+            value = str(answer).strip()
+            if len(value) > 5000:
+                raise HTTPException(status_code=422, detail="Text answer is too long")
+            checked_answers[question.id] = value
+            continue
+
+        if answer is None:
+            continue
+        try:
+            answer_index = int(answer)
+        except (TypeError, ValueError):
+            raise HTTPException(status_code=422, detail="Invalid answer option") from None
+        if answer_index < 0 or answer_index >= len(question.options):
+            raise HTTPException(status_code=422, detail="Invalid answer option")
+        checked_answers[question.id] = answer_index
+        if question.correct_option_index is not None:
+            total += 1
+            if answer_index == question.correct_option_index:
+                score += 1
+    return checked_answers, score, total
 
 
 def test_to_detail(test: Test, db: Session, user: User) -> TestDetailOut:
@@ -84,14 +146,18 @@ def test_to_detail(test: Test, db: Session, user: User) -> TestDetailOut:
 
     return TestDetailOut(
         id=test.id,
+        public_token=test.public_token,
         title=test.title,
         description=test.description,
+        is_public=test.is_public,
+        form_mode=test.form_mode,
         created_at=test.created_at,
         question_count=len(test.questions),
         questions=[
             TestQuestionHostOut(
                 id=question.id,
                 position=question.position,
+                question_type=question.question_type,
                 prompt=question.prompt,
                 options=question.options,
                 correct_option_index=question.correct_option_index,
@@ -99,6 +165,22 @@ def test_to_detail(test: Test, db: Session, user: User) -> TestDetailOut:
             for question in test.questions
         ],
         sessions=review_sessions,
+        standalone_submissions=[
+            TestStandaloneSubmissionOut(
+                id=submission.id,
+                participant_name=submission.participant_name,
+                participant_email=submission.participant_email,
+                score=submission.score,
+                total=submission.total,
+                answers=submission.answers,
+                submitted_at=submission.submitted_at,
+            )
+            for submission in db.scalars(
+                select(TestSubmission)
+                .where(TestSubmission.test_id == test.id, TestSubmission.session_id.is_(None))
+                .order_by(TestSubmission.submitted_at.desc())
+            ).all()
+        ],
     )
 
 
@@ -117,13 +199,12 @@ def list_tests(db: Session = Depends(get_db), user: User = Depends(get_current_u
 def create_test(payload: TestCreate, request: Request, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     validate_questions(payload)
 
-    test = Test(created_by=user.id, title=payload.title, description=payload.description)
+    test = Test(created_by=user.id, title=payload.title, description=payload.description, form_mode=payload.form_mode, is_public=payload.is_public)
     db.add(test)
     db.flush()
     for index, question in enumerate(payload.questions):
-        options = [option.strip() for option in question.options if option.strip()]
-        db.add(TestQuestion(test_id=test.id, position=index + 1, prompt=question.prompt.strip(), options=options, correct_option_index=question.correct_option_index))
-    audit(db, user, request, "test.created", "test", test.id, None, {"question_count": len(payload.questions)})
+        db.add(build_question(test.id, index, question))
+    audit(db, user, request, "test.created", "test", test.id, None, {"question_count": len(payload.questions), "form_mode": payload.form_mode})
     db.commit()
     db.refresh(test)
     test = db.scalar(select(Test).options(selectinload(Test.questions)).where(Test.id == test.id))
@@ -154,6 +235,8 @@ async def generate_test_from_file(
         created_by=user.id,
         title=title,
         description=f"Generated automatically from {file.filename}. Review questions before using in a live call.",
+        form_mode=False,
+        is_public=True,
     )
     db.add(test)
     db.flush()
@@ -161,6 +244,7 @@ async def generate_test_from_file(
         db.add(TestQuestion(
             test_id=test.id,
             position=index + 1,
+            question_type="multiple_choice",
             prompt=question.prompt,
             options=question.options,
             correct_option_index=question.correct_option_index,
@@ -189,27 +273,22 @@ def update_test(test_id: str, payload: TestUpdate, request: Request, db: Session
 
     test.title = payload.title.strip()
     test.description = payload.description.strip() if payload.description else None
+    test.form_mode = payload.form_mode
+    test.is_public = payload.is_public
 
     for index, incoming in enumerate(payload.questions):
-        options = [option.strip() for option in incoming.options if option.strip()]
         if incoming.id:
             question = existing_questions.get(incoming.id)
             if not question:
                 raise HTTPException(status_code=422, detail=f"Question {index + 1} does not belong to this test")
             seen_question_ids.add(question.id)
             question.position = index + 1
+            question.question_type = incoming.question_type
             question.prompt = incoming.prompt.strip()
-            question.options = options
-            question.correct_option_index = incoming.correct_option_index
+            question.options = [option.strip() for option in incoming.options if option.strip()] if incoming.question_type == "multiple_choice" else []
+            question.correct_option_index = incoming.correct_option_index if incoming.question_type == "multiple_choice" else None
         else:
-            question = TestQuestion(
-                test_id=test.id,
-                position=index + 1,
-                prompt=incoming.prompt.strip(),
-                options=options,
-                correct_option_index=incoming.correct_option_index,
-            )
-            db.add(question)
+            db.add(build_question(test.id, index, incoming))
 
     removed_count = 0
     for question_id, question in existing_questions.items():
@@ -225,8 +304,65 @@ def update_test(test_id: str, payload: TestUpdate, request: Request, db: Session
         "test",
         test.id,
         None,
-        {"question_count": len(payload.questions), "removed_questions": removed_count},
+        {"question_count": len(payload.questions), "removed_questions": removed_count, "form_mode": payload.form_mode, "is_public": payload.is_public},
     )
     db.commit()
     test = owned_test(db, test_id, user)
     return test_to_detail(test, db, user)
+
+
+def public_test(db: Session, token: str) -> Test:
+    test = db.scalar(
+        select(Test)
+        .options(selectinload(Test.questions))
+        .where(Test.public_token == token, Test.is_public.is_(True))
+    )
+    if not test:
+        raise HTTPException(status_code=404, detail="Test link is invalid or closed")
+    return test
+
+
+@public_router.get("/{token}", response_model=TestOut)
+def get_public_test(token: str, db: Session = Depends(get_db)):
+    return test_to_out(public_test(db, token), include_questions=True)
+
+
+@public_router.post("/{token}/submissions", response_model=TestSubmissionOut, status_code=201)
+def submit_public_test(token: str, payload: PublicTestSubmit, request: Request, db: Session = Depends(get_db)):
+    test = public_test(db, token)
+    questions = db.scalars(select(TestQuestion).where(TestQuestion.test_id == test.id).order_by(TestQuestion.position)).all()
+    checked_answers, score, total = grade_answers(list(questions), payload.answers)
+    submission = TestSubmission(
+        session_id=None,
+        test_id=test.id,
+        participant_name=payload.participant_name.strip() if payload.participant_name else None,
+        participant_email=str(payload.participant_email).lower() if payload.participant_email else None,
+        participant_ip=request_ip(request),
+        answers=checked_answers,
+        score=score,
+        total=total,
+    )
+    db.add(submission)
+    audit(
+        db,
+        None,
+        request,
+        "public_test.submitted",
+        "test_submission",
+        submission.id,
+        None,
+        {"test_id": test.id, "score": score, "total": total, "form_mode": test.form_mode},
+    )
+    db.commit()
+    db.refresh(submission)
+    return TestSubmissionOut(
+        id=submission.id,
+        test_id=submission.test_id,
+        session_id=submission.session_id,
+        participant_name=submission.participant_name,
+        participant_email=submission.participant_email,
+        score=submission.score,
+        total=submission.total,
+        answers=submission.answers,
+        submitted_at=submission.submitted_at,
+    )

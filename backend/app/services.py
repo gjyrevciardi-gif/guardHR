@@ -29,16 +29,19 @@ def session_to_out(
     if session.test:
         test = TestOut(
             id=session.test.id,
+            public_token=session.test.public_token,
             title=session.test.title,
             description=session.test.description,
+            is_public=session.test.is_public,
+            form_mode=session.test.form_mode,
             created_at=session.test.created_at,
             question_count=len(session.test.questions),
-            questions=[TestQuestionOut(id=q.id, position=q.position, prompt=q.prompt, options=q.options) for q in session.test.questions] if include_details else [],
+            questions=[TestQuestionOut(id=q.id, position=q.position, question_type=q.question_type, prompt=q.prompt, options=q.options) for q in session.test.questions] if include_details else [],
         )
     submission = None
     if include_details:
         db = object_session(session)
         found = db.query(TestSubmission).filter(TestSubmission.session_id == session.id).one_or_none() if db else None
         if found:
-            submission = TestSubmissionOut(id=found.id, test_id=found.test_id, score=found.score, total=found.total, answers=found.answers, submitted_at=found.submitted_at)
+            submission = TestSubmissionOut(id=found.id, test_id=found.test_id, session_id=found.session_id, participant_name=found.participant_name, participant_email=found.participant_email, score=found.score, total=found.total, answers=found.answers, submitted_at=found.submitted_at)
     return SessionOut(id=session.id, title=session.title, public_token=session.public_token, status=session.status, review_status=session.review_status, invite_email_sent=invite_email_sent, invite_email_error=invite_email_error, require_screen_share=session.require_screen_share, test=test, test_submission=submission, candidate=session.candidate, expires_at=session.expires_at, consented_at=session.consented_at, started_at=session.started_at, ended_at=session.ended_at, created_at=session.created_at, event_count=len(session.events), events=events, reviews=reviews)

@@ -76,3 +76,42 @@ def test_invalid_event_type_is_rejected():
         assert login.status_code == 200
         assert client.post("/api/public/sessions/not-a-token/events", json={"event_type": "emotion_detected", "started_at": datetime.now(timezone.utc).isoformat()}).status_code == 422
 
+
+def test_public_form_link_collects_standalone_submission():
+    with TestClient(app) as client:
+        login = client.post("/api/auth/login", json={"email": "hr@example.com", "password": "StrongPass123!"})
+        assert login.status_code == 200
+        headers = {"Authorization": f"Bearer {login.json()['access_token']}"}
+
+        created = client.post("/api/tests", headers=headers, json={
+            "title": "Event signup",
+            "description": "Kush merr pjese sot?",
+            "form_mode": True,
+            "is_public": True,
+            "questions": [
+                {"question_type": "short_text", "prompt": "Emri i ekipit", "options": [], "correct_option_index": None},
+                {"question_type": "multiple_choice", "prompt": "A merr pjese?", "options": ["Po", "Jo", "Ndoshta"], "correct_option_index": None},
+            ],
+        })
+        assert created.status_code == 201
+        data = created.json()
+
+        public = client.get(f"/api/public/tests/{data['public_token']}")
+        assert public.status_code == 200
+        questions = public.json()["questions"]
+
+        submitted = client.post(f"/api/public/tests/{data['public_token']}/submissions", json={
+            "participant_name": "Ardi",
+            "participant_email": "ardi@example.com",
+            "answers": {
+                questions[0]["id"]: "Frontend team",
+                questions[1]["id"]: 0,
+            },
+        })
+        assert submitted.status_code == 201
+        assert submitted.json()["total"] == 0
+
+        detail = client.get(f"/api/tests/{data['id']}", headers=headers)
+        assert detail.status_code == 200
+        assert len(detail.json()["standalone_submissions"]) == 1
+        assert detail.json()["standalone_submissions"][0]["participant_name"] == "Ardi"

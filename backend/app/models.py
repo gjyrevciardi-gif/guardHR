@@ -66,8 +66,11 @@ class Test(Base):
     __tablename__ = "tests"
     id: Mapped[str] = mapped_column(Uuid(as_uuid=False), primary_key=True, default=uuid4_str)
     created_by: Mapped[str] = mapped_column(Uuid(as_uuid=False), ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    public_token: Mapped[str] = mapped_column(Uuid(as_uuid=False), unique=True, default=uuid4_str, index=True)
     title: Mapped[str] = mapped_column(String(200))
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    is_public: Mapped[bool] = mapped_column(Boolean, default=True)
+    form_mode: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     questions: Mapped[list["TestQuestion"]] = relationship(cascade="all, delete-orphan", order_by="TestQuestion.position")
 
@@ -77,20 +80,24 @@ class TestQuestion(Base):
     id: Mapped[str] = mapped_column(Uuid(as_uuid=False), primary_key=True, default=uuid4_str)
     test_id: Mapped[str] = mapped_column(Uuid(as_uuid=False), ForeignKey("tests.id", ondelete="CASCADE"), index=True)
     position: Mapped[int] = mapped_column(Integer)
+    question_type: Mapped[str] = mapped_column(String(40), default="multiple_choice")
     prompt: Mapped[str] = mapped_column(Text)
     options: Mapped[dict] = mapped_column(JSON, default=list)
-    correct_option_index: Mapped[int] = mapped_column(Integer)
+    correct_option_index: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
 
 class TestSubmission(Base):
     __tablename__ = "test_submissions"
     __table_args__ = (UniqueConstraint("session_id"),)
     id: Mapped[str] = mapped_column(Uuid(as_uuid=False), primary_key=True, default=uuid4_str)
-    session_id: Mapped[str] = mapped_column(Uuid(as_uuid=False), ForeignKey("interview_sessions.id", ondelete="CASCADE"), index=True)
+    session_id: Mapped[str | None] = mapped_column(Uuid(as_uuid=False), ForeignKey("interview_sessions.id", ondelete="CASCADE"), nullable=True, index=True)
     test_id: Mapped[str] = mapped_column(Uuid(as_uuid=False), ForeignKey("tests.id", ondelete="CASCADE"), index=True)
+    participant_name: Mapped[str | None] = mapped_column(String(160), nullable=True)
+    participant_email: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
+    participant_ip: Mapped[str | None] = mapped_column(String(64), nullable=True)
     answers: Mapped[dict] = mapped_column(JSON, default=dict)
-    score: Mapped[int] = mapped_column(Integer)
-    total: Mapped[int] = mapped_column(Integer)
+    score: Mapped[int] = mapped_column(Integer, default=0)
+    total: Mapped[int] = mapped_column(Integer, default=0)
     submitted_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
 

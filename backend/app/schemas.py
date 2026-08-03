@@ -4,6 +4,7 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
 ReviewLabel = Literal["No events detected", "Requires review", "Review completed", "Insufficient evidence"]
+QuestionType = Literal["multiple_choice", "short_text"]
 EventType = Literal[
     "tab_hidden",
     "fullscreen_exit",
@@ -55,9 +56,10 @@ class SessionCreate(BaseModel):
 
 
 class TestQuestionCreate(BaseModel):
+    question_type: QuestionType = "multiple_choice"
     prompt: str = Field(min_length=2, max_length=5000)
-    options: list[str] = Field(min_length=2, max_length=8)
-    correct_option_index: int = Field(ge=0)
+    options: list[str] = Field(default_factory=list, max_length=8)
+    correct_option_index: int | None = Field(default=None, ge=0)
 
 
 class TestQuestionUpdate(TestQuestionCreate):
@@ -67,45 +69,61 @@ class TestQuestionUpdate(TestQuestionCreate):
 class TestCreate(BaseModel):
     title: str = Field(min_length=2, max_length=200)
     description: str | None = Field(default=None, max_length=2000)
+    form_mode: bool = False
+    is_public: bool = True
     questions: list[TestQuestionCreate] = Field(min_length=1, max_length=100)
 
 
 class TestUpdate(BaseModel):
     title: str = Field(min_length=2, max_length=200)
     description: str | None = Field(default=None, max_length=2000)
+    form_mode: bool = False
+    is_public: bool = True
     questions: list[TestQuestionUpdate] = Field(min_length=1, max_length=100)
 
 
 class TestQuestionOut(BaseModel):
     id: str
     position: int
+    question_type: QuestionType = "multiple_choice"
     prompt: str
     options: list[str]
 
 
 class TestQuestionHostOut(TestQuestionOut):
-    correct_option_index: int
+    correct_option_index: int | None = None
 
 
 class TestOut(BaseModel):
     id: str
+    public_token: str
     title: str
     description: str | None
+    is_public: bool = True
+    form_mode: bool = False
     created_at: datetime
     question_count: int = 0
     questions: list[TestQuestionOut] = Field(default_factory=list)
 
 
 class TestSubmit(BaseModel):
-    answers: dict[str, int]
+    answers: dict[str, Any]
+
+
+class PublicTestSubmit(TestSubmit):
+    participant_name: str | None = Field(default=None, max_length=160)
+    participant_email: EmailStr | None = None
 
 
 class TestSubmissionOut(BaseModel):
     id: str
     test_id: str
+    session_id: str | None = None
+    participant_name: str | None = None
+    participant_email: EmailStr | None = None
     score: int
     total: int
-    answers: dict[str, int]
+    answers: dict[str, Any]
     submitted_at: datetime
 
 
@@ -121,17 +139,31 @@ class TestReviewSessionOut(BaseModel):
     submitted_at: datetime | None = None
     score: int | None = None
     total: int | None = None
-    answers: dict[str, int] | None = None
+    answers: dict[str, Any] | None = None
+
+
+class TestStandaloneSubmissionOut(BaseModel):
+    id: str
+    participant_name: str | None = None
+    participant_email: EmailStr | None = None
+    score: int
+    total: int
+    answers: dict[str, Any]
+    submitted_at: datetime
 
 
 class TestDetailOut(BaseModel):
     id: str
+    public_token: str
     title: str
     description: str | None
+    is_public: bool = True
+    form_mode: bool = False
     created_at: datetime
     question_count: int = 0
     questions: list[TestQuestionHostOut] = Field(default_factory=list)
     sessions: list[TestReviewSessionOut] = Field(default_factory=list)
+    standalone_submissions: list[TestStandaloneSubmissionOut] = Field(default_factory=list)
 
 
 class CandidateOut(BaseModel):

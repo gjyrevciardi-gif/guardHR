@@ -10,6 +10,7 @@ from ..schemas import ConsentRequest, EventCreate, EventOut, PublicSessionOut, T
 from ..services import audit, request_ip
 from ..vision import detect_objects
 from .signaling import broadcast_system
+from .tests import grade_answers
 
 router = APIRouter(prefix="/public/sessions", tags=["candidate"])
 
@@ -37,9 +38,12 @@ def get_public_session(token: str, db: Session = Depends(get_db)):
             id=session.test.id,
             title=session.test.title,
             description=session.test.description,
+            public_token=session.test.public_token,
+            is_public=session.test.is_public,
+            form_mode=session.test.form_mode,
             created_at=session.test.created_at,
             question_count=len(session.test.questions),
-            questions=[TestQuestionOut(id=q.id, position=q.position, prompt=q.prompt, options=q.options) for q in session.test.questions],
+            questions=[TestQuestionOut(id=q.id, position=q.position, question_type=q.question_type, prompt=q.prompt, options=q.options) for q in session.test.questions],
         )
     return PublicSessionOut(title=session.title, candidate_name=session.candidate.full_name, status=session.status, require_screen_share=session.require_screen_share, expires_at=session.expires_at, consented_at=session.consented_at, test=test)
 
@@ -71,23 +75,13 @@ def submit_test(token: str, payload: TestSubmit, request: Request, db: Session =
         raise HTTPException(status_code=409, detail="Test was already submitted")
 
     questions = db.scalars(select(TestQuestion).where(TestQuestion.test_id == session.test.id).order_by(TestQuestion.position)).all()
-    score = 0
-    checked_answers: dict[str, int] = {}
-    for question in questions:
-        answer = payload.answers.get(question.id)
-        if answer is None:
-            continue
-        if answer < 0 or answer >= len(question.options):
-            raise HTTPException(status_code=422, detail="Invalid answer option")
-        checked_answers[question.id] = answer
-        if answer == question.correct_option_index:
-            score += 1
-    submission = TestSubmission(session_id=session.id, test_id=session.test.id, answers=checked_answers, score=score, total=len(questions))
+    checked_answers, score, total = grade_answers(list(questions), payload.answers)
+    submission = TestSubmission(session_id=session.id, test_id=session.test.id, answers=checked_answers, score=score, total=total)
     db.add(submission)
-    audit(db, None, request, "candidate.test.submitted", "test_submission", submission.id, session.id, {"score": score, "total": len(questions)})
+    audit(db, None, request, "candidate.test.submitted", "test_submission", submission.id, session.id, {"score": score, "total": total})
     db.commit()
     db.refresh(submission)
-    return TestSubmissionOut(id=submission.id, test_id=submission.test_id, score=submission.score, total=submission.total, answers=submission.answers, submitted_at=submission.submitted_at)
+    return TestSubmissionOut(id=submission.id, test_id=submission.test_id, session_id=submission.session_id, participant_name=submission.participant_name, participant_email=submission.participant_email, score=submission.score, total=submission.total, answers=submission.answers, submitted_at=submission.submitted_at)
 
 
 @router.post("/{token}/start", status_code=204)

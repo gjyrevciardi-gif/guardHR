@@ -41,13 +41,13 @@ export default function TestsPage() {
       <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <p className="text-sm font-bold uppercase tracking-[0.24em] text-teal">Test library</p>
-          <h1 className="mt-2 text-3xl font-black text-navy">Testet</h1>
+          <h1 className="mt-2 text-3xl font-black text-navy">Testet & formularet</h1>
           <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-500">
-            Ketu i sheh testet, i editon pyetjet dhe hap review per pergjigjet e pjesemarresve.
+            Ketu i sheh testet/formularet, i editon pyetjet, merr link publik dhe hap review per pergjigjet e pjesemarresve.
           </p>
         </div>
         <Link href="/tests/new" className="btn-primary">
-          <Plus size={18} /> Krijo test
+          <Plus size={18} /> Krijo test/form
         </Link>
       </div>
 
@@ -74,8 +74,8 @@ export default function TestsPage() {
         <section className="card mt-6 p-10 text-center">
           <ClipboardList className="mx-auto text-teal" size={34} />
           <h2 className="mt-4 text-xl font-black">Nuk ka teste ende</h2>
-          <p className="mt-2 text-sm text-slate-500">Krijo test manualisht ose ngarko PDF/DOCX per gjenerim automatik.</p>
-          <Link href="/tests/new" className="btn-primary mt-5">Krijo testin e pare</Link>
+          <p className="mt-2 text-sm text-slate-500">Krijo test me score ose formular publik per event/survey.</p>
+          <Link href="/tests/new" className="btn-primary mt-5">Krijo te parin</Link>
         </section>
       ) : (
         <div className="mt-6 grid gap-4 lg:grid-cols-2">
@@ -93,7 +93,7 @@ export default function TestsPage() {
                 </span>
               </div>
               <div className="mt-6 flex flex-wrap items-center justify-between gap-3 text-sm">
-                <span className="rounded-full bg-sky-50 px-3 py-1 font-bold text-teal">{test.question_count} pyetje</span>
+                <span className="rounded-full bg-sky-50 px-3 py-1 font-bold text-teal">{test.form_mode ? "Formular" : "Test"} - {test.question_count} pyetje</span>
                 <span className="text-slate-500">{dateTime(test.created_at)}</span>
               </div>
               <div className="mt-5 flex items-center gap-2 text-sm font-bold text-teal">
