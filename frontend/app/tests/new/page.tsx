@@ -25,7 +25,7 @@ export default function NewTestPage() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
-  const [questionCount, setQuestionCount] = useState(8);
+  const [questionCount, setQuestionCount] = useState(10);
 
   useEffect(() => {
     if (!getToken()) router.replace("/login");
@@ -132,7 +132,7 @@ export default function NewTestPage() {
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
                   <label className="block text-sm font-semibold text-slate-600">
                     Pyetje
-                    <input className="input mt-1 w-28" type="number" min={2} max={30} value={questionCount} onChange={(event) => setQuestionCount(Number(event.target.value))} />
+                    <input className="input mt-1 w-28" type="number" min={2} max={50} value={questionCount} onChange={(event) => setQuestionCount(Number(event.target.value))} />
                   </label>
                   <label className="btn-primary cursor-pointer">
                     <FileUp size={17} /> {uploading ? "Duke gjeneruar..." : "Ngarko dokument"}
@@ -147,7 +147,7 @@ export default function NewTestPage() {
                 </div>
               </div>
               <p className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 p-3 text-xs leading-5 text-amber-800">
-                MVP gjeneron pyetje lokale nga teksti, pa external AI key. Kontrollo pyetjet para se ta perdoresh testin ne call.
+                Importi tani provon se pari me i kapur pyetjet ekzistuese nga dokumenti. Nese PDF-i nuk ka answer key, kontrollo pergjigjet ne Review/Edit para se ta perdoresh ne call.
               </p>
             </section>
 

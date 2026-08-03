@@ -134,12 +134,12 @@ def create_test(payload: TestCreate, request: Request, db: Session = Depends(get
 async def generate_test_from_file(
     request: Request,
     file: UploadFile = File(...),
-    question_count: int = Form(8),
+    question_count: int = Form(10),
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
-    if question_count < 2 or question_count > 30:
-        raise HTTPException(status_code=422, detail="Question count must be between 2 and 30")
+    if question_count < 2 or question_count > 50:
+        raise HTTPException(status_code=422, detail="Question count must be between 2 and 50")
     content = await file.read(8_000_001)
     if len(content) > 8_000_000:
         raise HTTPException(status_code=413, detail="File is too large. Max 8MB.")
