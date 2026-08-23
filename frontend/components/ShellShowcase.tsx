@@ -58,7 +58,7 @@ export function ShellShowcase() {
         </div>
       </div>
 
-      <div className="absolute left-1/2 top-[60%] z-0 h-64 w-64 -translate-x-1/2 -translate-y-1/2 opacity-95 drop-shadow-[0_30px_50px_rgba(22,74,65,0.22)] sm:h-72 sm:w-72">
+      <div className="absolute bottom-4 left-1/2 z-0 h-72 w-72 -translate-x-1/2 drop-shadow-[0_26px_44px_rgba(22,74,65,0.26)] sm:h-80 sm:w-80">
         <ShellMark animated className="h-full w-full" />
       </div>
 
@@ -79,14 +79,6 @@ export function ShellShowcase() {
 
       <div className="shell-current shell-current-one" />
       <div className="shell-current shell-current-two" />
-
-      <div className="absolute inset-x-8 bottom-8 z-10 grid gap-3 sm:grid-cols-3">
-        {["No verdicts", "Consent first", "Manual review"].map((item) => (
-          <div key={item} className="rounded-2xl border border-white/80 bg-white/80 px-3 py-3 text-center text-xs font-bold text-navy backdrop-blur-xl">
-            {item}
-          </div>
-        ))}
-      </div>
     </div>
   );
 }
