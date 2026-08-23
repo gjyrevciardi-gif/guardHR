@@ -2,86 +2,91 @@
 @tailwind components;
 @tailwind utilities;
 
-:root { color: #0f2540; background: #eaf7fb; }
+:root { color: #143a31; background: #e7f1e0; }
 * { box-sizing: border-box; }
 body {
   margin: 0;
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-sora), Sora, "Trebuchet MS", sans-serif;
   background:
-    radial-gradient(circle at 12% 10%, rgba(125, 211, 252, 0.35), transparent 28rem),
-    radial-gradient(circle at 80% 12%, rgba(191, 219, 254, 0.55), transparent 30rem),
-    linear-gradient(135deg, #dff7fb 0%, #f5fbff 48%, #e9f6ff 100%);
-  color: #0f2540;
+    radial-gradient(circle at 12% 10%, rgba(157, 200, 141, 0.32), transparent 28rem),
+    radial-gradient(circle at 80% 12%, rgba(203, 230, 186, 0.5), transparent 30rem),
+    linear-gradient(135deg, #e1f1d9 0%, #f7fcf4 48%, #e6f2e0 100%);
+  color: #143a31;
 }
 button, input, textarea, select { font: inherit; }
-button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-visible { outline: 3px solid rgba(13,123,215,.28); outline-offset: 2px; }
+button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-visible { outline: 3px solid rgba(22, 74, 65, .3); outline-offset: 2px; }
 
-.constellation {
+/* Pale shell wash used behind full-page layouts. */
+.shell-field {
   background:
-    radial-gradient(circle at 10% 5%, rgba(186, 230, 253, 0.55), transparent 26rem),
-    radial-gradient(circle at 84% 20%, rgba(219, 234, 254, 0.7), transparent 30rem),
-    linear-gradient(135deg, #dff6fb 0%, #f4fbff 52%, #e8f4ff 100%);
+    radial-gradient(circle at 10% 5%, rgba(157, 200, 141, 0.4), transparent 26rem),
+    radial-gradient(circle at 84% 20%, rgba(203, 230, 186, 0.55), transparent 30rem),
+    linear-gradient(135deg, #e1f1d9 0%, #f7fcf4 52%, #e6f2e0 100%);
 }
 
 .display-tech {
-  font-family: Arial, Helvetica, sans-serif;
-  letter-spacing: -0.055em;
+  font-family: var(--font-sora), Sora, "Trebuchet MS", sans-serif;
+  letter-spacing: -0.038em;
 }
 
-.ocean-card {
+.shell-card {
   background:
-    radial-gradient(circle at 32% 30%, rgba(255, 255, 255, 0.96), transparent 13rem),
-    radial-gradient(circle at 72% 20%, rgba(125, 211, 252, 0.42), transparent 18rem),
-    linear-gradient(160deg, rgba(232, 249, 255, 0.98) 0%, rgba(194, 236, 255, 0.82) 47%, rgba(230, 247, 255, 0.95) 100%);
+    radial-gradient(circle at 30% 24%, rgba(255, 255, 255, 0.98), transparent 44%),
+    linear-gradient(160deg, #eff9e9 0%, #cde6bf 54%, #e7f3e1 100%);
 }
 
-.ocean-card::before {
+.shell-card::before {
   content: "";
   position: absolute;
   inset: 0;
   background:
-    linear-gradient(120deg, transparent 10%, rgba(255, 255, 255, 0.32) 38%, transparent 62%),
-    radial-gradient(circle at 85% 92%, rgba(13, 123, 215, 0.13), transparent 15rem);
+    linear-gradient(120deg, transparent 10%, rgba(255, 255, 255, 0.34) 38%, transparent 62%),
+    radial-gradient(circle at 85% 92%, rgba(22, 74, 65, 0.1), transparent 15rem);
   animation: shimmer-drift 10s ease-in-out infinite alternate;
   pointer-events: none;
 }
 
-.ocean-current {
+.shell-current {
   position: absolute;
   left: -16%;
   right: -16%;
   height: 13rem;
   border-radius: 999px;
   filter: blur(1px);
-  opacity: 0.48;
+  opacity: 0.42;
   pointer-events: none;
 }
 
-.ocean-current-one {
+.shell-current-one {
   bottom: 7.5rem;
-  background: linear-gradient(90deg, transparent, rgba(14, 165, 233, 0.22), rgba(255, 255, 255, 0.55), transparent);
+  background: linear-gradient(90deg, transparent, rgba(77, 119, 78, 0.2), rgba(255, 255, 255, 0.55), transparent);
   transform: rotate(-7deg);
-  animation: ocean-drift 12s ease-in-out infinite;
+  animation: shell-drift 12s ease-in-out infinite;
 }
 
-.ocean-current-two {
+.shell-current-two {
   bottom: -2rem;
-  background: linear-gradient(90deg, transparent, rgba(125, 211, 252, 0.38), rgba(13, 123, 215, 0.2), transparent);
+  background: linear-gradient(90deg, transparent, rgba(157, 200, 141, 0.4), rgba(22, 74, 65, 0.16), transparent);
   transform: rotate(4deg);
-  animation: ocean-drift 15s ease-in-out infinite reverse;
+  animation: shell-drift 15s ease-in-out infinite reverse;
 }
 
-.nemo-swimmer {
+.shell-swim {
   transform-origin: center;
-  animation: nemo-glide 7.5s ease-in-out infinite;
+  animation: shell-bob 7.5s ease-in-out infinite;
 }
 
-.nemo-tail {
-  transform-origin: 32px 82px;
-  animation: nemo-tail-swish 1.9s ease-in-out infinite;
+.shell-paddle {
+  transform-origin: 110px 96px;
+  animation: shell-paddle-sweep 3.4s ease-in-out infinite;
 }
 
-.ocean-bubble {
+.shell-paddle-back {
+  transform-origin: 110px 96px;
+  animation: shell-paddle-sweep 3.4s ease-in-out infinite reverse;
+}
+
+.shell-bubble {
   position: absolute;
   bottom: -2rem;
   left: var(--bubble-left);
@@ -89,55 +94,57 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
   width: var(--bubble-size);
   height: var(--bubble-size);
   border-radius: 9999px;
-  border: 1px solid rgba(255, 255, 255, 0.72);
-  background: radial-gradient(circle at 32% 28%, rgba(255, 255, 255, 0.95), rgba(125, 211, 252, 0.28));
-  box-shadow: 0 10px 24px rgba(13, 123, 215, 0.12);
+  border: 1px solid rgba(255, 255, 255, 0.85);
+  background: radial-gradient(circle at 32% 28%, rgba(255, 255, 255, 0.95), rgba(157, 200, 141, 0.3));
+  box-shadow: 0 10px 24px rgba(22, 74, 65, 0.1);
   opacity: 0;
   animation: bubble-rise var(--bubble-duration) ease-in infinite;
   animation-delay: var(--bubble-delay);
 }
 
-@keyframes nemo-glide {
-  0%, 100% { transform: translate3d(-8px, 4px, 0) rotate(-1.2deg); }
-  50% { transform: translate3d(10px, -7px, 0) rotate(1.4deg); }
+@keyframes shell-bob {
+  0%, 100% { transform: translate3d(-6px, 6px, 0) rotate(-1.4deg); }
+  50% { transform: translate3d(8px, -10px, 0) rotate(1.6deg); }
 }
 
-@keyframes nemo-tail-swish {
-  0%, 100% { transform: rotate(0deg); }
-  50% { transform: rotate(-4deg); }
+@keyframes shell-paddle-sweep {
+  0%, 100% { transform: rotate(-5deg); }
+  50% { transform: rotate(6deg); }
 }
 
 @keyframes bubble-rise {
   0% { transform: translate3d(0, 0, 0) scale(0.7); opacity: 0; }
-  15% { opacity: 0.62; }
-  85% { opacity: 0.42; }
+  15% { opacity: 0.7; }
+  85% { opacity: 0.45; }
   100% { transform: translate3d(22px, -34rem, 0) scale(1.25); opacity: 0; }
 }
 
-@keyframes ocean-drift {
+@keyframes shell-drift {
   0%, 100% { transform: translateX(-2%) rotate(-6deg); }
   50% { transform: translateX(4%) rotate(-4deg); }
 }
 
 @keyframes shimmer-drift {
-  0% { transform: translateX(-3%); opacity: 0.72; }
+  0% { transform: translateX(-3%); opacity: 0.7; }
   100% { transform: translateX(3%); opacity: 0.95; }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .nemo-swimmer,
-  .nemo-tail,
-  .ocean-bubble,
-  .ocean-current,
-  .ocean-card::before {
+  .shell-swim,
+  .shell-paddle,
+  .shell-paddle-back,
+  .shell-bubble,
+  .shell-current,
+  .shell-card::before {
     animation: none !important;
   }
 }
 
 @layer components {
-  .card { @apply rounded-3xl border border-slate-200/80 bg-white/90 shadow-soft backdrop-blur-xl; }
-  .input { @apply w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-navy outline-none transition placeholder:text-slate-400 focus:border-teal focus:ring-2 focus:ring-teal/15; }
-  .btn-primary { @apply inline-flex items-center justify-center gap-2 rounded-full bg-teal px-5 py-3 text-sm font-semibold text-white shadow-soft transition hover:bg-[#086fc4] disabled:cursor-not-allowed disabled:opacity-50; }
-  .btn-secondary { @apply inline-flex items-center justify-center gap-2 rounded-full border border-slate-200 bg-white px-5 py-3 text-sm font-semibold text-navy transition hover:bg-slate-50; }
+  .card { @apply rounded-3xl border border-shell-300/80 bg-white/90 shadow-lift backdrop-blur-xl; }
+  .input { @apply w-full rounded-2xl border border-shell-300 bg-white px-4 py-3 text-sm text-navy outline-none transition placeholder:text-slate-400 focus:border-teal focus:ring-2 focus:ring-teal/15; }
+  .btn-primary { @apply inline-flex items-center justify-center gap-2 rounded-full bg-teal px-5 py-3 text-sm font-semibold text-white shadow-soft transition hover:bg-[#0f3a33] disabled:cursor-not-allowed disabled:opacity-50; }
+  .btn-secondary { @apply inline-flex items-center justify-center gap-2 rounded-full border border-shell-300 bg-white px-5 py-3 text-sm font-semibold text-navy transition hover:bg-shell-100; }
+  .btn-gold { @apply inline-flex items-center justify-center gap-2 rounded-full bg-gold px-5 py-3 text-sm font-semibold text-gold-ink transition hover:bg-[#e5a536] disabled:cursor-not-allowed disabled:opacity-50; }
   .label { @apply mb-2 block text-sm font-semibold text-slate-700; }
 }

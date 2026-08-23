@@ -1,8 +1,27 @@
 import type { Metadata } from "next";
+import { IBM_Plex_Mono, Sora } from "next/font/google";
 import "./globals.css";
 
-export const metadata: Metadata = { title: "Nemo Call", description: "Calls, tests, and live activity signals for host review" };
+const sora = Sora({
+  subsets: ["latin"],
+  weight: ["400", "600", "700"],
+  variable: "--font-sora",
+  display: "swap",
+});
+
+const plexMono = IBM_Plex_Mono({
+  subsets: ["latin"],
+  weight: ["400", "500"],
+  variable: "--font-plex-mono",
+  display: "swap",
+});
+
+export const metadata: Metadata = { title: "NemoGuardHR", description: "Calls, tests, and live activity signals for host review" };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
-  return <html lang="sq"><body>{children}</body></html>;
+  return (
+    <html lang="sq" className={`${sora.variable} ${plexMono.variable}`}>
+      <body>{children}</body>
+    </html>
+  );
 }

@@ -43,7 +43,7 @@ export function CandidateTestPanel({ token, test }: { token: string; test: Test 
 
   return (
     <section className="rounded-2xl border border-white/10 bg-white/5 p-5">
-      <div className="flex items-center gap-2"><ClipboardList className="text-teal-300" size={18} /><h2 className="font-semibold">{test.title}</h2></div>
+      <div className="flex items-center gap-2"><ClipboardList className="text-shell-500" size={18} /><h2 className="font-semibold">{test.title}</h2></div>
       {test.description && <p className="mt-2 text-xs leading-5 text-slate-400">{test.description}</p>}
       <div className="mt-4 max-h-96 space-y-4 overflow-auto pr-1">
         {test.questions.map((question) => (

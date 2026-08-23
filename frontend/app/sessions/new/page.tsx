@@ -14,7 +14,7 @@ function defaultExpiry() {
 
 export default function NewSessionPage() {
   const [form, setForm] = useState({
-    title: "Nemo Call session",
+    title: "NemoGuardHR session",
     candidate_name: "",
     candidate_email: "",
     expires_at: defaultExpiry(),
@@ -61,7 +61,7 @@ export default function NewSessionPage() {
         <ArrowLeft size={17} /> Dashboard
       </Link>
       <div className="mx-auto max-w-2xl">
-        <h1 className="text-3xl font-bold">Krijo Nemo Call</h1>
+        <h1 className="text-3xl font-bold">Krijo call</h1>
         <p className="mt-2 text-slate-500">Fut të dhënat e pjesëmarrësit. Linku i join dërgohet në email dhe shfaqet si backup.</p>
 
         {created ? (
@@ -158,7 +158,7 @@ export default function NewSessionPage() {
               </p>
             </div>
             <p className="rounded-xl border border-teal/20 bg-teal/5 p-4 text-sm text-slate-600">
-              Nemo Call regjistron sinjale live si tab tjetër, minimize/focus loss, resize dritareje, fullscreen exit, copy/paste dhe ndërprerje lidhjeje. Kamera/mikrofoni janë opsionale.
+              NemoGuardHR regjistron sinjale live si tab tjetër, minimize/focus loss, resize dritareje, fullscreen exit, copy/paste dhe ndërprerje lidhjeje. Kamera/mikrofoni janë opsionale.
             </p>
             {error && <p className="rounded-xl bg-red-50 p-3 text-sm text-red-700">{error}</p>}
             <button className="btn-primary w-full" disabled={loading}>

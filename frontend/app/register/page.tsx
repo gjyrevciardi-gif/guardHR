@@ -6,7 +6,8 @@ import { useRouter } from "next/navigation";
 import { UserPlus } from "lucide-react";
 import { api, saveToken } from "@/lib/api";
 import { User } from "@/lib/types";
-import { NemoMark } from "@/components/NemoMark";
+import { ShellMark } from "@/components/ShellMark";
+import { Wordmark } from "@/components/Wordmark";
 
 export default function RegisterPage() {
   const router = useRouter();
@@ -34,12 +35,12 @@ export default function RegisterPage() {
 
   return (
     <main className="grid min-h-screen lg:grid-cols-2">
-      <section className="constellation relative hidden overflow-hidden p-16 text-navy lg:flex lg:flex-col lg:justify-between">
+      <section className="shell-field relative hidden overflow-hidden p-16 text-navy lg:flex lg:flex-col lg:justify-between">
         <Link href="/" className="relative z-10 flex items-center gap-3 text-xl font-black">
           <span className="flex h-12 w-12 items-center justify-center rounded-full bg-white/75 shadow-sm">
-            <NemoMark className="h-9 w-11" />
+            <ShellMark className="h-8 w-8" />
           </span>
-          Nemo Call
+          <Wordmark />
         </Link>
 
         <div className="relative z-10 max-w-xl">
@@ -53,7 +54,7 @@ export default function RegisterPage() {
             Host-i regjistrohet per te krijuar call, per te ftuar pjesemarres me email dhe per te shfaqur teste live.
           </p>
           <div className="mt-10 rounded-[2rem] border border-white/80 bg-white/65 p-8 shadow-soft backdrop-blur-xl">
-            <NemoMark animated className="mx-auto h-40 w-64" />
+            <ShellMark animated className="mx-auto h-48 w-48" />
           </div>
         </div>
 

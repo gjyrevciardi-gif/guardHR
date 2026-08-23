@@ -6,6 +6,7 @@ import { Camera, CheckCircle2, Eye, MonitorUp, ShieldCheck, Trash2 } from "lucid
 import { api } from "@/lib/api";
 import { dateTime } from "@/lib/format";
 import { PublicSession } from "@/lib/types";
+import { Wordmark } from "@/components/Wordmark";
 
 export default function ConsentPage() {
   const { token } = useParams<{ token: string }>();
@@ -41,12 +42,12 @@ export default function ConsentPage() {
       <div className="mx-auto max-w-3xl">
         <div className="mb-8 flex items-center justify-center gap-3 font-bold text-navy">
           <span className="rounded-xl bg-navy p-2 text-white"><ShieldCheck size={20} /></span>
-          Nemo Call
+          <Wordmark />
         </div>
         <section className="card overflow-hidden">
           <div className="border-b border-slate-200 p-7 sm:p-9">
             <p className="text-sm font-semibold text-teal">JOIN CALL · CONSENT</p>
-            <h1 className="mt-2 text-3xl font-bold">Para se të hysh në Nemo Call</h1>
+            <h1 className="mt-2 text-3xl font-bold">Para se të hysh në call</h1>
             <p className="mt-3 text-slate-600">
               Përshëndetje {session.candidate_name}. Për call-in "{session.title}", sistemi regjistron sinjale aktiviteti që i shfaqen host-it live.
             </p>

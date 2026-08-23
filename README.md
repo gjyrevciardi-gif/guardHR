@@ -1,6 +1,6 @@
-# InterviewGuard MVP
+# NemoGuardHR MVP
 
-InterviewGuard është një aplikacion HR për regjistrimin e sinjaleve të integritetit gjatë intervistave online. Sinjalet paraqiten për **shqyrtim manual**; sistemi nuk etiketon kandidatin si mashtrues dhe nuk merr vendime punësimi.
+NemoGuardHR është një aplikacion HR për regjistrimin e sinjaleve të integritetit gjatë intervistave online. Sinjalet paraqiten për **shqyrtim manual**; sistemi nuk etiketon kandidatin si mashtrues dhe nuk merr vendime punësimi.
 
 ## Struktura
 

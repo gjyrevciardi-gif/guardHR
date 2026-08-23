@@ -25,7 +25,7 @@ const emptyQuestion = (formMode = false): DraftQuestion => ({
 export default function NewTestPage() {
   const router = useRouter();
   const [formMode, setFormMode] = useState(false);
-  const [title, setTitle] = useState("Nemo Call test");
+  const [title, setTitle] = useState("NemoGuardHR test");
   const [description, setDescription] = useState("");
   const [questions, setQuestions] = useState<DraftQuestion[]>([emptyQuestion(false)]);
   const [created, setCreated] = useState<Test | null>(null);
@@ -40,7 +40,7 @@ export default function NewTestPage() {
 
   function setMode(nextFormMode: boolean) {
     setFormMode(nextFormMode);
-    setTitle(nextFormMode ? "Event signup form" : "Nemo Call test");
+    setTitle(nextFormMode ? "Event signup form" : "NemoGuardHR test");
     setQuestions((current) => current.map((question) => ({
       ...question,
       correct_option_index: nextFormMode || question.question_type === "short_text" ? null : question.correct_option_index ?? 0,
@@ -150,7 +150,7 @@ export default function NewTestPage() {
                 <button
                   type="button"
                   onClick={() => setMode(false)}
-                  className={`rounded-3xl border p-5 text-left transition ${!formMode ? "border-sky-300 bg-sky-50 text-navy" : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"}`}
+                  className={`rounded-3xl border p-5 text-left transition ${!formMode ? "border-shell-500 bg-shell-100 text-navy" : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"}`}
                 >
                   <p className="font-black">Test me score</p>
                   <p className="mt-2 text-sm leading-6">Per pyetje me pergjigje te sakta, score dhe review pas submission.</p>
@@ -158,7 +158,7 @@ export default function NewTestPage() {
                 <button
                   type="button"
                   onClick={() => setMode(true)}
-                  className={`rounded-3xl border p-5 text-left transition ${formMode ? "border-sky-300 bg-sky-50 text-navy" : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"}`}
+                  className={`rounded-3xl border p-5 text-left transition ${formMode ? "border-shell-500 bg-shell-100 text-navy" : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"}`}
                 >
                   <p className="font-black">Formular publik</p>
                   <p className="mt-2 text-sm leading-6">Per event signup, feedback, pjesemarrje, survey ose pyetje te lira.</p>

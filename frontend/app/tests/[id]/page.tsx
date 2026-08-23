@@ -169,8 +169,8 @@ export default function TestDetailPage() {
           <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-500">{test.description || "Pa pershkrim"}</p>
         </div>
         <div className="flex rounded-full border border-slate-200 bg-white p-1 shadow-sm">
-          <button onClick={() => setMode("review")} className={`rounded-full px-4 py-2 text-sm font-bold transition ${mode === "review" ? "bg-sky-100 text-teal" : "text-slate-500 hover:text-navy"}`}>Review</button>
-          <button onClick={() => setMode("edit")} className={`rounded-full px-4 py-2 text-sm font-bold transition ${mode === "edit" ? "bg-sky-100 text-teal" : "text-slate-500 hover:text-navy"}`}>Edit</button>
+          <button onClick={() => setMode("review")} className={`rounded-full px-4 py-2 text-sm font-bold transition ${mode === "review" ? "bg-shell-200 text-teal" : "text-slate-500 hover:text-navy"}`}>Review</button>
+          <button onClick={() => setMode("edit")} className={`rounded-full px-4 py-2 text-sm font-bold transition ${mode === "edit" ? "bg-shell-200 text-teal" : "text-slate-500 hover:text-navy"}`}>Edit</button>
         </div>
       </div>
 
@@ -205,7 +205,7 @@ export default function TestDetailPage() {
       ) : (
         <form onSubmit={save} className="card mt-8 space-y-6 p-7">
           <div className="flex items-center gap-3">
-            <span className="rounded-2xl bg-sky-100 p-3 text-teal"><Edit3 /></span>
+            <span className="rounded-2xl bg-shell-200 p-3 text-teal"><Edit3 /></span>
             <div>
               <h2 className="text-xl font-black">Edito {formMode ? "formularin" : "testin"}</h2>
               <p className="mt-1 text-sm text-slate-500">Ndrysho titullin, pyetjet, opsionet dhe share settings.</p>
@@ -313,7 +313,7 @@ function ReviewPanel({ test }: { test: TestDetail }) {
     <div className="mt-8 grid gap-6 lg:grid-cols-[1fr_1.35fr]">
       <section className="card p-6">
         <div className="flex items-center gap-3">
-          <span className="rounded-2xl bg-sky-100 p-3 text-teal"><ClipboardList /></span>
+          <span className="rounded-2xl bg-shell-200 p-3 text-teal"><ClipboardList /></span>
           <div>
             <h2 className="text-xl font-black">{test.form_mode ? "Form questions" : "Answer key"}</h2>
             <p className="mt-1 text-sm text-slate-500">Kjo shihet vetem nga host/admin.</p>
@@ -326,7 +326,7 @@ function ReviewPanel({ test }: { test: TestDetail }) {
               {question.question_type === "short_text" ? (
                 <p className="mt-3 rounded-xl bg-white px-3 py-2 text-sm font-semibold text-slate-600">Pergjigje tekst</p>
               ) : question.correct_option_index == null ? (
-                <p className="mt-3 rounded-xl bg-sky-50 px-3 py-2 text-sm font-semibold text-teal">Multiple choice pa answer key</p>
+                <p className="mt-3 rounded-xl bg-shell-100 px-3 py-2 text-sm font-semibold text-teal">Multiple choice pa answer key</p>
               ) : (
                 <p className="mt-3 rounded-xl bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-800">
                   Sakte: {question.options[question.correct_option_index]}
@@ -353,7 +353,7 @@ function ReviewPanel({ test }: { test: TestDetail }) {
                   <h3 className="text-lg font-black">{submission.participant_name || "Anonim"}</h3>
                   <p className="text-sm text-slate-500">{submission.participant_email || "pa email"} - {dateTime(submission.submitted_at)}</p>
                 </div>
-                <span className="rounded-full bg-sky-50 px-3 py-1 text-sm font-bold text-teal">
+                <span className="rounded-full bg-shell-100 px-3 py-1 text-sm font-bold text-teal">
                   {submission.total > 0 ? `${submission.score}/${submission.total}` : "Form"}
                 </span>
               </div>

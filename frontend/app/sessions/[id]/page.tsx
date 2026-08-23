@@ -113,7 +113,7 @@ export default function SessionDetailPage() {
         <div className="flex flex-col gap-3 sm:items-end">
           <div className="text-sm text-slate-500">Krijuar {dateTime(session.created_at)}</div>
           <Link href={`/sessions/${session.id}/room`} className="btn-primary">
-            <Video size={18} /> Hyr ne Nemo Call si host
+            <Video size={18} /> Hyr ne call si host
           </Link>
         </div>
       </div>

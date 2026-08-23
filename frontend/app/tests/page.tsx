@@ -80,7 +80,7 @@ export default function TestsPage() {
       ) : (
         <div className="mt-6 grid gap-4 lg:grid-cols-2">
           {filtered.map((test) => (
-            <Link key={test.id} href={`/tests/${test.id}`} className="card group p-6 transition hover:-translate-y-0.5 hover:border-sky-200">
+            <Link key={test.id} href={`/tests/${test.id}`} className="card group p-6 transition hover:-translate-y-0.5 hover:border-shell-400">
               <div className="flex items-start justify-between gap-4">
                 <div>
                   <h2 className="text-xl font-black text-navy">{test.title}</h2>
@@ -88,12 +88,12 @@ export default function TestsPage() {
                     {test.description || "Pa pershkrim"}
                   </p>
                 </div>
-                <span className="rounded-2xl bg-sky-100 p-3 text-teal">
+                <span className="rounded-2xl bg-shell-200 p-3 text-teal">
                   <ClipboardList size={20} />
                 </span>
               </div>
               <div className="mt-6 flex flex-wrap items-center justify-between gap-3 text-sm">
-                <span className="rounded-full bg-sky-50 px-3 py-1 font-bold text-teal">{test.form_mode ? "Formular" : "Test"} - {test.question_count} pyetje</span>
+                <span className="rounded-full bg-shell-100 px-3 py-1 font-bold text-teal">{test.form_mode ? "Formular" : "Test"} - {test.question_count} pyetje</span>
                 <span className="text-slate-500">{dateTime(test.created_at)}</span>
               </div>
               <div className="mt-5 flex items-center gap-2 text-sm font-bold text-teal">

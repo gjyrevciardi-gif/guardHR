@@ -127,7 +127,7 @@ def infer_title(filename: str, text: str) -> str:
     if first:
         return first[:90]
     fallback = re.sub(r"\.[^.]+$", "", filename).replace("_", " ").replace("-", " ").strip()
-    return fallback.title()[:90] or "Generated Nemo Call Test"
+    return fallback.title()[:90] or "Generated NemoGuardHR Test"
 
 
 def extract_answer_key(text: str) -> dict[int, str]:

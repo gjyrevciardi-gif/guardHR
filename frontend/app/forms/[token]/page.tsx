@@ -6,6 +6,7 @@ import { useParams } from "next/navigation";
 import { CheckCircle2, ClipboardList, Waves } from "lucide-react";
 import { api } from "@/lib/api";
 import { Test, TestAnswer, TestSubmission } from "@/lib/types";
+import { Wordmark } from "@/components/Wordmark";
 
 export default function PublicFormPage() {
   const { token } = useParams<{ token: string }>();
@@ -51,13 +52,13 @@ export default function PublicFormPage() {
   }
 
   return (
-    <main className="constellation min-h-screen px-5 py-6 text-navy">
+    <main className="shell-field min-h-screen px-5 py-6 text-navy">
       <nav className="mx-auto flex max-w-4xl items-center justify-between rounded-full border border-white/80 bg-white/90 px-5 py-3 shadow-soft backdrop-blur-xl">
         <Link href="/" className="flex items-center gap-3 text-sm font-black">
-          <span className="rounded-full bg-sky-100 p-2 text-teal"><Waves size={17} /></span>
-          Nemo Call
+          <span className="rounded-full bg-shell-200 p-2 text-teal"><Waves size={17} /></span>
+          <Wordmark />
         </Link>
-        <span className="rounded-full bg-sky-100 px-4 py-2 text-xs font-bold text-teal">public link</span>
+        <span className="rounded-full bg-shell-200 px-4 py-2 text-xs font-bold text-teal">public link</span>
       </nav>
 
       <section className="mx-auto mt-10 max-w-4xl">
@@ -80,7 +81,7 @@ export default function PublicFormPage() {
         ) : (
           <form onSubmit={submit} className="card p-7 sm:p-9">
             <div className="flex items-start gap-3">
-              <span className="rounded-2xl bg-sky-100 p-3 text-teal"><ClipboardList /></span>
+              <span className="rounded-2xl bg-shell-200 p-3 text-teal"><ClipboardList /></span>
               <div>
                 <p className="text-sm font-bold uppercase tracking-[0.22em] text-teal">{test.form_mode ? "Public form" : "Public test"}</p>
                 <h1 className="mt-2 text-3xl font-black">{test.title}</h1>
@@ -114,7 +115,7 @@ export default function PublicFormPage() {
                   ) : (
                     <div className="mt-4 space-y-2">
                       {question.options.map((option, index) => (
-                        <label key={index} className="flex cursor-pointer items-start gap-3 rounded-2xl border border-slate-200 bg-white p-3 text-sm hover:border-sky-200 hover:bg-sky-50">
+                        <label key={index} className="flex cursor-pointer items-start gap-3 rounded-2xl border border-slate-200 bg-white p-3 text-sm hover:border-shell-400 hover:bg-shell-100">
                           <input
                             type="radio"
                             className="mt-1 accent-teal"

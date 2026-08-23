@@ -4,30 +4,31 @@ import { LogOut } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { clearToken } from "@/lib/api";
-import { NemoMark } from "@/components/NemoMark";
+import { ShellMark } from "@/components/ShellMark";
+import { Wordmark } from "@/components/Wordmark";
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
   const navClass = (active: boolean) =>
-    `rounded-full px-4 py-2 transition ${active ? "bg-sky-100 font-semibold text-teal" : "text-slate-600 hover:bg-sky-50 hover:text-navy"}`;
+    `rounded-full px-4 py-2 transition ${active ? "bg-shell-200 font-semibold text-teal" : "text-slate-600 hover:bg-shell-100 hover:text-navy"}`;
 
   return (
-    <div className="constellation min-h-screen text-navy">
+    <div className="shell-field min-h-screen text-navy">
       <header className="sticky top-0 z-40 border-b border-white/70 bg-white/75 backdrop-blur-xl">
         <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-5 py-4">
           <Link href="/dashboard" className="flex items-center gap-3 font-bold">
-            <span className="flex h-10 w-10 items-center justify-center rounded-full bg-sky-100">
-              <NemoMark className="h-7 w-9" />
+            <span className="flex h-10 w-10 items-center justify-center rounded-full bg-shell-200">
+              <ShellMark className="h-7 w-7" />
             </span>
-            Nemo Call
+            <Wordmark />
           </Link>
           <nav className="flex items-center gap-2 text-sm">
             <Link href="/dashboard" className={navClass(pathname === "/dashboard")}>Dashboard</Link>
             <Link href="/tests" className={navClass(pathname.startsWith("/tests"))}>Teste</Link>
             <button
               onClick={() => { clearToken(); router.push("/login"); }}
-              className="flex items-center gap-2 rounded-full px-4 py-2 text-slate-600 hover:bg-sky-50 hover:text-navy"
+              className="flex items-center gap-2 rounded-full px-4 py-2 text-slate-600 hover:bg-shell-100 hover:text-navy"
             >
               <LogOut size={16} /> Dil
             </button>

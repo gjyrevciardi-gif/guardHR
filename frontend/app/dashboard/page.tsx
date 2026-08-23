@@ -48,7 +48,7 @@ export default function DashboardPage() {
 
   return <AppShell>
     <div className="flex flex-col justify-between gap-5 sm:flex-row sm:items-end">
-      <div><p className="text-sm font-semibold text-teal">NEMO CALL DASHBOARD</p><h1 className="mt-1 text-3xl font-bold">Mirë se erdhe, {user?.full_name || "Host"}</h1><p className="mt-2 text-slate-500">Krijo call, fto pjesëmarrës dhe shiko live activity signals.</p></div>
+      <div><p className="font-mono text-xs font-medium uppercase tracking-[0.22em] text-slate-500">NemoGuardHR dashboard</p><h1 className="mt-1 text-3xl font-bold">Mirë se erdhe, {user?.full_name || "Host"}</h1><p className="mt-2 text-slate-500">Krijo call, fto pjesëmarrës dhe shiko live activity signals.</p></div>
       <Link href="/sessions/new" className="btn-primary"><Plus size={18}/> Call i ri</Link>
     </div>
     <div className="mt-8 grid gap-4 sm:grid-cols-3">

@@ -7,6 +7,7 @@ import { CandidateTestPanel } from "@/components/TestPanel";
 import { api, wsUrl } from "@/lib/api";
 import { EventType, PublicSession } from "@/lib/types";
 import { dateTime, eventLabels } from "@/lib/format";
+import { Wordmark } from "@/components/Wordmark";
 
 type Role = "candidate" | "hr";
 type RemoteTarget = "camera" | "screen";
@@ -442,11 +443,11 @@ export function MeetingRoom({ token, role, session, onFinish }: Props) {
   }, []);
 
   return (
-    <div ref={roomRef} className="min-h-screen bg-[#0b1520] text-white">
+    <div ref={roomRef} className="min-h-screen bg-[#0c1f1a] text-white">
       {roomAlerts.length > 0 && (
         <div className="fixed right-5 top-20 z-50 w-[min(380px,calc(100vw-2.5rem))] space-y-3">
           {roomAlerts.map((alert) => (
-            <div key={alert.id} className="rounded-2xl border border-amber-300/50 bg-[#172333] p-4 shadow-2xl">
+            <div key={alert.id} className="rounded-2xl border border-amber-300/50 bg-[#152f27] p-4 shadow-2xl">
               <div className="flex items-start gap-3">
                 <span className="rounded-xl bg-amber-300/15 p-2 text-amber-200"><AlertTriangle size={18} /></span>
                 <div className="min-w-0 flex-1">
@@ -463,7 +464,7 @@ export function MeetingRoom({ token, role, session, onFinish }: Props) {
       )}
       <header className="flex flex-wrap items-center justify-between gap-4 border-b border-white/10 px-5 py-4">
         <div className="flex items-center gap-3 font-bold">
-          <ShieldCheck className="text-teal-300" /> Nemo Call
+          <ShieldCheck className="text-shell-500" /> <Wordmark tone="light" />
           <span className="hidden text-sm font-normal text-slate-400 sm:inline">· {session.title}</span>
         </div>
         <div className="flex items-center gap-4">
@@ -492,9 +493,9 @@ export function MeetingRoom({ token, role, session, onFinish }: Props) {
         <aside className="space-y-4">
           {!active && (
             <section className="rounded-2xl border border-white/10 bg-white/5 p-5 text-center">
-              <Eye className="mx-auto text-teal-300" size={34} />
-              <h1 className="mt-4 text-xl font-bold">{role === "hr" ? "Hyr si host" : "Join Nemo Call"}</h1>
-              <p className="mt-2 text-sm leading-6 text-slate-400">Kamera dhe mikrofoni janë opsionale. Nemo Call kap sinjale si tab tjetër, minimize/focus loss, resize dhe copy/paste.</p>
+              <Eye className="mx-auto text-shell-500" size={34} />
+              <h1 className="mt-4 text-xl font-bold">{role === "hr" ? "Hyr si host" : "Join call"}</h1>
+              <p className="mt-2 text-sm leading-6 text-slate-400">Kamera dhe mikrofoni janë opsionale. NemoGuardHR kap sinjale si tab tjetër, minimize/focus loss, resize dhe copy/paste.</p>
               {mediaBlockedByBrowser && (
                 <p className="mt-3 rounded-xl border border-amber-300/30 bg-amber-300/10 p-3 text-left text-xs leading-5 text-amber-100">
                   {mediaBlockedMessage}
@@ -574,7 +575,7 @@ export function MeetingRoom({ token, role, session, onFinish }: Props) {
 
 function VideoPanel({ label, videoRef, active, present = false, speaking = false, muted = false }: { label: string; videoRef: React.RefObject<HTMLVideoElement | null>; active: boolean; present?: boolean; speaking?: boolean; muted?: boolean }) {
   return (
-    <div className={`relative flex min-h-[300px] items-center justify-center overflow-hidden rounded-2xl bg-black shadow-2xl transition ${speaking ? "ring-4 ring-emerald-400/80 ring-offset-2 ring-offset-[#0b1520]" : "ring-1 ring-white/5"}`}>
+    <div className={`relative flex min-h-[300px] items-center justify-center overflow-hidden rounded-2xl bg-black shadow-2xl transition ${speaking ? "ring-4 ring-emerald-400/80 ring-offset-2 ring-offset-[#0c1f1a]" : "ring-1 ring-white/5"}`}>
       <video ref={videoRef} autoPlay muted={muted} playsInline controls={false} className={`h-full max-h-[62vh] w-full object-cover ${active ? "block" : "hidden"}`} />
       {!active && <div className="p-6 text-center text-slate-400"><Users className="mx-auto mb-3" />{present ? "Connected · camera off" : "Waiting..."}</div>}
       <div className="absolute bottom-4 left-4 rounded-lg bg-black/60 px-3 py-2 text-xs">{label}</div>
