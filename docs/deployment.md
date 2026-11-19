@@ -71,3 +71,9 @@ The credential is visible to anyone who opens a call link, so use short-lived TU
 2. Deploy the new images. On start, `alembic upgrade head` runs migration `0001` (idempotent: it creates what is missing and adds the columns the old startup code used to add, including a wider `event_type` check) and `0002` (candidates become per-HR-user; a candidate shared by several HR users is split, candidates without any session are deleted). `0002` cannot be reversed automatically.
 3. HR users sign in again; the browser drops the old `localStorage` token.
 4. If you used the old `database/schema.sql` mount, it is gone: Alembic is the single source of the schema.
+5. **Review the accounts that came with the old database.** The old seed script added a new `admin` every time `INITIAL_ADMIN_EMAIL` changed, so a long-lived database can hold forgotten admins that still have a default password. List them and deactivate what you do not recognise (inactive users cannot log in, and their history is kept):
+
+   ```sql
+   SELECT email, role, is_active FROM users ORDER BY created_at;
+   UPDATE users SET is_active = false WHERE email IN ('old-admin@example.com');
+   ```
