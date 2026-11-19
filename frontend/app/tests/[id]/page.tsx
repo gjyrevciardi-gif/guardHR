@@ -6,7 +6,7 @@ import { useParams, useRouter } from "next/navigation";
 import { AlertTriangle, ArrowLeft, CheckCircle2, Clipboard, ClipboardList, Edit3, ExternalLink, Plus, Save, Trash2 } from "lucide-react";
 import { AppShell } from "@/components/AppShell";
 import { StatusBadge } from "@/components/StatusBadge";
-import { api, getToken } from "@/lib/api";
+import { api } from "@/lib/api";
 import { dateTime, eventLabels } from "@/lib/format";
 import { QuestionType, TestAnswer, TestDetail } from "@/lib/types";
 
@@ -56,10 +56,6 @@ export default function TestDetailPage() {
   }, [id]);
 
   useEffect(() => {
-    if (!getToken()) {
-      router.replace("/login");
-      return;
-    }
     void load().catch(() => router.replace("/tests"));
   }, [load, router]);
 
@@ -115,6 +111,19 @@ export default function TestDetailPage() {
     })));
   }
 
+  async function removeTest() {
+    const warning = test && test.sessions.length + test.standalone_submissions.length > 0
+      ? "Ky test ka përgjigje të ruajtura; fshihen bashkë me të. Ta fshij përgjithmonë?"
+      : "Ta fshij këtë test përgjithmonë?";
+    if (!window.confirm(warning)) return;
+    try {
+      await api(`/tests/${id}`, { method: "DELETE" });
+      router.replace("/tests");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Testi nuk u fshi.");
+    }
+  }
+
   async function save(event: FormEvent) {
     event.preventDefault();
     setSaving(true);
@@ -164,28 +173,29 @@ export default function TestDetailPage() {
 
       <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
         <div>
-          <p className="text-sm font-bold uppercase tracking-[0.24em] text-teal">{test.form_mode ? "Form review center" : "Test review center"}</p>
+          <p className="text-sm font-bold uppercase tracking-[0.24em] text-teal">{test.form_mode ? "Qendra e review për formularin" : "Qendra e review për testin"}</p>
           <h1 className="mt-2 text-3xl font-black text-navy">{test.title}</h1>
           <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-500">{test.description || "Pa pershkrim"}</p>
         </div>
         <div className="flex rounded-full border border-slate-200 bg-white p-1 shadow-sm">
           <button onClick={() => setMode("review")} className={`rounded-full px-4 py-2 text-sm font-bold transition ${mode === "review" ? "bg-shell-200 text-teal" : "text-slate-500 hover:text-navy"}`}>Review</button>
           <button onClick={() => setMode("edit")} className={`rounded-full px-4 py-2 text-sm font-bold transition ${mode === "edit" ? "bg-shell-200 text-teal" : "text-slate-500 hover:text-navy"}`}>Edit</button>
+          <button onClick={() => void removeTest()} className="rounded-full px-4 py-2 text-sm font-bold text-red-700 transition hover:bg-red-50" aria-label="Fshi testin">Fshi</button>
         </div>
       </div>
 
       <section className="card mt-8 p-5">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div>
-            <h2 className="font-black">Public share link</h2>
+            <h2 className="font-black">Linku publik</h2>
             <p className="mt-1 text-sm text-slate-500">
               Njerzit hyjne pa account dhe plotesojne vetem kete {test.form_mode ? "formular" : "test"}.
             </p>
           </div>
           <div className="flex min-w-0 flex-1 flex-col gap-2 sm:flex-row lg:max-w-2xl">
             <code className="min-w-0 flex-1 truncate rounded-2xl bg-slate-100 px-4 py-3 text-xs">{publicLink()}</code>
-            <button onClick={() => navigator.clipboard.writeText(publicLink())} className="btn-secondary"><Clipboard size={16} /> Copy</button>
-            <a href={publicLink()} target="_blank" className="btn-primary">Open <ExternalLink size={16} /></a>
+            <button onClick={() => navigator.clipboard.writeText(publicLink())} className="btn-secondary"><Clipboard size={16} /> Kopjo</button>
+            <a href={publicLink()} target="_blank" className="btn-primary">Hap <ExternalLink size={16} /></a>
           </div>
         </div>
         {!test.is_public && <p className="mt-4 rounded-2xl bg-amber-50 p-3 text-sm font-semibold text-amber-800">Linku publik eshte i mbyllur. Aktivizoje te Edit.</p>}
@@ -194,11 +204,12 @@ export default function TestDetailPage() {
       <div className="mt-6 grid gap-4 md:grid-cols-4">
         <Metric label="Pyetje" value={String(test.question_count)} />
         <Metric label="Calls" value={String(test.sessions.length)} />
-        <Metric label="Public submissions" value={String(standaloneCount)} />
+        <Metric label="Përgjigje publike" value={String(standaloneCount)} />
         <Metric label="Mesatarja" value={averageScore == null ? "-" : `${averageScore}%`} />
       </div>
 
       {message && <p className="mt-5 rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm font-semibold text-emerald-800">{message}</p>}
+      {error && mode === "review" && <p role="alert" className="mt-5 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm font-semibold text-red-700">{error}</p>}
 
       {mode === "review" ? (
         <ReviewPanel test={test} />
@@ -338,7 +349,7 @@ function ReviewPanel({ test }: { test: TestDetail }) {
       </section>
 
       <section className="space-y-4">
-        <h2 className="text-xl font-black">Public submissions</h2>
+        <h2 className="text-xl font-black">Përgjigje publike</h2>
         {test.standalone_submissions.length === 0 ? (
           <div className="card p-8 text-center">
             <ClipboardList className="mx-auto text-teal" size={34} />

@@ -27,35 +27,18 @@ interface Props {
   onFinish?: () => void;
 }
 
-const rtcConfig: RTCConfiguration = {
+// Used only if /rtc-config cannot be reached; the server-provided list (STUN/TURN) normally replaces it.
+const fallbackRtcConfig: RTCConfiguration = {
   iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
 };
 
-function liveEventTitle(event: LiveEvent) {
-  const reason = String(event.metadata?.reason || "");
-  const phase = String(event.metadata?.phase || "");
-  if (event.event_type === "tab_hidden" && reason.includes("window_blur")) {
-    return phase === "started" ? "Pjesëmarrësi humbi focus/minimizoi" : "Pjesëmarrësi u kthye në faqe";
-  }
-  if (event.event_type === "tab_hidden") {
-    return phase === "started" ? "Pjesëmarrësi hapi tab/app tjetër" : "Pjesëmarrësi u kthye nga tab/app tjetër";
-  }
-  if (event.event_type === "fullscreen_exit") return "Pjesëmarrësi doli nga fullscreen";
-  if (event.event_type === "copy_paste") return "Copy/paste u përdor";
-  if (event.event_type === "camera_disabled") return "Kamera e pjesëmarrësit u ndal";
-  if (event.event_type === "screen_share_stopped") return "Screen share u ndal";
-  if (event.event_type === "face_not_visible") return "Fytyra nuk u pa mbi 5 sekonda";
-  if (event.event_type === "multiple_people") return "U panë më shumë se një person";
-  if (event.event_type === "phone_detected") return "U dallua telefon";
-  if (event.event_type === "connection_interruption") return "Ndërprerje e shpeshtë lidhjeje";
-  return eventLabels[event.event_type] || event.event_type;
-}
-
-function liveEventDetails(event: LiveEvent) {
-  const duration = event.duration_seconds != null ? `${event.duration_seconds.toFixed(1)}s` : "live/tani";
-  const confidence = event.confidence_score != null ? ` · confidence ${Math.round(event.confidence_score * 100)}%` : "";
-  return `${eventLabels[event.event_type] || event.event_type} · ${duration}${confidence} · ${dateTime(event.started_at)}`;
-}
+const signalingCloseMessages: Record<number, string> = {
+  4401: "Sesioni i host-it ka skaduar. Kyçu përsëri.",
+  4403: "Lidhja u refuzua nga serveri.",
+  4404: "Linku i call-it nuk është i vlefshëm.",
+  4409: "Call-i ka përfunduar ose u hap në një dritare tjetër.",
+  4429: "Shumë përpjekje lidhjeje. Prit pak dhe provo përsëri.",
+};
 
 function hrLiveEventTitle(event: LiveEvent) {
   const reason = String(event.metadata?.reason || "");
@@ -103,6 +86,7 @@ export function MeetingRoom({ token, role, session, onFinish }: Props) {
   const remoteAudioRef = useRef<HTMLAudioElement>(null);
   const roomRef = useRef<HTMLDivElement>(null);
   const socketRef = useRef<WebSocket | null>(null);
+  const rtcConfigRef = useRef<RTCConfiguration>(fallbackRtcConfig);
   const peerRef = useRef<RTCPeerConnection | null>(null);
   const localStreamRef = useRef<MediaStream | null>(null);
   const screenStreamRef = useRef<MediaStream | null>(null);
@@ -189,7 +173,7 @@ export function MeetingRoom({ token, role, session, onFinish }: Props) {
   const ensurePeer = useCallback(() => {
     if (peerRef.current) return peerRef.current;
 
-    const peer = new RTCPeerConnection(rtcConfig);
+    const peer = new RTCPeerConnection(rtcConfigRef.current);
     if (localStreamRef.current) addTracksToPeer(peer, localStreamRef.current, "camera");
     if (screenStreamRef.current) addTracksToPeer(peer, screenStreamRef.current, "screen");
 
@@ -229,6 +213,11 @@ export function MeetingRoom({ token, role, session, onFinish }: Props) {
   const connectSignaling = useCallback(() => {
     const socket = new WebSocket(`${wsUrl(`/ws/rooms/${token}`)}?role=${role}`);
     socketRef.current = socket;
+
+    socket.onclose = (event) => {
+      const reason = signalingCloseMessages[event.code];
+      if (reason) setError(reason);
+    };
 
     socket.onmessage = async (event) => {
       const message = JSON.parse(event.data);
@@ -275,11 +264,12 @@ export function MeetingRoom({ token, role, session, onFinish }: Props) {
     try {
       if (role === "candidate") await api(`/public/sessions/${token}/start`, { method: "POST" }, false);
 
+      rtcConfigRef.current = await api<RTCConfiguration>("/rtc-config", {}, false).catch(() => fallbackRtcConfig);
       setActive(true);
       connectSignaling();
       if (role === "candidate") await roomRef.current?.requestFullscreen().catch(() => undefined);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Monitoring could not start");
+      setError(err instanceof Error ? err.message : "Monitorimi nuk mund të nisej");
     }
   }
 
@@ -330,7 +320,7 @@ export function MeetingRoom({ token, role, session, onFinish }: Props) {
       }
     } catch (err) {
       camera?.getTracks().forEach((track) => track.stop());
-      const message = err instanceof Error ? err.message : "Camera or microphone permission was rejected";
+      const message = err instanceof Error ? err.message : "Leja për kamerën ose mikrofonin u refuzua";
       setError(message.includes("Permission denied") ? "Leja per kamera/mikrofon u refuzua nga browser-i. Kontrollo ikonën e kamerës te adresa e faqes dhe lejo aksesin." : message);
     }
   }
@@ -431,6 +421,7 @@ export function MeetingRoom({ token, role, session, onFinish }: Props) {
     void refreshDevices();
     navigator.mediaDevices?.addEventListener?.("devicechange", refreshDevices);
     return () => navigator.mediaDevices?.removeEventListener?.("devicechange", refreshDevices);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- refreshDevices only calls state setters; subscribe once
   }, []);
 
   useEffect(() => {
@@ -472,7 +463,7 @@ export function MeetingRoom({ token, role, session, onFinish }: Props) {
             <InterviewMonitor token={token} videoRef={localVideoRef} active={active} cameraStream={localStream} screenStream={screenStream} onSignal={setLastSignal} />
           )}
           <span className={`rounded-full px-3 py-1 text-xs font-semibold ${peerPresent || remoteCameraStream ? "bg-emerald-500/20 text-emerald-300" : "bg-white/10 text-slate-300"}`}>
-            {peerPresent || remoteCameraStream ? "Other person connected" : "Waiting for other person"}
+            {peerPresent || remoteCameraStream ? "Personi tjetër u lidh" : "Po pritet personi tjetër"}
           </span>
         </div>
       </header>
@@ -480,12 +471,12 @@ export function MeetingRoom({ token, role, session, onFinish }: Props) {
       <main className="mx-auto grid max-w-7xl gap-5 p-5 lg:grid-cols-[1fr_320px]">
         <audio ref={remoteAudioRef} autoPlay playsInline className="hidden" />
         <section className="grid gap-4 md:grid-cols-2">
-          <VideoPanel label={role === "hr" ? "You (Host)" : session.candidate_name} videoRef={localVideoRef} active={!!localStream && cameraEnabled} speaking={localSpeaking} muted />
+          <VideoPanel label={role === "hr" ? "Ti (host)" : session.candidate_name} videoRef={localVideoRef} active={!!localStream && cameraEnabled} speaking={localSpeaking} muted />
           <VideoPanel label={role === "hr" ? session.candidate_name : "Host"} videoRef={remoteVideoRef} active={!!remoteCameraStream} present={peerPresent} speaking={remoteSpeaking} />
           {(screenStream || remoteScreenStream) && (
             <>
-              <VideoPanel label="Your screen" videoRef={localScreenRef} active={!!screenStream} muted />
-              <VideoPanel label={role === "hr" ? "Participant screen" : "Host screen"} videoRef={remoteScreenRef} active={!!remoteScreenStream} />
+              <VideoPanel label="Ekrani yt" videoRef={localScreenRef} active={!!screenStream} muted />
+              <VideoPanel label={role === "hr" ? "Ekrani i pjesëmarrësit" : "Ekrani i host-it"} videoRef={remoteScreenRef} active={!!remoteScreenStream} />
             </>
           )}
         </section>
@@ -494,7 +485,7 @@ export function MeetingRoom({ token, role, session, onFinish }: Props) {
           {!active && (
             <section className="rounded-2xl border border-white/10 bg-white/5 p-5 text-center">
               <Eye className="mx-auto text-shell-500" size={34} />
-              <h1 className="mt-4 text-xl font-bold">{role === "hr" ? "Hyr si host" : "Join call"}</h1>
+              <h1 className="mt-4 text-xl font-bold">{role === "hr" ? "Hyr si host" : "Hyr në call"}</h1>
               <p className="mt-2 text-sm leading-6 text-slate-400">Kamera dhe mikrofoni janë opsionale. NemoGuardHR kap sinjale si tab tjetër, minimize/focus loss, resize dhe copy/paste.</p>
               {mediaBlockedByBrowser && (
                 <p className="mt-3 rounded-xl border border-amber-300/30 bg-amber-300/10 p-3 text-left text-xs leading-5 text-amber-100">
@@ -505,7 +496,7 @@ export function MeetingRoom({ token, role, session, onFinish }: Props) {
                 <DeviceSelect label="Kamera" kind="videoinput" devices={devices} value={cameraDeviceId} onChange={setCameraDeviceId} />
                 <DeviceSelect label="Mikrofoni" kind="audioinput" devices={devices} value={micDeviceId} onChange={setMicDeviceId} />
               </div>
-              <button onClick={start} className="btn-primary mt-5 w-full"><Eye size={18} /> {role === "candidate" ? "Join call" : "Hyr në call"}</button>
+              <button onClick={start} className="btn-primary mt-5 w-full"><Eye size={18} /> {"Hyr në call"}</button>
               {error && <p className="mt-3 text-sm text-red-300">{error}</p>}
             </section>
           )}

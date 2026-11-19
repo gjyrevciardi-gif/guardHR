@@ -7,16 +7,22 @@ NemoGuardHR është një aplikacion HR për regjistrimin e sinjaleve të integri
 ```text
 cheatHR/
 ├── frontend/                 # Next.js 15, React, TypeScript, Tailwind
-│   ├── app/                  # login, dashboard, session, consent, interview room
-│   ├── components/           # shell, badge, MediaPipe/browser monitor
-│   └── lib/                  # API client, types, formatters
+│   ├── app/                  # login, dashboard, session, consent, interview room, tests/forms
+│   ├── components/           # shell, badge, MediaPipe/browser monitor, meeting room
+│   └── lib/                  # API client (cookie session), tipet, mesazhet e gabimeve (sq)
 ├── backend/
-│   ├── app/api/              # auth, HR sessions, candidate, settings/audit
-│   ├── app/models.py         # SQLAlchemy relations
+│   ├── app/api/              # auth, sessions, public (kandidati), tests, settings, signaling (WebSocket)
+│   ├── app/models.py         # SQLAlchemy relations + CHECK constraints
+│   ├── app/enums.py          # statuset dhe llojet e lejuara
+│   ├── app/retention.py      # pastrimi sipas retention dhe fshirja e plotë e call/test
+│   ├── app/ratelimit.py      # limitim kërkesash (në memorie, 1 worker)
 │   ├── app/vision.py         # transient YOLO/OpenCV inference
-│   └── tests/                # end-to-end API flow
-├── database/schema.sql       # explicit PostgreSQL DDL
-├── docker-compose.yml
+│   ├── alembic/              # migrimet e PostgreSQL (e vetmja burim i skemës)
+│   └── tests/                # pytest: API, auth, WebSocket, retention, migrime
+├── deploy/nginx.conf         # reverse proxy HTTPS për prodhim
+├── docker-compose.yml        # zhvillim
+├── docker-compose.prod.yml   # overlay për prodhim (vetëm Nginx publik)
+├── docs/deployment.md        # prodhimi, TURN, scheduling, kufizimet
 └── .env.example
 ```
 
@@ -30,28 +36,30 @@ docker compose up --build
 ```
 
 3. Hap `http://localhost:3100`. API docs janë në `http://localhost:8100/docs`.
-4. Email-et lokale të kandidatëve shihen në Mailpit: `http://localhost:8025`.
-4. Kredencialet default për zhvillim janë `hr@example.com` / `ChangeMe123!` (ndryshoji në `.env`).
+4. Email-et lokale të kandidatëve shihen në Mailpit: `http://localhost:8025`. Nëse `.env` ka SMTP real (p.sh. Gmail), ftesat dërgohen vërtet; për zhvillim lokal lëre `SMTP_HOST=mailpit`.
+5. Kredencialet e zhvillimit janë `hr@example.com` / `ChangeMe123!` (ndryshoji në `.env`). Në zhvillim regjistrimi publik është i hapur; në prodhim është i mbyllur dhe llogaritë i krijon administratori (`POST /api/auth/users`).
 
-Në nisjen e parë, PostgreSQL ekzekuton [database/schema.sql](database/schema.sql), ndërsa backend-i krijon përdoruesin fillestar. Modeli i vogël `yolo11n.pt` shkarkohet nga Ultralytics kur analiza e parë e frame-it ekzekutohet; cakto `YOLO_MODEL_PATH` në një file lokal në mjedise pa internet.
+Në nisje backend-i ekzekuton `alembic upgrade head`, krijon përdoruesin fillestar dhe starton me **një worker**. Imazhi përfshin YOLO/OpenCV (`INSTALL_CV=true`, default) që zbulimi i telefonit dhe i personit shtesë të funksionojë; vendos `INSTALL_CV=false` për imazh më të vogël pa këtë zbulim (`/api/health` kthen `"vision": false` dhe backend-i logon një paralajmërim). Modeli `yolo11n.pt` shkarkohet nga Ultralytics kur analiza e parë e frame-it ekzekutohet; cakto `YOLO_MODEL_PATH` në një file lokal në mjedise pa internet.
+
+Për prodhim shih [docs/deployment.md](docs/deployment.md).
 
 ## Nisja pa Docker
 
-Kërkohet Node.js 20+, Python 3.12+ dhe PostgreSQL 16+.
+Kërkohet Node.js 20+, Python 3.12+ dhe PostgreSQL 16+ (13+ funksionon).
 
 ```bash
-# PostgreSQL: krijo DB-në dhe apliko skemën
+# PostgreSQL: krijo DB-në (skema krijohet nga Alembic)
 psql -U postgres -c "CREATE USER interviewguard WITH PASSWORD 'interviewguard_dev';"
 psql -U postgres -c "CREATE DATABASE interviewguard OWNER interviewguard;"
-psql -U interviewguard -d interviewguard -f database/schema.sql
 
 # Backend
 cd backend
 python -m venv .venv
 # Windows: .venv\Scripts\activate
 # macOS/Linux: source .venv/bin/activate
-pip install -r requirements-cv.txt
-copy .env.example .env                 # Windows; përdor cp në macOS/Linux
+pip install -r requirements-dev.txt        # shto -r requirements-cv.txt për zbulimin me YOLO
+copy .env.example .env                     # Windows; përdor cp në macOS/Linux
+alembic upgrade head
 python -m app.seed
 uvicorn app.main:app --reload --port 8100
 
@@ -62,43 +70,75 @@ npm install
 npm run dev
 ```
 
-Për backend pa computer vision (p.sh. vetëm testet e API-së), përdor `pip install -r requirements.txt`. Endpoint-i YOLO kërkon `requirements-cv.txt`.
+Pa `DATABASE_URL` backend-i përdor një file SQLite lokal (vetëm për zhvillim/teste; migrimet janë vetëm për PostgreSQL).
+
+### Përditësim nga një version i vjetër
+
+Skema nuk krijohet më nga `database/schema.sql` por nga Alembic. Një databazë ekzistuese përditësohet me `alembic upgrade head` (Docker e bën automatikisht). Migrimi `0002` e ndan çdo kandidat të ndarë mes disa përdoruesve HR në një rekord për përdorues. Sesionet ekzistuese hyjnë me cookie; tokeni i vjetër në `localStorage` fshihet automatikisht.
 
 ## API kryesore
 
 | Method | Endpoint | Qëllimi |
 |---|---|---|
-| POST | `/api/auth/login` | JWT login për HR |
+| POST | `/api/auth/login` | Login HR; vendos cookie `HttpOnly` (kthen edhe `access_token` për klientë API) |
+| POST | `/api/auth/logout` | Fshin cookie-n e sesionit |
+| POST | `/api/auth/register` | Regjistrim HR (i mbyllur në prodhim) |
+| POST | `/api/auth/users` | Krijim përdoruesi nga admin |
 | GET | `/api/auth/me` | Profili dhe retention policy |
-| GET/POST | `/api/sessions` | Lista / krijimi i sesioneve |
-| GET | `/api/sessions/{id}` | Timeline dhe reviews |
+| GET/POST | `/api/sessions` | Lista (`limit`, `offset`) / krijimi i sesioneve; ftesa dërgohet në sfond |
+| GET/DELETE | `/api/sessions/{id}` | Timeline dhe reviews / fshirje e plotë |
 | POST | `/api/sessions/{id}/reviews` | Review manual |
-| GET | `/api/public/sessions/{token}` | Detaje publike minimale |
-| POST | `/api/public/sessions/{token}/consent` | Consent eksplicit |
+| GET/POST | `/api/tests` | Teste/formularë (listë me `limit`, `offset`); `POST /api/tests/generate-from-file` nga PDF/DOCX/TXT/MD |
+| GET/PUT/DELETE | `/api/tests/{id}` | Detaje, editim, fshirje |
+| GET | `/api/public/sessions/{token}` | Detaje publike minimale (pa link publik të testit) |
+| POST | `/api/public/sessions/{token}/consent` | Consent eksplicit (idempotent) |
 | POST | `/api/public/sessions/{token}/start` | Nis sesionin |
 | POST | `/api/public/sessions/{token}/events` | Regjistron një event neutral |
 | POST | `/api/public/sessions/{token}/analyze-frame` | YOLO/OpenCV transient |
+| POST | `/api/public/sessions/{token}/test-submission` | Dorëzon testin e call-it |
 | POST | `/api/public/sessions/{token}/finish` | Përfundon sesionin |
+| GET | `/api/public/tests/{token}` | Test/formular publik |
+| POST | `/api/public/tests/{token}/submissions` | Dorëzim publik (një për email) |
+| GET | `/api/rtc-config` | Serverat ICE (STUN/TURN) për WebRTC |
+| WS | `/api/ws/rooms/{token}?role=hr\|candidate` | Signaling; roli verifikohet në server |
 | PUT | `/api/settings/retention` | Ndryshon ditët e ruajtjes |
-| POST | `/api/settings/retention/purge` | Fshin eventet përtej afatit |
-| GET | `/api/audit-logs` | Audit log i HR-it |
+| POST | `/api/settings/retention/purge` | Pastron të dhënat përtej afatit |
+| GET | `/api/audit-logs` | Audit log i HR-it (`limit`, `offset`) |
 
 ## Monitorimi dhe privatësia
 
 - `visibilitychange`, `fullscreenchange`, eventet clipboard, track-et e medias dhe lidhja monitorohen në browser.
 - MediaPipe Face Detector punon në browser. Mungesa e fytyrës raportohet vetëm pas 5 sekondash.
 - Një frame JPEG i zvogëluar dërgohet çdo 5 sekonda te YOLO/OpenCV vetëm për klasat `person` dhe `cell phone`; bytes nuk ruhen.
-- Video/audio nuk regjistrohen në MVP. `integrity_events` pastrohen sipas `retention_days` me endpoint-in purge (në prodhim thirre nga një scheduled job).
+- Video/audio nuk regjistrohen në MVP.
+- **Retention:** çdo ditë (`RETENTION_PURGE_INTERVAL_HOURS`) dhe me kërkesë (`/settings/retention/purge`) fshihen `integrity_events`, përgjigjet e testeve, `consent_ip` dhe IP-të në audit log për call-et e përfunduara përtej afatit. Sesioni, review-t dhe emri i kandidatit mbeten derisa HR të fshijë call-in (`DELETE /api/sessions/{id}`), që heq gjithçka, përfshirë kandidatin nëse nuk ka call tjetër. Mund ta ekzekutosh edhe nga cron: `python -m app.retention`.
+- IP-ja e kandidatit (consent, audit) merret nga lidhja TCP. `X-Forwarded-For` besohet vetëm kur `TRUST_PROXY_HEADERS=true` (Nginx i përfshirë e mbishkruan).
 - Etiketat e vetme janë: `No events detected`, `Requires review`, `Review completed`, `Insufficient evidence`.
 - Nuk ka emotion recognition, lie detection, personality analysis ose refuzim automatik.
+
+## Siguria në pika
+
+- Sesioni HR është cookie `HttpOnly`, `SameSite=Lax` (`Secure` mbi HTTPS); kërkesat që ndryshojnë të dhëna me cookie kërkojnë `Origin` të lejuar.
+- Login: kufizim për IP dhe për llogari; përpjekjet e dështuara regjistrohen në audit log.
+- Rooms e thirrjes: roli `hr` kërkon cookie të vlefshme të pronarit të sesionit; kandidati hyn vetëm pasi ka dhënë consent dhe ka nisur; klientët mund të përcjellin vetëm mesazhe WebRTC (`offer`, `answer`, `ice`, `screen-*`).
+- Në `APP_ENV=production` backend-i refuzon të niset me `JWT_SECRET` të dobët/placeholder, fjalëkalim admin default ose `PUBLIC_APP_URL` pa HTTPS.
+- Kufijtë dhe ceilings të njohura (një worker, limitet në memorie) janë në [docs/deployment.md](docs/deployment.md).
 
 ## Kontrollet
 
 ```bash
 cd backend
-pytest -q
+pip install -r requirements-dev.txt
+ruff check .
+pytest -q                                   # SQLite
+# PostgreSQL (skema ndërtohet me Alembic dhe ekzekutohen edhe testet e migrimit):
+docker run -d --name pg-test -e POSTGRES_USER=ng -e POSTGRES_PASSWORD=test -e POSTGRES_DB=ngtest -p 55433:5432 postgres:16-alpine
+TEST_DATABASE_URL=postgresql+psycopg://ng:test@localhost:55433/ngtest pytest -q
 
 cd frontend
+npm run lint
 npm run typecheck
 npm run build
 ```
+
+CI (`.github/workflows/ci.yml`) ekzekuton të njëjtat kontrolle, përfshirë PostgreSQL.

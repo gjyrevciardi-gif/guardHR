@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { CalendarDays, ChevronRight, Clock3, History, Plus, Search, Settings2, ShieldAlert, Trash2 } from "lucide-react";
 import { AppShell } from "@/components/AppShell";
 import { StatusBadge } from "@/components/StatusBadge";
-import { api, getToken } from "@/lib/api";
+import { api } from "@/lib/api";
 import { dateTime } from "@/lib/format";
 import { AuditLog, InterviewSession, User } from "@/lib/types";
 
@@ -21,7 +21,6 @@ export default function DashboardPage() {
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
 
   const load = useCallback(async () => {
-    if (!getToken()) { router.replace("/login"); return; }
     try {
       const [me, rows, logs] = await Promise.all([api<User>("/auth/me"), api<InterviewSession[]>("/sessions"), api<AuditLog[]>("/audit-logs")]);
       setUser(me); setRetention(me.retention_days); setSessions(rows); setAuditLogs(logs);
@@ -42,8 +41,8 @@ export default function DashboardPage() {
     setUser(updated); setMessage(`Ruajtja u caktua në ${updated.retention_days} ditë.`);
   }
   async function purgeRetention() {
-    const result = await api<{ deleted_events: number }>("/settings/retention/purge", { method: "POST" });
-    setMessage(`${result.deleted_events} evente përtej afatit u fshinë.`); await load();
+    const result = await api<{ deleted_events: number; deleted_submissions: number }>("/settings/retention/purge", { method: "POST" });
+    setMessage(`U fshinë ${result.deleted_events} evente dhe ${result.deleted_submissions} përgjigje testesh përtej afatit.`); await load();
   }
 
   return <AppShell>
@@ -70,7 +69,7 @@ export default function DashboardPage() {
       </Link>)}</div>}
     </section>
     <section className="card mt-8 p-6">
-      <div className="flex items-center gap-3"><span className="rounded-xl bg-teal/10 p-2 text-teal"><Settings2 size={20}/></span><div><h2 className="font-bold">Data retention</h2><p className="text-sm text-slate-500">Eventet e call-eve të përfunduara mund të pastrohen pas kësaj periudhe. Video nuk ruhet në MVP.</p></div></div>
+      <div className="flex items-center gap-3"><span className="rounded-xl bg-teal/10 p-2 text-teal"><Settings2 size={20}/></span><div><h2 className="font-bold">Data retention</h2><p className="text-sm text-slate-500">Eventet, përgjigjet e testeve dhe IP-të e call-eve të përfunduara pastrohen automatikisht pas kësaj periudhe. Video nuk ruhet në MVP.</p></div></div>
       <div className="mt-5 flex flex-wrap items-center gap-3"><input className="input w-28" type="number" min={1} max={365} value={retention} onChange={e => setRetention(Number(e.target.value))}/><span className="text-sm text-slate-600">ditë</span><button className="btn-secondary" onClick={saveRetention}>Ruaj politikën</button><button className="btn-secondary" onClick={purgeRetention}><Trash2 size={16}/> Ekzekuto cleanup</button>{message && <span className="text-sm text-emerald-700">{message}</span>}</div>
     </section>
     <section className="card mt-8 p-6"><div className="flex items-center gap-3"><span className="rounded-xl bg-teal/10 p-2 text-teal"><History size={20}/></span><div><h2 className="font-bold">Audit log</h2><p className="text-sm text-slate-500">Veprimet më të fundit të llogarisë host.</p></div></div><div className="mt-5 divide-y divide-slate-100">{auditLogs.slice(0, 8).map(log => <div key={log.id} className="flex flex-col justify-between gap-1 py-3 text-sm sm:flex-row"><span className="font-medium">{log.action}</span><span className="text-slate-500">{dateTime(log.created_at)} · {log.ip_address || "IP e panjohur"}</span></div>)}{auditLogs.length === 0 && <p className="py-4 text-sm text-slate-500">Nuk ka veprime të regjistruara.</p>}</div></section>

@@ -9,3 +9,9 @@ node_modules/
 coverage/
 frontend/.env.local
 backend/.env
+.env
+.env.*
+!.env.example
+*.db
+.ruff_cache/
+deploy/certs/

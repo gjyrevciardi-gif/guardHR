@@ -4,15 +4,15 @@ import { FormEvent, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { LockKeyhole } from "lucide-react";
-import { api, saveToken } from "@/lib/api";
+import { api } from "@/lib/api";
 import { User } from "@/lib/types";
 import { ShellMark } from "@/components/ShellMark";
 import { Wordmark } from "@/components/Wordmark";
 
 export default function LoginPage() {
   const router = useRouter();
-  const [email, setEmail] = useState("hr@example.com");
-  const [password, setPassword] = useState("ChangeMe123!");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -21,14 +21,13 @@ export default function LoginPage() {
     setLoading(true);
     setError("");
     try {
-      const response = await api<{ access_token: string; user: User }>("/auth/login", {
+      await api<{ user: User }>("/auth/login", {
         method: "POST",
         body: JSON.stringify({ email, password }),
-      }, false);
-      saveToken(response.access_token);
+      });
       router.push("/dashboard");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Login deshtoi");
+      setError(err instanceof Error ? err.message : "Hyrja dështoi");
     } finally {
       setLoading(false);
     }
@@ -45,14 +44,14 @@ export default function LoginPage() {
         </Link>
 
         <div className="relative z-10 max-w-xl">
-          <p className="mb-5 text-sm font-bold uppercase tracking-[.24em] text-teal">Host access</p>
+          <p className="mb-5 text-sm font-bold uppercase tracking-[.24em] text-teal">Qasje për host</p>
           <h1 className="display-tech text-5xl font-black leading-tight">
-            Create calls.
+            Krijo call-e.
             <br />
-            Watch signals.
+            Ndiq sinjalet.
           </h1>
           <p className="mt-6 text-lg leading-8 text-slate-600">
-            Ky login eshte vetem per host/admin. Pjesemarresit hyjne pa account permes email invite link.
+            Ky kyçje është vetëm për host/admin. Pjesëmarrësit hyjnë pa llogari përmes linkut të ftesës në email.
           </p>
           <div className="mt-10 rounded-[2rem] border border-white/80 bg-white/65 p-8 shadow-soft backdrop-blur-xl">
             <ShellMark animated className="mx-auto h-48 w-48" />
@@ -85,7 +84,7 @@ export default function LoginPage() {
           </button>
 
           <p className="mt-5 text-center text-sm text-slate-500">
-            S'ke host account? <Link href="/register" className="font-semibold text-teal">Regjistrohu</Link>
+            S&apos;ke host account? <Link href="/register" className="font-semibold text-teal">Regjistrohu</Link>
           </p>
         </form>
       </section>

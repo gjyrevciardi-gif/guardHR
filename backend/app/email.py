@@ -1,8 +1,16 @@
-from email.message import EmailMessage
+import logging
 import smtplib
+from email.message import EmailMessage
+
+from sqlalchemy import select
+from sqlalchemy.orm import selectinload
 
 from .config import get_settings
+from .database import SessionLocal
 from .models import InterviewSession
+from .services import record_audit
+
+logger = logging.getLogger("nemoguard.email")
 
 
 def build_candidate_link(public_token: str) -> str:
@@ -46,3 +54,19 @@ def send_candidate_invite(session: InterviewSession) -> str:
         smtp.send_message(message)
 
     return candidate_link
+
+
+def deliver_invite(session_id: str, user_id: str, ip: str | None) -> None:
+    """Background task: send the invite and audit the outcome. The SMTP error stays in the server log only."""
+    with SessionLocal() as db:
+        session = db.scalar(select(InterviewSession).options(selectinload(InterviewSession.candidate)).where(InterviewSession.id == session_id))
+        if not session:
+            return
+        try:
+            send_candidate_invite(session)
+            action = "participant.invite.email_sent"
+        except Exception:
+            logger.exception("Invite email for session %s could not be delivered", session_id)
+            action = "participant.invite.email_failed"
+        record_audit(db, user_id=user_id, ip=ip, action=action, entity_type="call", entity_id=session.id, session_id=session.id, details={"candidate_id": session.candidate_id})
+        db.commit()

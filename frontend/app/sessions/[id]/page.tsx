@@ -3,7 +3,7 @@
 import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
-import { AlertTriangle, ArrowLeft, Clipboard, ExternalLink, FileCheck2, Video, X } from "lucide-react";
+import { AlertTriangle, ArrowLeft, Clipboard, ExternalLink, FileCheck2, Trash2, Video, X } from "lucide-react";
 import { AppShell } from "@/components/AppShell";
 import { StatusBadge } from "@/components/StatusBadge";
 import { api } from "@/lib/api";
@@ -66,6 +66,16 @@ export default function SessionDetailPage() {
     return () => window.clearInterval(timer);
   }, [load]);
 
+  async function removeSession() {
+    if (!window.confirm("Ta fshij këtë call përgjithmonë? Eventet, përgjigjet dhe review-t fshihen dhe veprimi nuk kthehet.")) return;
+    try {
+      await api(`/sessions/${id}`, { method: "DELETE" });
+      router.replace("/dashboard");
+    } catch (err) {
+      pushAlert({ id: `delete-error-${Date.now()}`, title: "Fshirja dështoi", message: err instanceof Error ? err.message : "Call-i nuk u fshi." });
+    }
+  }
+
   async function review(event: FormEvent) {
     event.preventDefault();
     await api(`/sessions/${id}/reviews`, { method: "POST", body: JSON.stringify({ notes, outcome }) });
@@ -115,6 +125,9 @@ export default function SessionDetailPage() {
           <Link href={`/sessions/${session.id}/room`} className="btn-primary">
             <Video size={18} /> Hyr ne call si host
           </Link>
+          <button type="button" onClick={() => void removeSession()} className="btn-secondary text-red-700">
+            <Trash2 size={16} /> Fshi call-in
+          </button>
         </div>
       </div>
 
