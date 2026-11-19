@@ -1,5 +1,6 @@
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+pythonpath = ["."]  # bare `pytest` (unlike `python -m pytest`) does not put backend/ on sys.path
 filterwarnings = ["ignore::DeprecationWarning"]
 
 [tool.ruff]
