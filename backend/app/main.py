@@ -1,3 +1,5 @@
+import asyncio
+import logging
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -6,14 +8,23 @@ from fastapi.middleware.cors import CORSMiddleware
 from .api import auth, public, sessions, settings, signaling, tests
 from .config import get_settings
 from .database import Base, engine
-from .migrations import run_lightweight_migrations
+from .retention import retention_loop
+from .vision import vision_installed
+
+logger = logging.getLogger("nemoguard")
 
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
-    Base.metadata.create_all(bind=engine)
-    run_lightweight_migrations()
+    # PostgreSQL schemas are managed by Alembic (`alembic upgrade head`); create_all only serves SQLite dev/test runs.
+    if engine.dialect.name == "sqlite":
+        Base.metadata.create_all(bind=engine)
+    if not vision_installed():
+        logger.warning("YOLO/OpenCV are not installed: phone and extra-person detection is disabled (see README, INSTALL_CV).")
+    purge_task = asyncio.create_task(retention_loop()) if get_settings().retention_purge_interval_hours > 0 else None
     yield
+    if purge_task:
+        purge_task.cancel()
 
 
 app = FastAPI(title="NemoGuardHR API", version="0.1.0", lifespan=lifespan)
@@ -29,4 +40,4 @@ app.include_router(tests.public_router, prefix="/api")
 
 @app.get("/api/health")
 def health():
-    return {"status": "ok", "service": "NemoGuardHR API"}
+    return {"status": "ok", "service": "NemoGuardHR API", "vision": vision_installed()}

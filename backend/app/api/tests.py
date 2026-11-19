@@ -1,51 +1,39 @@
-from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
-from sqlalchemy import select
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, UploadFile
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session, selectinload
 
 from ..database import get_db
-from ..models import InterviewSession, Test, TestQuestion, TestSubmission, User
+from ..enums import QuestionType
+from ..models import IntegrityEvent, InterviewSession, Test, TestQuestion, TestSubmission, User
+from ..ratelimit import rate_limit
+from ..retention import delete_test
 from ..schemas import (
     PublicTestSubmit,
     TestCreate,
     TestDetailOut,
     TestOut,
     TestQuestionHostOut,
-    TestQuestionOut,
     TestReviewSessionOut,
     TestStandaloneSubmissionOut,
     TestSubmissionOut,
     TestUpdate,
 )
 from ..security import get_current_user
-from ..services import audit, request_ip
+from ..services import audit, parse_uuid, request_ip
 from ..test_generator import extract_text_from_upload, generate_questions, infer_title
 
 router = APIRouter(prefix="/tests", tags=["tests"])
-public_router = APIRouter(prefix="/public/tests", tags=["public-tests"])
+public_router = APIRouter(prefix="/public/tests", tags=["public-tests"], dependencies=[Depends(rate_limit("public-tests", 240, 60))])
 
 
-def test_to_out(test: Test, include_questions: bool = True) -> TestOut:
-    return TestOut(
-        id=test.id,
-        public_token=test.public_token,
-        title=test.title,
-        description=test.description,
-        is_public=test.is_public,
-        form_mode=test.form_mode,
-        created_at=test.created_at,
-        question_count=len(test.questions),
-        questions=[
-            TestQuestionOut(id=q.id, position=q.position, question_type=q.question_type, prompt=q.prompt, options=q.options)
-            for q in test.questions
-        ] if include_questions else [],
-    )
+MAX_STANDALONE_SUBMISSIONS = 500
 
 
 def owned_test(db: Session, test_id: str, user: User) -> Test:
     test = db.scalar(
         select(Test)
         .options(selectinload(Test.questions))
-        .where(Test.id == test_id, Test.created_by == user.id)
+        .where(Test.id == parse_uuid(test_id, "Test not found"), Test.created_by == user.id)
     )
     if not test:
         raise HTTPException(status_code=404, detail="Test not found")
@@ -54,7 +42,7 @@ def owned_test(db: Session, test_id: str, user: User) -> Test:
 
 def validate_questions(payload: TestCreate | TestUpdate) -> None:
     for index, question in enumerate(payload.questions):
-        if question.question_type == "short_text":
+        if question.question_type == QuestionType.short_text:
             continue
         cleaned_options = [option.strip() for option in question.options if option.strip()]
         if len(cleaned_options) < 2:
@@ -66,14 +54,14 @@ def validate_questions(payload: TestCreate | TestUpdate) -> None:
 
 
 def build_question(test_id: str, index: int, question) -> TestQuestion:
-    options = [option.strip() for option in question.options if option.strip()] if question.question_type == "multiple_choice" else []
+    options = [option.strip() for option in question.options if option.strip()] if question.question_type == QuestionType.multiple_choice else []
     return TestQuestion(
         test_id=test_id,
         position=index + 1,
         question_type=question.question_type,
         prompt=question.prompt.strip(),
         options=options,
-        correct_option_index=question.correct_option_index if question.question_type == "multiple_choice" else None,
+        correct_option_index=question.correct_option_index if question.question_type == QuestionType.multiple_choice else None,
     )
 
 
@@ -83,7 +71,7 @@ def grade_answers(questions: list[TestQuestion], answers: dict) -> tuple[dict, i
     total = 0
     for question in questions:
         answer = answers.get(question.id)
-        if question.question_type == "short_text":
+        if question.question_type == QuestionType.short_text:
             if answer is None:
                 continue
             value = str(answer).strip()
@@ -111,22 +99,28 @@ def grade_answers(questions: list[TestQuestion], answers: dict) -> tuple[dict, i
 def test_to_detail(test: Test, db: Session, user: User) -> TestDetailOut:
     sessions = db.scalars(
         select(InterviewSession)
-        .options(selectinload(InterviewSession.candidate), selectinload(InterviewSession.events))
+        .options(selectinload(InterviewSession.candidate))
         .where(InterviewSession.created_by == user.id, InterviewSession.test_id == test.id)
         .order_by(InterviewSession.created_at.desc())
     ).all()
     session_ids = [session.id for session in sessions]
-    submissions = []
+    submissions_by_session: dict[str, TestSubmission] = {}
+    event_summaries: dict[str, dict[str, int]] = {session_id: {} for session_id in session_ids}
     if session_ids:
-        submissions = db.scalars(select(TestSubmission).where(TestSubmission.session_id.in_(session_ids))).all()
-    submissions_by_session = {submission.session_id: submission for submission in submissions}
+        for submission in db.scalars(select(TestSubmission).where(TestSubmission.session_id.in_(session_ids))).all():
+            submissions_by_session[submission.session_id] = submission
+        counts = db.execute(
+            select(IntegrityEvent.session_id, IntegrityEvent.event_type, func.count(IntegrityEvent.id))
+            .where(IntegrityEvent.session_id.in_(session_ids))
+            .group_by(IntegrityEvent.session_id, IntegrityEvent.event_type)
+        ).all()
+        for session_id, event_type, count in counts:
+            event_summaries[session_id][event_type] = count
 
-    review_sessions: list[TestReviewSessionOut] = []
+    review_sessions = []
     for session in sessions:
-        event_summary: dict[str, int] = {}
-        for event in session.events:
-            event_summary[event.event_type] = event_summary.get(event.event_type, 0) + 1
         submission = submissions_by_session.get(session.id)
+        summary = event_summaries[session.id]
         review_sessions.append(
             TestReviewSessionOut(
                 session_id=session.id,
@@ -135,8 +129,8 @@ def test_to_detail(test: Test, db: Session, user: User) -> TestDetailOut:
                 candidate_email=session.candidate.email,
                 status=session.status,
                 review_status=session.review_status,
-                event_count=len(session.events),
-                event_summary=event_summary,
+                event_count=sum(summary.values()),
+                event_summary=summary,
                 submitted_at=submission.submitted_at if submission else None,
                 score=submission.score if submission else None,
                 total=submission.total if submission else None,
@@ -144,55 +138,27 @@ def test_to_detail(test: Test, db: Session, user: User) -> TestDetailOut:
             )
         )
 
+    standalone = db.scalars(
+        select(TestSubmission)
+        .where(TestSubmission.test_id == test.id, TestSubmission.session_id.is_(None))
+        .order_by(TestSubmission.submitted_at.desc())
+        .limit(MAX_STANDALONE_SUBMISSIONS)
+    ).all()
     return TestDetailOut(
-        id=test.id,
-        public_token=test.public_token,
-        title=test.title,
-        description=test.description,
-        is_public=test.is_public,
-        form_mode=test.form_mode,
-        created_at=test.created_at,
-        question_count=len(test.questions),
-        questions=[
-            TestQuestionHostOut(
-                id=question.id,
-                position=question.position,
-                question_type=question.question_type,
-                prompt=question.prompt,
-                options=question.options,
-                correct_option_index=question.correct_option_index,
-            )
-            for question in test.questions
-        ],
+        **TestOut.from_test(test, include_questions=False).model_dump(exclude={"questions"}),
+        questions=[TestQuestionHostOut.model_validate(question) for question in test.questions],
         sessions=review_sessions,
-        standalone_submissions=[
-            TestStandaloneSubmissionOut(
-                id=submission.id,
-                participant_name=submission.participant_name,
-                participant_email=submission.participant_email,
-                score=submission.score,
-                total=submission.total,
-                answers=submission.answers,
-                submitted_at=submission.submitted_at,
-            )
-            for submission in db.scalars(
-                select(TestSubmission)
-                .where(TestSubmission.test_id == test.id, TestSubmission.session_id.is_(None))
-                .order_by(TestSubmission.submitted_at.desc())
-            ).all()
-        ],
+        standalone_submissions=[TestStandaloneSubmissionOut.model_validate(submission) for submission in standalone],
     )
 
 
 @router.get("", response_model=list[TestOut])
-def list_tests(db: Session = Depends(get_db), user: User = Depends(get_current_user)):
-    rows = db.scalars(
-        select(Test)
-        .options(selectinload(Test.questions))
-        .where(Test.created_by == user.id)
-        .order_by(Test.created_at.desc())
+def list_tests(limit: int = Query(100, ge=1, le=500), offset: int = Query(0, ge=0), db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    question_count = select(func.count(TestQuestion.id)).where(TestQuestion.test_id == Test.id).correlate(Test).scalar_subquery()
+    rows = db.execute(
+        select(Test, question_count).where(Test.created_by == user.id).order_by(Test.created_at.desc(), Test.id).limit(limit).offset(offset)
     ).all()
-    return [test_to_out(row, include_questions=False) for row in rows]
+    return [TestOut.from_test(test, include_questions=False, question_count=count) for test, count in rows]
 
 
 @router.post("", response_model=TestOut, status_code=201)
@@ -208,7 +174,7 @@ def create_test(payload: TestCreate, request: Request, db: Session = Depends(get
     db.commit()
     db.refresh(test)
     test = db.scalar(select(Test).options(selectinload(Test.questions)).where(Test.id == test.id))
-    return test_to_out(test)
+    return TestOut.from_test(test)
 
 
 @router.post("/generate-from-file", response_model=TestOut, status_code=201)
@@ -244,7 +210,7 @@ async def generate_test_from_file(
         db.add(TestQuestion(
             test_id=test.id,
             position=index + 1,
-            question_type="multiple_choice",
+            question_type=QuestionType.multiple_choice,
             prompt=question.prompt,
             options=question.options,
             correct_option_index=question.correct_option_index,
@@ -253,7 +219,7 @@ async def generate_test_from_file(
     db.commit()
     db.refresh(test)
     test = db.scalar(select(Test).options(selectinload(Test.questions)).where(Test.id == test.id))
-    return test_to_out(test)
+    return TestOut.from_test(test)
 
 
 @router.get("/{test_id}", response_model=TestDetailOut)
@@ -285,8 +251,8 @@ def update_test(test_id: str, payload: TestUpdate, request: Request, db: Session
             question.position = index + 1
             question.question_type = incoming.question_type
             question.prompt = incoming.prompt.strip()
-            question.options = [option.strip() for option in incoming.options if option.strip()] if incoming.question_type == "multiple_choice" else []
-            question.correct_option_index = incoming.correct_option_index if incoming.question_type == "multiple_choice" else None
+            question.options = [option.strip() for option in incoming.options if option.strip()] if incoming.question_type == QuestionType.multiple_choice else []
+            question.correct_option_index = incoming.correct_option_index if incoming.question_type == QuestionType.multiple_choice else None
         else:
             db.add(build_question(test.id, index, incoming))
 
@@ -311,11 +277,20 @@ def update_test(test_id: str, payload: TestUpdate, request: Request, db: Session
     return test_to_detail(test, db, user)
 
 
+@router.delete("/{test_id}", status_code=204)
+def remove_test(test_id: str, request: Request, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    test = owned_test(db, test_id, user)
+    deleted_id = test.id
+    delete_test(db, test)
+    audit(db, user, request, "test.deleted", "test", deleted_id)
+    db.commit()
+
+
 def public_test(db: Session, token: str) -> Test:
     test = db.scalar(
         select(Test)
         .options(selectinload(Test.questions))
-        .where(Test.public_token == token, Test.is_public.is_(True))
+        .where(Test.public_token == parse_uuid(token, "Test link is invalid or closed"), Test.is_public.is_(True))
     )
     if not test:
         raise HTTPException(status_code=404, detail="Test link is invalid or closed")
@@ -324,45 +299,34 @@ def public_test(db: Session, token: str) -> Test:
 
 @public_router.get("/{token}", response_model=TestOut)
 def get_public_test(token: str, db: Session = Depends(get_db)):
-    return test_to_out(public_test(db, token), include_questions=True)
+    return TestOut.from_test(public_test(db, token))
 
 
-@public_router.post("/{token}/submissions", response_model=TestSubmissionOut, status_code=201)
+@public_router.post(
+    "/{token}/submissions",
+    response_model=TestSubmissionOut,
+    status_code=201,
+    dependencies=[Depends(rate_limit("public-test-submit", 10, 3600, "token"))],
+)
 def submit_public_test(token: str, payload: PublicTestSubmit, request: Request, db: Session = Depends(get_db)):
     test = public_test(db, token)
+    email = str(payload.participant_email).lower() if payload.participant_email else None
+    if email and db.scalar(select(TestSubmission.id).where(TestSubmission.test_id == test.id, TestSubmission.session_id.is_(None), TestSubmission.participant_email == email)):
+        raise HTTPException(status_code=409, detail="This email has already submitted this test")
     questions = db.scalars(select(TestQuestion).where(TestQuestion.test_id == test.id).order_by(TestQuestion.position)).all()
     checked_answers, score, total = grade_answers(list(questions), payload.answers)
     submission = TestSubmission(
         session_id=None,
         test_id=test.id,
         participant_name=payload.participant_name.strip() if payload.participant_name else None,
-        participant_email=str(payload.participant_email).lower() if payload.participant_email else None,
+        participant_email=email,
         participant_ip=request_ip(request),
         answers=checked_answers,
         score=score,
         total=total,
     )
     db.add(submission)
-    audit(
-        db,
-        None,
-        request,
-        "public_test.submitted",
-        "test_submission",
-        submission.id,
-        None,
-        {"test_id": test.id, "score": score, "total": total, "form_mode": test.form_mode},
-    )
+    audit(db, None, request, "public_test.submitted", "test_submission", submission.id, None, {"test_id": test.id, "score": score, "total": total, "form_mode": test.form_mode})
     db.commit()
     db.refresh(submission)
-    return TestSubmissionOut(
-        id=submission.id,
-        test_id=submission.test_id,
-        session_id=submission.session_id,
-        participant_name=submission.participant_name,
-        participant_email=submission.participant_email,
-        score=submission.score,
-        total=submission.total,
-        answers=submission.answers,
-        submitted_at=submission.submitted_at,
-    )
+    return TestSubmissionOut.model_validate(submission)

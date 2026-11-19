@@ -1,0 +1,18 @@
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+filterwarnings = ["ignore::DeprecationWarning"]
+
+[tool.ruff]
+line-length = 240  # the codebase keeps one statement per line, many of them long
+target-version = "py312"
+extend-exclude = [".venv"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP"]
+ignore = ["E501", "UP017", "B008"]  # UP017: timezone.utc is used throughout; B008: Depends() defaults are the FastAPI idiom
+
+[tool.ruff.lint.isort]
+known-first-party = ["app", "helpers"]
+
+[tool.ruff.lint.per-file-ignores]
+"alembic/versions/*" = ["E501"]

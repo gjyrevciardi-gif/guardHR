@@ -1,10 +1,11 @@
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, JSON, Numeric, String, Text, UniqueConstraint, Uuid
+from sqlalchemy import JSON, Boolean, CheckConstraint, DateTime, ForeignKey, Integer, Numeric, String, Text, UniqueConstraint, Uuid
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .database import Base
+from .enums import EventType, QuestionType, ReviewOutcome, ReviewStatus, SessionStatus, UserRole, check_in
 
 
 def uuid4_str() -> str:
@@ -17,11 +18,15 @@ def utcnow() -> datetime:
 
 class User(Base):
     __tablename__ = "users"
+    __table_args__ = (
+        CheckConstraint(check_in("role", UserRole), name="ck_users_role"),
+        CheckConstraint("retention_days BETWEEN 1 AND 365", name="ck_users_retention_days"),
+    )
     id: Mapped[str] = mapped_column(Uuid(as_uuid=False), primary_key=True, default=uuid4_str)
     email: Mapped[str] = mapped_column(String(255), unique=True, index=True)
     password_hash: Mapped[str] = mapped_column(String(255))
     full_name: Mapped[str] = mapped_column(String(160))
-    role: Mapped[str] = mapped_column(String(30), default="hr")
+    role: Mapped[str] = mapped_column(String(30), default=UserRole.hr)
     retention_days: Mapped[int] = mapped_column(Integer, default=30)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
@@ -29,23 +34,31 @@ class User(Base):
 
 
 class Candidate(Base):
+    """A candidate belongs to the HR user who invited them; the same email may exist once per HR user."""
+
     __tablename__ = "candidates"
+    __table_args__ = (UniqueConstraint("created_by", "email", name="uq_candidates_created_by_email"),)
     id: Mapped[str] = mapped_column(Uuid(as_uuid=False), primary_key=True, default=uuid4_str)
-    email: Mapped[str | None] = mapped_column(String(255), unique=True, index=True, nullable=True)
+    created_by: Mapped[str] = mapped_column(Uuid(as_uuid=False), ForeignKey("users.id", ondelete="RESTRICT"), index=True)
+    email: Mapped[str | None] = mapped_column(String(255), index=True, nullable=True)
     full_name: Mapped[str] = mapped_column(String(160))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
 
 class InterviewSession(Base):
     __tablename__ = "interview_sessions"
+    __table_args__ = (
+        CheckConstraint(check_in("status", SessionStatus), name="ck_interview_sessions_status"),
+        CheckConstraint(check_in("review_status", ReviewStatus), name="ck_interview_sessions_review_status"),
+    )
     id: Mapped[str] = mapped_column(Uuid(as_uuid=False), primary_key=True, default=uuid4_str)
     created_by: Mapped[str] = mapped_column(Uuid(as_uuid=False), ForeignKey("users.id", ondelete="RESTRICT"), index=True)
     candidate_id: Mapped[str] = mapped_column(Uuid(as_uuid=False), ForeignKey("candidates.id", ondelete="RESTRICT"), index=True)
     test_id: Mapped[str | None] = mapped_column(Uuid(as_uuid=False), ForeignKey("tests.id", ondelete="SET NULL"), nullable=True, index=True)
     title: Mapped[str] = mapped_column(String(200))
     public_token: Mapped[str] = mapped_column(Uuid(as_uuid=False), unique=True, default=uuid4_str, index=True)
-    status: Mapped[str] = mapped_column(String(40), default="scheduled")
-    review_status: Mapped[str] = mapped_column(String(40), default="No events detected")
+    status: Mapped[str] = mapped_column(String(40), default=SessionStatus.scheduled)
+    review_status: Mapped[str] = mapped_column(String(40), default=ReviewStatus.no_events)
     require_screen_share: Mapped[bool] = mapped_column(Boolean, default=False)
     consented_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     consent_ip: Mapped[str | None] = mapped_column(String(64), nullable=True)
@@ -63,6 +76,7 @@ class InterviewSession(Base):
 
 
 class Test(Base):
+    __test__ = False  # not a pytest test class
     __tablename__ = "tests"
     id: Mapped[str] = mapped_column(Uuid(as_uuid=False), primary_key=True, default=uuid4_str)
     created_by: Mapped[str] = mapped_column(Uuid(as_uuid=False), ForeignKey("users.id", ondelete="CASCADE"), index=True)
@@ -76,17 +90,20 @@ class Test(Base):
 
 
 class TestQuestion(Base):
+    __test__ = False  # not a pytest test class
     __tablename__ = "test_questions"
+    __table_args__ = (CheckConstraint(check_in("question_type", QuestionType), name="ck_test_questions_question_type"),)
     id: Mapped[str] = mapped_column(Uuid(as_uuid=False), primary_key=True, default=uuid4_str)
     test_id: Mapped[str] = mapped_column(Uuid(as_uuid=False), ForeignKey("tests.id", ondelete="CASCADE"), index=True)
     position: Mapped[int] = mapped_column(Integer)
-    question_type: Mapped[str] = mapped_column(String(40), default="multiple_choice")
+    question_type: Mapped[str] = mapped_column(String(40), default=QuestionType.multiple_choice)
     prompt: Mapped[str] = mapped_column(Text)
-    options: Mapped[dict] = mapped_column(JSON, default=list)
+    options: Mapped[list[str]] = mapped_column(JSON, default=list)
     correct_option_index: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
 
 class TestSubmission(Base):
+    __test__ = False  # not a pytest test class
     __tablename__ = "test_submissions"
     __table_args__ = (UniqueConstraint("session_id"),)
     id: Mapped[str] = mapped_column(Uuid(as_uuid=False), primary_key=True, default=uuid4_str)
@@ -103,6 +120,10 @@ class TestSubmission(Base):
 
 class IntegrityEvent(Base):
     __tablename__ = "integrity_events"
+    __table_args__ = (
+        CheckConstraint(check_in("event_type", EventType), name="ck_integrity_events_event_type"),
+        CheckConstraint("confidence_score IS NULL OR confidence_score BETWEEN 0 AND 1", name="ck_integrity_events_confidence"),
+    )
     id: Mapped[str] = mapped_column(Uuid(as_uuid=False), primary_key=True, default=uuid4_str)
     session_id: Mapped[str] = mapped_column(Uuid(as_uuid=False), ForeignKey("interview_sessions.id", ondelete="CASCADE"), index=True)
     event_type: Mapped[str] = mapped_column(String(60))
@@ -116,7 +137,10 @@ class IntegrityEvent(Base):
 
 class SessionReview(Base):
     __tablename__ = "session_reviews"
-    __table_args__ = (UniqueConstraint("session_id", "reviewer_id"),)
+    __table_args__ = (
+        UniqueConstraint("session_id", "reviewer_id"),
+        CheckConstraint(check_in("outcome", ReviewOutcome), name="ck_session_reviews_outcome"),
+    )
     id: Mapped[str] = mapped_column(Uuid(as_uuid=False), primary_key=True, default=uuid4_str)
     session_id: Mapped[str] = mapped_column(Uuid(as_uuid=False), ForeignKey("interview_sessions.id", ondelete="CASCADE"))
     reviewer_id: Mapped[str] = mapped_column(Uuid(as_uuid=False), ForeignKey("users.id", ondelete="RESTRICT"))

@@ -1,6 +1,11 @@
 from functools import lru_cache
+from importlib.util import find_spec
 
 from .config import get_settings
+
+
+def vision_installed() -> bool:
+    return all(find_spec(name) is not None for name in ("cv2", "numpy", "ultralytics"))
 
 
 @lru_cache(maxsize=1)

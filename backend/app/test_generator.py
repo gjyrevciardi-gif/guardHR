@@ -3,18 +3,18 @@ import io
 import random
 import re
 import unicodedata
+import zipfile
 from collections import Counter
 from dataclasses import dataclass
 
 from docx import Document
 from pypdf import PdfReader
 
-
 STOPWORDS = {
     "about", "after", "again", "against", "also", "because", "before", "between", "could", "during", "every",
     "from", "have", "into", "more", "other", "should", "their", "there", "these", "this", "through", "under",
     "using", "were", "where", "which", "while", "with", "without", "would", "what", "when", "will", "than",
-    "and", "the", "for", "are", "was", "has", "that", "into", "over",
+    "and", "the", "for", "are", "was", "has", "that", "over",
     "dhe", "apo", "nga", "per", "eshte", "jane", "kjo", "kete", "keto", "kur", "nese", "nuk", "ose", "pas",
     "para", "prej", "sepse", "tek", "tha", "nje", "me", "ne", "te", "si", "ka", "do", "ku", "qka", "cka",
     "cilat", "cili", "cila", "jep", "duhet", "mund", "shume",
@@ -30,13 +30,32 @@ class GeneratedQuestion:
     correct_option_index: int
 
 
+MAX_PDF_PAGES = 300
+MAX_DOCX_UNCOMPRESSED_BYTES = 50_000_000
+
+
 def extract_text_from_upload(filename: str, content: bytes) -> str:
     name = filename.lower()
     if name.endswith(".pdf"):
-        reader = PdfReader(io.BytesIO(content))
-        return "\n\n".join(page.extract_text() or "" for page in reader.pages)
+        try:
+            reader = PdfReader(io.BytesIO(content))
+            if len(reader.pages) > MAX_PDF_PAGES:
+                raise ValueError(f"PDF has too many pages (max {MAX_PDF_PAGES}).")
+            return "\n\n".join(page.extract_text() or "" for page in reader.pages)
+        except ValueError:
+            raise
+        except Exception as exc:  # pypdf raises many types for corrupt files
+            raise ValueError("The PDF could not be read.") from exc
     if name.endswith(".docx"):
-        document = Document(io.BytesIO(content))
+        try:
+            with zipfile.ZipFile(io.BytesIO(content)) as archive:  # a .docx is a zip: refuse zip bombs before parsing
+                if sum(item.file_size for item in archive.infolist()) > MAX_DOCX_UNCOMPRESSED_BYTES:
+                    raise ValueError("DOCX content is too large.")
+            document = Document(io.BytesIO(content))
+        except ValueError:
+            raise
+        except Exception as exc:
+            raise ValueError("The DOCX file could not be read.") from exc
         return "\n".join(paragraph.text for paragraph in document.paragraphs)
     if name.endswith(".txt") or name.endswith(".md"):
         return content.decode("utf-8", errors="ignore")

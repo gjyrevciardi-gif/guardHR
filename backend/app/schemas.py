@@ -1,28 +1,18 @@
+import json
 from datetime import datetime
-from typing import Any, Literal
+from typing import Any
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field
+from pydantic import AliasChoices, BaseModel, ConfigDict, EmailStr, Field, field_validator
 
-ReviewLabel = Literal["No events detected", "Requires review", "Review completed", "Insufficient evidence"]
-QuestionType = Literal["multiple_choice", "short_text"]
-EventType = Literal[
-    "tab_hidden",
-    "fullscreen_exit",
-    "camera_disabled",
-    "face_not_visible",
-    "multiple_people",
-    "phone_detected",
-    "screen_share_stopped",
-    "copy_paste",
-    "connection_interruption",
-    "window_resized",
-    "multiple_monitors",
-]
+from .enums import EventType, QuestionType, ReviewOutcome, ReviewStatus, UserRole
+
+MAX_EVENT_METADATA_BYTES = 4096
+MAX_ANSWERS = 200
 
 
 class LoginRequest(BaseModel):
     email: EmailStr
-    password: str
+    password: str = Field(max_length=128)
 
 
 class RegisterRequest(BaseModel):
@@ -31,10 +21,8 @@ class RegisterRequest(BaseModel):
     full_name: str = Field(min_length=2, max_length=160)
 
 
-class TokenResponse(BaseModel):
-    access_token: str
-    token_type: str = "bearer"
-    user: "UserOut"
+class AdminUserCreate(RegisterRequest):
+    role: UserRole = UserRole.hr
 
 
 class UserOut(BaseModel):
@@ -44,6 +32,14 @@ class UserOut(BaseModel):
     full_name: str
     role: str
     retention_days: int
+
+
+class TokenResponse(BaseModel):
+    """`access_token` is for API clients; the browser app relies on the HttpOnly session cookie."""
+
+    access_token: str
+    token_type: str = "bearer"
+    user: UserOut
 
 
 class SessionCreate(BaseModel):
@@ -56,7 +52,7 @@ class SessionCreate(BaseModel):
 
 
 class TestQuestionCreate(BaseModel):
-    question_type: QuestionType = "multiple_choice"
+    question_type: QuestionType = QuestionType.multiple_choice
     prompt: str = Field(min_length=2, max_length=5000)
     options: list[str] = Field(default_factory=list, max_length=8)
     correct_option_index: int | None = Field(default=None, ge=0)
@@ -83,9 +79,10 @@ class TestUpdate(BaseModel):
 
 
 class TestQuestionOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
     id: str
     position: int
-    question_type: QuestionType = "multiple_choice"
+    question_type: QuestionType = QuestionType.multiple_choice
     prompt: str
     options: list[str]
 
@@ -105,9 +102,47 @@ class TestOut(BaseModel):
     question_count: int = 0
     questions: list[TestQuestionOut] = Field(default_factory=list)
 
+    @classmethod
+    def from_test(cls, test: Any, *, include_questions: bool = True, question_count: int | None = None) -> "TestOut":
+        """Build from a Test model. Pass `question_count` to avoid loading questions just to count them."""
+        return cls(
+            id=test.id,
+            public_token=test.public_token,
+            title=test.title,
+            description=test.description,
+            is_public=test.is_public,
+            form_mode=test.form_mode,
+            created_at=test.created_at,
+            question_count=question_count if question_count is not None else len(test.questions),
+            questions=[TestQuestionOut.model_validate(q) for q in test.questions] if include_questions else [],
+        )
+
+
+class PublicTestOut(BaseModel):
+    """What a candidate sees inside a monitored session. Deliberately omits `public_token`,
+    which would let the candidate retake the test outside the monitored call."""
+
+    id: str
+    title: str
+    description: str | None
+    form_mode: bool = False
+    question_count: int = 0
+    questions: list[TestQuestionOut] = Field(default_factory=list)
+
+    @classmethod
+    def from_test(cls, test: Any) -> "PublicTestOut":
+        return cls(
+            id=test.id,
+            title=test.title,
+            description=test.description,
+            form_mode=test.form_mode,
+            question_count=len(test.questions),
+            questions=[TestQuestionOut.model_validate(q) for q in test.questions],
+        )
+
 
 class TestSubmit(BaseModel):
-    answers: dict[str, Any]
+    answers: dict[str, Any] = Field(max_length=MAX_ANSWERS)
 
 
 class PublicTestSubmit(TestSubmit):
@@ -116,6 +151,7 @@ class PublicTestSubmit(TestSubmit):
 
 
 class TestSubmissionOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
     id: str
     test_id: str
     session_id: str | None = None
@@ -133,7 +169,7 @@ class TestReviewSessionOut(BaseModel):
     candidate_name: str
     candidate_email: EmailStr | None
     status: str
-    review_status: ReviewLabel
+    review_status: ReviewStatus
     event_count: int
     event_summary: dict[str, int] = Field(default_factory=dict)
     submitted_at: datetime | None = None
@@ -143,6 +179,7 @@ class TestReviewSessionOut(BaseModel):
 
 
 class TestStandaloneSubmissionOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
     id: str
     participant_name: str | None = None
     participant_email: EmailStr | None = None
@@ -177,24 +214,32 @@ class EventCreate(BaseModel):
     event_type: EventType
     started_at: datetime
     ended_at: datetime | None = None
-    duration_seconds: float | None = Field(default=None, ge=0)
+    duration_seconds: float | None = Field(default=None, ge=0, le=86400)
     confidence_score: float | None = Field(default=None, ge=0, le=1)
-    metadata: dict[str, Any] = Field(default_factory=dict)
+    metadata: dict[str, Any] = Field(default_factory=dict, max_length=30)
+
+    @field_validator("metadata")
+    @classmethod
+    def metadata_must_be_small(cls, value: dict[str, Any]) -> dict[str, Any]:
+        if len(json.dumps(value, default=str)) > MAX_EVENT_METADATA_BYTES:
+            raise ValueError(f"metadata must be at most {MAX_EVENT_METADATA_BYTES} bytes")
+        return value
 
 
 class EventOut(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
+    model_config = ConfigDict(from_attributes=True, populate_by_name=True)
     id: str
     event_type: str
     started_at: datetime
     ended_at: datetime | None
     duration_seconds: float | None
     confidence_score: float | None
-    metadata: dict[str, Any]
+    # The ORM attribute is `event_metadata` because `metadata` is reserved on declarative models.
+    metadata: dict[str, Any] = Field(default_factory=dict, validation_alias=AliasChoices("event_metadata", "metadata"))
 
 
 class ReviewCreate(BaseModel):
-    outcome: Literal["Review completed", "Insufficient evidence"]
+    outcome: ReviewOutcome
     notes: str = Field(min_length=3, max_length=5000)
 
 
@@ -212,9 +257,8 @@ class SessionOut(BaseModel):
     title: str
     public_token: str
     status: str
-    review_status: ReviewLabel
-    invite_email_sent: bool | None = None
-    invite_email_error: str | None = None
+    review_status: ReviewStatus
+    invite_email_queued: bool = False
     require_screen_share: bool
     test: TestOut | None = None
     test_submission: TestSubmissionOut | None = None
@@ -236,7 +280,7 @@ class PublicSessionOut(BaseModel):
     require_screen_share: bool
     expires_at: datetime
     consented_at: datetime | None
-    test: TestOut | None = None
+    test: PublicTestOut | None = None
 
 
 class ConsentRequest(BaseModel):
