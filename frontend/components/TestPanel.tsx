@@ -3,9 +3,9 @@
 import { useMemo, useState } from "react";
 import { CheckCircle2, ClipboardList } from "lucide-react";
 import { api } from "@/lib/api";
-import { Test, TestAnswer, TestSubmission } from "@/lib/types";
+import { PublicTest, TestAnswer, TestSubmission } from "@/lib/types";
 
-export function CandidateTestPanel({ token, test }: { token: string; test: Test }) {
+export function CandidateTestPanel({ token, test }: { token: string; test: PublicTest }) {
   const [answers, setAnswers] = useState<Record<string, TestAnswer>>({});
   const [submission, setSubmission] = useState<TestSubmission | null>(null);
   const [error, setError] = useState("");

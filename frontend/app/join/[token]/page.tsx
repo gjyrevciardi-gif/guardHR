@@ -49,7 +49,7 @@ export default function ConsentPage() {
             <p className="text-sm font-semibold text-teal">JOIN CALL · CONSENT</p>
             <h1 className="mt-2 text-3xl font-bold">Para se të hysh në call</h1>
             <p className="mt-3 text-slate-600">
-              Përshëndetje {session.candidate_name}. Për call-in "{session.title}", sistemi regjistron sinjale aktiviteti që i shfaqen host-it live.
+              Përshëndetje {session.candidate_name}. Për call-in &quot;{session.title}&quot;, sistemi regjistron sinjale aktiviteti që i shfaqen host-it live.
             </p>
           </div>
           <div className="grid gap-4 p-7 sm:grid-cols-2 sm:p-9">

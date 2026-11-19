@@ -1,4 +1,6 @@
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8100/api";
+import { fallbackMessages, translateMessage } from "@/lib/messages";
+
+export const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8100/api";
 
 export class ApiError extends Error {
   constructor(public status: number, message: string) {
@@ -6,57 +8,64 @@ export class ApiError extends Error {
   }
 }
 
-function formatApiMessage(payload: unknown): string {
-  if (!payload || typeof payload !== "object") return "Kerkesa deshtoi";
+function formatApiMessage(status: number, payload: unknown): string {
+  const fallback = fallbackMessages[status] ?? "Kërkesa dështoi. Provo përsëri.";
+  if (!payload || typeof payload !== "object") return fallback;
 
   const detail = (payload as { detail?: unknown }).detail;
-  if (typeof detail === "string") return detail;
+  if (typeof detail === "string") return translateMessage(detail);
 
   if (Array.isArray(detail)) {
-    return detail
-      .map((item) => {
-        if (!item || typeof item !== "object") return String(item);
-        const message = (item as { msg?: unknown }).msg;
-        return typeof message === "string" ? message : JSON.stringify(item);
-      })
-      .join(" ");
+    const fields = detail
+      .map((item) => (item && typeof item === "object" && Array.isArray((item as { loc?: unknown }).loc) ? String((item as { loc: unknown[] }).loc.slice(1).join(".")) : ""))
+      .filter(Boolean);
+    return fields.length ? `Të dhëna të pavlefshme: ${fields.join(", ")}.` : "Të dhënat e futura nuk janë të vlefshme.";
   }
-
-  if (detail && typeof detail === "object") return JSON.stringify(detail);
-  return "Kerkesa deshtoi";
+  return fallback;
 }
 
-export function getToken() {
-  return typeof window === "undefined" ? null : localStorage.getItem("interviewguard_token");
+function redirectToLogin() {
+  if (typeof window === "undefined") return;
+  if (["/login", "/register"].includes(window.location.pathname)) return;
+  window.location.replace("/login");
 }
 
-export function saveToken(token: string) {
-  localStorage.setItem("interviewguard_token", token);
+// Older versions kept the JWT in localStorage; the session now lives in an HttpOnly cookie.
+if (typeof window !== "undefined") {
+  try {
+    localStorage.removeItem("interviewguard_token");
+  } catch {
+    // storage can be unavailable (private mode); nothing to clean up then
+  }
 }
 
-export function clearToken() {
-  localStorage.removeItem("interviewguard_token");
-}
-
+/**
+ * Calls the API. `authenticated` requests (and /auth/*) send the session cookie; candidate-facing
+ * /public/* calls pass `false` and carry no credentials. A 401 on an authenticated call sends the user to /login.
+ */
 export async function api<T>(path: string, options: RequestInit = {}, authenticated = true): Promise<T> {
   const headers = new Headers(options.headers);
   if (!(options.body instanceof FormData)) headers.set("Content-Type", "application/json");
-  if (authenticated && getToken()) headers.set("Authorization", `Bearer ${getToken()}`);
+  const isAuthRoute = path.startsWith("/auth/");
 
-  const response = await fetch(`${API_URL}${path}`, { ...options, headers });
+  const response = await fetch(`${API_URL}${path}`, { ...options, headers, credentials: authenticated || isAuthRoute ? "include" : "omit" });
   if (!response.ok) {
     const payload = await response.json().catch(() => ({}));
-    if (response.status === 401 && authenticated) clearToken();
-    throw new ApiError(response.status, formatApiMessage(payload));
+    if (response.status === 401 && authenticated && !isAuthRoute) redirectToLogin();
+    throw new ApiError(response.status, formatApiMessage(response.status, payload));
   }
 
   if (response.status === 204) return undefined as T;
   return response.json();
 }
 
-export { API_URL };
+export async function logout() {
+  await api("/auth/logout", { method: "POST" }).catch(() => undefined);
+  window.location.replace("/login");
+}
 
+// API_URL may be absolute (http://host:8100/api) or relative (/api, behind a reverse proxy).
 export function wsUrl(path: string) {
-  const base = API_URL.replace(/^http/, "ws").replace(/\/api$/, "");
-  return `${base}/api${path}`;
+  const base = API_URL.startsWith("/") ? `${window.location.origin}${API_URL}` : API_URL;
+  return `${base.replace(/^http/, "ws")}${path}`;
 }

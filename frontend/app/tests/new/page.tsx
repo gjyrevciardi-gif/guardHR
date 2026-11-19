@@ -1,11 +1,11 @@
 "use client";
 
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { ArrowLeft, Eye, FileUp, Plus, Save, Trash2 } from "lucide-react";
 import { AppShell } from "@/components/AppShell";
-import { api, getToken } from "@/lib/api";
+import { api } from "@/lib/api";
+import { useRequireSession } from "@/lib/session";
 import { QuestionType, Test } from "@/lib/types";
 
 type DraftQuestion = {
@@ -23,7 +23,6 @@ const emptyQuestion = (formMode = false): DraftQuestion => ({
 });
 
 export default function NewTestPage() {
-  const router = useRouter();
   const [formMode, setFormMode] = useState(false);
   const [title, setTitle] = useState("NemoGuardHR test");
   const [description, setDescription] = useState("");
@@ -34,9 +33,7 @@ export default function NewTestPage() {
   const [uploading, setUploading] = useState(false);
   const [questionCount, setQuestionCount] = useState(10);
 
-  useEffect(() => {
-    if (!getToken()) router.replace("/login");
-  }, [router]);
+  useRequireSession();
 
   function setMode(nextFormMode: boolean) {
     setFormMode(nextFormMode);

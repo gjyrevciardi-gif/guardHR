@@ -2,35 +2,33 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { ArrowRight, ClipboardList, Plus, Search } from "lucide-react";
 import { AppShell } from "@/components/AppShell";
-import { api, getToken } from "@/lib/api";
+import { api } from "@/lib/api";
 import { dateTime } from "@/lib/format";
 import { Test } from "@/lib/types";
 
 export default function TestsPage() {
-  const router = useRouter();
   const [tests, setTests] = useState<Test[]>([]);
   const [query, setQuery] = useState("");
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
       setTests(await api<Test[]>("/tests"));
+      setError("");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Testet nuk u ngarkuan");
     } finally {
       setLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    if (!getToken()) {
-      router.replace("/login");
-      return;
-    }
     void load();
-  }, [load, router]);
+  }, [load]);
 
   const filtered = tests.filter((test) =>
     `${test.title} ${test.description || ""}`.toLowerCase().includes(query.toLowerCase())
@@ -40,7 +38,7 @@ export default function TestsPage() {
     <AppShell>
       <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <p className="text-sm font-bold uppercase tracking-[0.24em] text-teal">Test library</p>
+          <p className="text-sm font-bold uppercase tracking-[0.24em] text-teal">Biblioteka e testeve</p>
           <h1 className="mt-2 text-3xl font-black text-navy">Testet & formularet</h1>
           <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-500">
             Ketu i sheh testet/formularet, i editon pyetjet, merr link publik dhe hap review per pergjigjet e pjesemarresve.
@@ -57,7 +55,7 @@ export default function TestsPage() {
             <Search className="absolute left-3 top-3 text-slate-400" size={18} />
             <input
               className="input pl-10 sm:w-80"
-              placeholder="Kerko test..."
+              placeholder="Kërko test…"
               value={query}
               onChange={(event) => setQuery(event.target.value)}
             />
@@ -70,6 +68,8 @@ export default function TestsPage() {
 
       {loading ? (
         <section className="card mt-6 p-10 text-center text-slate-500">Duke ngarkuar testet...</section>
+      ) : error ? (
+        <section role="alert" className="card mt-6 p-10 text-center text-red-700">{error}</section>
       ) : filtered.length === 0 ? (
         <section className="card mt-6 p-10 text-center">
           <ClipboardList className="mx-auto text-teal" size={34} />

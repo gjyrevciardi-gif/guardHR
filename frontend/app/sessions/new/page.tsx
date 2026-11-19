@@ -66,22 +66,17 @@ export default function NewSessionPage() {
 
         {created ? (
           <div className="card mt-8 p-8 text-center">
-            <span className={`mx-auto flex h-14 w-14 items-center justify-center rounded-full ${created.invite_email_sent ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"}`}>
-              {created.invite_email_sent ? <MailCheck /> : <AlertTriangle />}
+            <span className={`mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-emerald-100 text-emerald-700`}>
+              {created.invite_email_queued ? <MailCheck /> : <AlertTriangle />}
             </span>
             <h2 className="mt-5 text-2xl font-bold">
-              {created.invite_email_sent ? "Call-i u krijua dhe email-i u dërgua" : "Call-i u krijua"}
+              {created.invite_email_queued ? "Call-i u krijua dhe ftesa po dërgohet" : "Call-i u krijua"}
             </h2>
             <p className="mt-2 text-sm text-slate-500">
-              {created.invite_email_sent
-                ? "Pjesëmarrësi merr linkun në email dhe hyn pa account. Linku mbetet këtu si backup."
-                : "Email-i nuk u dërgua. Kopjo linkun si backup ose kontrollo SMTP settings."}
+              {created.invite_email_queued
+                ? "Email-i dërgohet në sfond; rezultati shfaqet në audit log (participant.invite.email_sent / email_failed). Linku mbetet këtu si backup."
+                : "Email-i nuk u vu në radhë. Kopjo linkun dhe ndaje manualisht."}
             </p>
-            {created.invite_email_error && (
-              <p className="mt-4 rounded-xl bg-amber-50 p-3 text-left text-sm text-amber-800">
-                {created.invite_email_error}
-              </p>
-            )}
             <div className="mt-6 flex items-center gap-2 rounded-xl bg-slate-100 p-3 text-left text-sm">
               <Link2 className="shrink-0 text-teal" size={18} />
               <code className="min-w-0 flex-1 truncate">{candidateLink}</code>
@@ -154,7 +149,7 @@ export default function NewSessionPage() {
                 ))}
               </select>
               <p className="mt-2 text-xs text-slate-500">
-                Nuk e ke krijuar ende? <a href="/tests/new" className="font-semibold text-teal">Krijo test këtu</a>.
+                Nuk e ke krijuar ende? <Link href="/tests/new" className="font-semibold text-teal">Krijo test këtu</Link>.
               </p>
             </div>
             <p className="rounded-xl border border-teal/20 bg-teal/5 p-4 text-sm text-slate-600">

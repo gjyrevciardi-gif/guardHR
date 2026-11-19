@@ -2,13 +2,12 @@
 
 import { LogOut } from "lucide-react";
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
-import { clearToken } from "@/lib/api";
+import { usePathname } from "next/navigation";
+import { logout } from "@/lib/api";
 import { ShellMark } from "@/components/ShellMark";
 import { Wordmark } from "@/components/Wordmark";
 
 export function AppShell({ children }: { children: React.ReactNode }) {
-  const router = useRouter();
   const pathname = usePathname();
   const navClass = (active: boolean) =>
     `rounded-full px-4 py-2 transition ${active ? "bg-shell-200 font-semibold text-teal" : "text-slate-600 hover:bg-shell-100 hover:text-navy"}`;
@@ -27,7 +26,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             <Link href="/dashboard" className={navClass(pathname === "/dashboard")}>Dashboard</Link>
             <Link href="/tests" className={navClass(pathname.startsWith("/tests"))}>Teste</Link>
             <button
-              onClick={() => { clearToken(); router.push("/login"); }}
+              onClick={() => void logout()}
               className="flex items-center gap-2 rounded-full px-4 py-2 text-slate-600 hover:bg-shell-100 hover:text-navy"
             >
               <LogOut size={16} /> Dil

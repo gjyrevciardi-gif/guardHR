@@ -4,7 +4,7 @@ import { FormEvent, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { UserPlus } from "lucide-react";
-import { api, saveToken } from "@/lib/api";
+import { api } from "@/lib/api";
 import { User } from "@/lib/types";
 import { ShellMark } from "@/components/ShellMark";
 import { Wordmark } from "@/components/Wordmark";
@@ -20,14 +20,13 @@ export default function RegisterPage() {
     setLoading(true);
     setError("");
     try {
-      const response = await api<{ access_token: string; user: User }>("/auth/register", {
+      await api<{ user: User }>("/auth/register", {
         method: "POST",
         body: JSON.stringify(form),
       }, false);
-      saveToken(response.access_token);
       router.push("/dashboard");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Regjistrimi deshtoi");
+      setError(err instanceof Error ? err.message : "Regjistrimi dështoi");
     } finally {
       setLoading(false);
     }
