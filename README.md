@@ -23,6 +23,7 @@ cheatHR/
 ├── docker-compose.yml        # zhvillim
 ├── docker-compose.prod.yml   # overlay për prodhim (vetëm Nginx publik)
 ├── docs/deployment.md        # prodhimi, TURN, scheduling, kufizimet
+├── docs/signals.md           # rëndësia e sinjaleve, rregulli i rishikimit, mbulimi
 └── .env.example
 ```
 
@@ -93,7 +94,9 @@ Skema nuk krijohet më nga `database/schema.sql` por nga Alembic. Një databazë
 | GET | `/api/public/sessions/{token}` | Detaje publike minimale (pa link publik të testit) |
 | POST | `/api/public/sessions/{token}/consent` | Consent eksplicit (idempotent) |
 | POST | `/api/public/sessions/{token}/start` | Nis sesionin |
-| POST | `/api/public/sessions/{token}/events` | Regjistron një event neutral |
+| POST | `/api/public/sessions/{token}/events` | Regjistron një event neutral (me rëndësi: info/low/medium/high) |
+| PATCH | `/api/public/sessions/{token}/events/{id}` | Mbyll një event të hapur (kthimi në faqe): kohëzgjatja dhe rëndësia |
+| POST | `/api/public/sessions/{token}/heartbeat` | Monitori raporton çdo 10 s; prej tij llogaritet mbulimi |
 | POST | `/api/public/sessions/{token}/analyze-frame` | YOLO/OpenCV transient |
 | POST | `/api/public/sessions/{token}/test-submission` | Dorëzon testin e call-it |
 | POST | `/api/public/sessions/{token}/finish` | Përfundon sesionin |
@@ -113,6 +116,7 @@ Skema nuk krijohet më nga `database/schema.sql` por nga Alembic. Një databazë
 - Video/audio nuk regjistrohen në MVP.
 - **Retention:** në nisje të API-t dhe çdo ditë (`RETENTION_PURGE_INTERVAL_HOURS`) dhe me kërkesë (`/settings/retention/purge`) fshihen `integrity_events`, përgjigjet e testeve, `consent_ip` dhe IP-të në audit log për call-et e përfunduara përtej afatit. Call-et që mbeten `in_progress` më shumë se `ABANDONED_SESSION_HOURS` (12 orë) mbyllen si të braktisura dhe ndjekin të njëjtin afat; linket e skaduara që s'u përdorën kurrë humbin vetëm IP-në e pranimit. Sesioni, review-t dhe emri i kandidatit mbeten derisa HR të fshijë call-in (`DELETE /api/sessions/{id}`), që heq gjithçka, përfshirë kandidatin nëse nuk ka call tjetër. Mund ta ekzekutosh edhe nga cron: `python -m app.retention`.
 - IP-ja e kandidatit (consent, audit) merret nga lidhja TCP. `X-Forwarded-For` besohet vetëm kur `TRUST_PROXY_HEADERS=true` (Nginx i përfshirë e mbishkruan).
+- Rëndësia e sinjaleve, rregulli i rishikimit dhe mbulimi i monitorimit: [docs/signals.md](docs/signals.md).
 - Etiketat e vetme janë: `No events detected`, `Requires review`, `Review completed`, `Insufficient evidence`.
 - Nuk ka emotion recognition, lie detection, personality analysis ose refuzim automatik.
 
