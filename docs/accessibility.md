@@ -10,7 +10,10 @@ Target: WCAG 2.2 level AA on every page. This file records what the code does, h
 | No clickable `div`s, no `autoFocus` | the same ESLint block |
 | Secondary text on light surfaces uses `text-muted` (`#567060`): 4.6:1 on the darkest page gradient, 5.4:1 on white. `slate-400/500` are only for the dark call room. | `tailwind.config.ts` |
 | `slate-600` is `#4f6a59` (5:1) because it is used for nav and body text on the page gradient. | `tailwind.config.ts` |
-| Focus ring: solid 3px `#164a41` on light pages; `.dark-ui` switches it to `#cde6bf` in the call room. | `app/globals.css`, `components/MeetingRoom.tsx` |
+| Focus ring: solid 3px in the `teal` token (`#164a41` in the light theme, light green in the dark theme); `.dark-ui` forces `#cde6bf` in the call room, which is always dark. | `app/globals.css`, `components/MeetingRoom.tsx` |
+| Two themes from one palette definition. Light and dark were both checked for contrast; do not add per-page colours, change the palettes. The theme toggle is a real button with `aria-pressed`. | `tailwind.config.ts`, `components/ThemeToggle.tsx`, [product-design.md](product-design.md) |
+| Severity is never colour alone: every signal shows a shape and a word, and "no monitoring" is hatched and labelled. | `SeverityMark`, `CallStrip` |
+| Heading outline: the room title is the `h1`; the signals panel has a screen-reader-only `h2` so signal cards (`h3`) do not skip a level. | `MeetingRoom.tsx`, `HostRail.tsx` |
 | Skip link first in the tab order, every page has `<main id="main">`. | `app/layout.tsx`, `.skip-link` |
 | Each route has its own `<title>` (`Page · NemoGuardHR`). A parent layout that sets a title must restate the template, otherwise its children lose the suffix. | `app/**/layout.tsx` |
 | Buttons and standalone links are at least 44 px tall; radios are 24 px with a 44 px hit area. Links inside a sentence are exempt (WCAG 2.5.8). | AppShell, test editor, session page |
@@ -30,10 +33,13 @@ axe-core 4.10 (WCAG 2.0/2.1/2.2 A and AA plus best-practice rules) on 12 pages a
 | Pages whose title was only the product name | 11 of 12 | 1 (the landing page, where that is the right title) |
 | Horizontal overflow at 320 px | none | none |
 
+### After the redesign (light and dark themes)
+
+axe-core (WCAG 2.0/2.1/2.2 A and AA, target size, best practice) on 15 screens (landing, login, register, consent, privacy, public test and form, dashboard, new call, review, live call page, tests list, new test, test detail, settings), each in light and dark at 1440, 820 and 390 px, with a horizontal-overflow check: no findings. It also runs at every stop of a real two-browser call (candidate consent, lobby before and after the device check, host lobby, host room on each tab, focus mode, phone width, candidate room, summary, completion page). The scan found three real problems that were fixed: the wordmark's "HR" at 2.8:1 in the light theme (`gold.text` is now `#97620c`, about 5:1), the room having no `h1`, and signal cards skipping a heading level. Scans must wait for the 300 ms rise-in animation to finish, otherwise axe measures half-transparent colours and reports false contrast failures.
+
 ## Known limits
 
 - Not tested with a real screen reader (NVDA, VoiceOver) or with voice control. axe only catches the problems a machine can detect; treat these numbers as a floor.
-- The interface mixes Albanian and English vocabulary (status labels such as "Review completed", headings on the landing page). Screen readers pronounce the English words with Albanian rules. There is no per-term `lang` markup; the real fix is i18n.
-- The "HR" in the wordmark is `#c08a22` (3:1 on white, 2.6:1 on the mist background). Logotypes are exempt, so it is left alone. Use `text-gold-deep` if that policy changes.
+- The interface is Albanian, but it still contains a few English product terms (call, test, email, copy/paste, fullscreen, host) and the test questions seeded or typed by hosts may be in any language. Screen readers pronounce English words with Albanian rules. There is no per-term `lang` markup; the real fix is i18n.
 - Alerts on the host's call page (`/sessions/[id]`) are announced politely through a live region that is always mounted. The signal timeline inside the host video room is not a live region, and a video call is not a good screen-reader experience to begin with.
 - The candidate's camera, screen share and face monitoring have no non-visual alternative. A candidate who cannot use them has to ask the host for another way.
