@@ -13,7 +13,7 @@ def test_complete_hr_and_candidate_flow(client, hr, new_session, sent_invites):
     assert client.post(f"/api/public/sessions/{token}/start").status_code == 403
     assert client.post(f"/api/public/sessions/{token}/consent", json={"accepted": True}).status_code == 200
     assert client.post(f"/api/public/sessions/{token}/start").status_code == 204
-    assert client.post(f"/api/public/sessions/{token}/events", json=event_payload()).status_code == 201
+    assert client.post(f"/api/public/sessions/{token}/events", json=event_payload(event_type="phone_detected")).status_code == 201  # high severity: goes to the review queue
     assert client.post(f"/api/public/sessions/{token}/finish").status_code == 204
 
     detail = client.get(f"/api/sessions/{session_id}", headers=hr)

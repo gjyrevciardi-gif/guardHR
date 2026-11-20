@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session, object_session
 from .config import get_settings
 from .models import AuditLog, InterviewSession, TestSubmission, User
 from .schemas import EventOut, ReviewOut, SessionOut, TestOut, TestSubmissionOut
+from .signals import monitoring_summary, signal_level
 
 
 def parse_uuid(value: str, not_found: str) -> str:
@@ -46,8 +47,11 @@ def session_to_out(
     invite_email_queued: bool = False,
     event_count: int | None = None,
     question_count: int | None = None,
+    max_severity: int | None = None,
 ) -> SessionOut:
-    """`event_count` / `question_count` let list views pass COUNT results instead of loading rows."""
+    """`event_count` / `question_count` / `max_severity` let list views pass aggregate results instead of loading rows."""
+    if event_count is None:  # events are loaded: derive the aggregate from them
+        max_severity = max((event.severity for event in session.events), default=None)
     submission = None
     invite_status = None
     if include_details:
@@ -64,6 +68,8 @@ def session_to_out(
         review_status=session.review_status,
         invite_email_queued=invite_email_queued,
         invite_status=invite_status,
+        signal_level=signal_level(max_severity),
+        monitoring=monitoring_summary(session),
         require_screen_share=session.require_screen_share,
         test=TestOut.from_test(session.test, include_questions=include_details, question_count=question_count) if session.test else None,
         test_submission=submission,

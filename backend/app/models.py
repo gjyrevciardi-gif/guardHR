@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import JSON, Boolean, CheckConstraint, DateTime, ForeignKey, Index, Integer, Numeric, String, Text, UniqueConstraint, Uuid
+from sqlalchemy import JSON, Boolean, CheckConstraint, DateTime, Float, ForeignKey, Index, Integer, Numeric, String, Text, UniqueConstraint, Uuid
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .database import Base
@@ -64,6 +64,11 @@ class InterviewSession(Base):
     consent_ip: Mapped[str | None] = mapped_column(String(64), nullable=True)
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     ended_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # Monitor heartbeat bookkeeping (see app/signals.py). NULL monitored_seconds = coverage was not tracked for this call.
+    last_seen_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    monitored_seconds: Mapped[float | None] = mapped_column(Float, nullable=True)
+    face_seconds: Mapped[float | None] = mapped_column(Float, nullable=True)
+    monitor_gaps: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
@@ -123,6 +128,7 @@ class IntegrityEvent(Base):
     __table_args__ = (
         CheckConstraint(check_in("event_type", EventType), name="ck_integrity_events_event_type"),
         CheckConstraint("confidence_score IS NULL OR confidence_score BETWEEN 0 AND 1", name="ck_integrity_events_confidence"),
+        CheckConstraint("severity BETWEEN 0 AND 3", name="ck_integrity_events_severity"),
     )
     id: Mapped[str] = mapped_column(Uuid(as_uuid=False), primary_key=True, default=uuid4_str)
     session_id: Mapped[str] = mapped_column(Uuid(as_uuid=False), ForeignKey("interview_sessions.id", ondelete="CASCADE"), index=True)
@@ -132,6 +138,7 @@ class IntegrityEvent(Base):
     duration_seconds: Mapped[float | None] = mapped_column(Numeric(10, 2), nullable=True)
     confidence_score: Mapped[float | None] = mapped_column(Numeric(5, 4), nullable=True)
     event_metadata: Mapped[dict] = mapped_column("metadata", JSON, default=dict)
+    severity: Mapped[int] = mapped_column(Integer, default=1, server_default="1")  # app.signals.Severity
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
 
