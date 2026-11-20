@@ -26,7 +26,7 @@ const principles = ["No automatic accusations", "Visible only to host", "Consent
 
 export default function Home() {
   return (
-    <main className="shell-field relative min-h-screen overflow-hidden px-5 py-6 text-navy">
+    <main id="main" className="shell-field relative min-h-screen overflow-hidden px-5 py-6 text-navy">
       <div className="pointer-events-none absolute inset-0 overflow-hidden">
         <div className="absolute -left-20 top-28 h-72 w-72 rounded-full bg-shell-500/40 blur-3xl" />
         <div className="absolute right-0 top-40 h-96 w-96 rounded-full bg-shell-400/60 blur-3xl" />
@@ -76,15 +76,15 @@ export default function Home() {
           <div className="mt-10 grid max-w-2xl gap-3 sm:grid-cols-3">
             <div className="rounded-3xl border border-white/80 bg-white/70 p-4 shadow-sm backdrop-blur-xl">
               <p className="text-2xl font-black text-navy">0</p>
-              <p className="text-xs font-semibold text-slate-500">automatic rejections</p>
+              <p className="text-xs font-semibold text-muted">automatic rejections</p>
             </div>
             <div className="rounded-3xl border border-white/80 bg-white/70 p-4 shadow-sm backdrop-blur-xl">
               <p className="text-2xl font-black text-navy">live</p>
-              <p className="text-xs font-semibold text-slate-500">host-side popups</p>
+              <p className="text-xs font-semibold text-muted">host-side popups</p>
             </div>
             <div className="rounded-3xl border border-white/80 bg-white/70 p-4 shadow-sm backdrop-blur-xl">
               <p className="text-2xl font-black text-navy">simple</p>
-              <p className="text-xs font-semibold text-slate-500">participant UI</p>
+              <p className="text-xs font-semibold text-muted">participant UI</p>
             </div>
           </div>
         </div>

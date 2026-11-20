@@ -52,9 +52,9 @@ export default function PublicFormPage() {
   }
 
   return (
-    <main className="shell-field min-h-screen px-5 py-6 text-navy">
+    <main id="main" className="shell-field min-h-screen px-5 py-6 text-navy">
       <nav className="mx-auto flex max-w-4xl items-center justify-between rounded-full border border-white/80 bg-white/90 px-5 py-3 shadow-soft backdrop-blur-xl">
-        <Link href="/" className="flex items-center gap-3 text-sm font-black">
+        <Link href="/" className="flex min-h-11 items-center gap-3 text-sm font-black">
           <span className="rounded-full bg-shell-200 p-2 text-teal"><Waves size={17} /></span>
           <Wordmark />
         </Link>
@@ -68,12 +68,12 @@ export default function PublicFormPage() {
             <p className="mt-2 text-sm text-red-600">{error}</p>
           </div>
         ) : !test ? (
-          <div className="card p-8 text-center text-slate-500">Duke ngarkuar...</div>
+          <div className="card p-8 text-center text-muted">Duke ngarkuar...</div>
         ) : submission ? (
           <div className="card p-10 text-center">
             <CheckCircle2 className="mx-auto text-emerald-600" size={42} />
             <h1 className="mt-4 text-3xl font-black">{test.form_mode ? "Formulari u dergua" : "Testi u dorezua"}</h1>
-            <p className="mt-3 text-slate-500">
+            <p className="mt-3 text-muted">
               {submission.total > 0 ? `Rezultati: ${submission.score}/${submission.total}. ` : ""}
               Faleminderit, pergjigjet u ruajten.
             </p>
@@ -91,21 +91,22 @@ export default function PublicFormPage() {
 
             <div className="mt-8 grid gap-4 sm:grid-cols-2">
               <div>
-                <label className="label">Emri</label>
-                <input className="input" value={participantName} onChange={(event) => setParticipantName(event.target.value)} placeholder="Emri yt" />
+                <label htmlFor="form-name" className="label">Emri</label>
+                <input id="form-name" autoComplete="name" className="input" value={participantName} onChange={(event) => setParticipantName(event.target.value)} placeholder="Emri yt" />
               </div>
               <div>
-                <label className="label">Email</label>
-                <input className="input" type="email" value={participantEmail} onChange={(event) => setParticipantEmail(event.target.value)} placeholder="email@example.com" />
+                <label htmlFor="form-email" className="label">Email</label>
+                <input id="form-email" autoComplete="email" className="input" type="email" value={participantEmail} onChange={(event) => setParticipantEmail(event.target.value)} placeholder="email@example.com" />
               </div>
             </div>
 
             <div className="mt-8 space-y-5">
               {test.questions.map((question) => (
-                <section key={question.id} className="rounded-3xl border border-slate-200 bg-slate-50/70 p-5">
-                  <p className="font-black">{question.position}. {question.prompt}</p>
+                <section key={question.id} aria-labelledby={`q-${question.id}`} className="rounded-3xl border border-slate-200 bg-slate-50/70 p-5">
+                  <p id={`q-${question.id}`} className="font-black">{question.position}. {question.prompt}</p>
                   {question.question_type === "short_text" ? (
                     <textarea
+                      aria-label={`Përgjigjja për pyetjen ${question.position}`}
                       className="input mt-4 min-h-28"
                       placeholder="Shkruaj pergjigjen..."
                       value={typeof answers[question.id] === "string" ? answers[question.id] : ""}
@@ -118,7 +119,7 @@ export default function PublicFormPage() {
                         <label key={index} className="flex cursor-pointer items-start gap-3 rounded-2xl border border-slate-200 bg-white p-3 text-sm hover:border-shell-400 hover:bg-shell-100">
                           <input
                             type="radio"
-                            className="mt-1 accent-teal"
+                            className="mt-0.5 h-6 w-6 shrink-0 accent-teal"
                             name={question.id}
                             checked={answers[question.id] === index}
                             onChange={() => setAnswers((current) => ({ ...current, [question.id]: index }))}

@@ -100,8 +100,8 @@ export default function SessionDetailPage() {
   return (
     <AppShell>
       {offline && <OfflineBanner />}
-      {alerts.length > 0 && (
-        <div className="fixed right-5 top-5 z-50 w-[min(360px,calc(100vw-2.5rem))] space-y-3">
+      {/* Always mounted: a live region is only announced if it exists before its content changes. */}
+      <div role="status" aria-live="polite" className="fixed right-5 top-5 z-50 w-[min(360px,calc(100vw-2.5rem))] space-y-3">
           {alerts.map((alert) => (
             <div key={alert.id} className="rounded-2xl border border-amber-200 bg-white p-4 shadow-2xl">
               <div className="flex items-start gap-3">
@@ -110,16 +110,15 @@ export default function SessionDetailPage() {
                   <p className="font-semibold text-slate-900">{alert.title}</p>
                   <p className="mt-1 text-sm leading-5 text-slate-600">{alert.message}</p>
                 </div>
-                <button onClick={() => setAlerts((current) => current.filter((item) => item.id !== alert.id))} className="rounded-lg p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700" aria-label="Mbyll njoftimin">
+                <button onClick={() => setAlerts((current) => current.filter((item) => item.id !== alert.id))} className="-mr-2 -mt-2 flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-muted hover:bg-slate-100 hover:text-slate-700" aria-label="Mbyll njoftimin">
                   <X size={16} />
                 </button>
               </div>
             </div>
           ))}
-        </div>
-      )}
+      </div>
 
-      <Link href="/dashboard" className="mb-6 inline-flex items-center gap-2 text-sm font-semibold text-slate-600 hover:text-teal">
+      <Link href="/dashboard" className="mb-6 inline-flex items-center gap-2 text-sm font-semibold text-slate-600 hover:text-teal min-h-11">
         <ArrowLeft size={17} /> Dashboard
       </Link>
 
@@ -129,10 +128,10 @@ export default function SessionDetailPage() {
             <h1 className="text-3xl font-black">{session.candidate.full_name}</h1>
             <StatusBadge status={session.review_status} signalLevel={session.signal_level} monitoring={session.monitoring} />
           </div>
-          <p className="mt-2 text-slate-500">{session.title} - {session.candidate.email || "Pa email"}</p>
+          <p className="mt-2 text-muted">{session.title} - {session.candidate.email || "Pa email"}</p>
         </div>
         <div className="flex flex-col gap-3 sm:items-end">
-          <div className="text-sm text-slate-500">Krijuar {dateTime(session.created_at)}</div>
+          <div className="text-sm text-muted">Krijuar {dateTime(session.created_at)}</div>
           <Link href={`/sessions/${session.id}/room`} className="btn-primary">
             <Video size={18} /> Hyr ne call si host
           </Link>
@@ -147,7 +146,7 @@ export default function SessionDetailPage() {
           <div className="flex items-center justify-between gap-4">
             <div>
               <h2 className="text-lg font-black">Live activity timeline</h2>
-              <p className="text-sm text-slate-500">Rifreskohet automatikisht. Sinjale per host-in, jo akuza automatike.</p>
+              <p className="text-sm text-muted">Rifreskohet automatikisht. Sinjale per host-in, jo akuza automatike.</p>
             </div>
             <span className="rounded-lg bg-slate-100 px-3 py-2 text-sm font-semibold">{session.events.length} evente</span>
           </div>
@@ -169,7 +168,7 @@ export default function SessionDetailPage() {
               ) : (
                 <>
                   <p className="font-semibold text-emerald-700">No events detected</p>
-                  <p className="mt-1 text-sm text-slate-500">Nuk ka activity signals te regjistruara ne kete call.</p>
+                  <p className="mt-1 text-sm text-muted">Nuk ka activity signals te regjistruara ne kete call.</p>
                 </>
               )}
             </div>
@@ -183,9 +182,9 @@ export default function SessionDetailPage() {
                       {eventLabels[item.event_type] || item.event_type}
                       <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ring-1 ring-inset ${severityStyles[item.severity]}`}>{severityLabels[item.severity]}</span>
                     </h3>
-                    <time className="text-xs text-slate-500">{dateTime(item.started_at)}</time>
+                    <time className="text-xs text-muted">{dateTime(item.started_at)}</time>
                   </div>
-                  <div className="mt-2 flex gap-4 text-xs text-slate-500">
+                  <div className="mt-2 flex gap-4 text-xs text-muted">
                     <span>Kohezgjatja: {item.duration_seconds != null ? `${item.duration_seconds.toFixed(1)}s` : "-"}</span>
                     <span>Confidence: {item.confidence_score != null ? `${Math.round(item.confidence_score * 100)}%` : "-"}</span>
                   </div>
@@ -208,8 +207,8 @@ export default function SessionDetailPage() {
             {session.invite_status === "failed" && <p role="alert" className="mt-4 rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">Emaili i ftesës nuk u dërgua. Kopjo linkun më poshtë dhe dërgoja pjesëmarrësit manualisht.</p>}
             <div className="mt-5 flex items-center gap-2 rounded-xl bg-slate-100 p-3">
               <code className="min-w-0 flex-1 truncate text-xs">{candidateLink}</code>
-              <button onClick={() => navigator.clipboard.writeText(candidateLink)} aria-label="Kopjo"><Clipboard size={17} /></button>
-              <a href={candidateLink} target="_blank" aria-label="Hap"><ExternalLink size={17} /></a>
+              <button onClick={() => navigator.clipboard.writeText(candidateLink)} aria-label="Kopjo linkun" className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full hover:bg-white"><Clipboard size={17} /></button>
+              <a href={candidateLink} target="_blank" rel="noopener noreferrer" aria-label="Hap linkun në skedë të re" className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full hover:bg-white"><ExternalLink size={17} /></a>
             </div>
           </section>
 
@@ -219,7 +218,7 @@ export default function SessionDetailPage() {
                 <div>
                   <h2 className="font-black">Testi me zgjedhje</h2>
                   <p className="mt-2 text-sm text-slate-600">{session.test.title}</p>
-                  <p className="mt-1 text-xs text-slate-500">{session.test.question_count} pyetje</p>
+                  <p className="mt-1 text-xs text-muted">{session.test.question_count} pyetje</p>
                 </div>
                 <Link href={`/tests/${session.test.id}`} className="btn-secondary">
                   Review/Edit <ExternalLink size={16} />
@@ -241,15 +240,15 @@ export default function SessionDetailPage() {
 
           <form onSubmit={review} className="card p-6">
             <div className="flex items-center gap-2"><FileCheck2 className="text-teal" /><h2 className="font-black">Host notes</h2></div>
-            <p className="mt-2 text-xs leading-5 text-slate-500">Sistemi nuk akuzon automatikisht. Sheno kontekstin e call/test signals per evidence.</p>
-            <label className="label mt-5">Rezultati</label>
-            <select className="input" value={outcome} onChange={(e) => setOutcome(e.target.value)}>
+            <p className="mt-2 text-xs leading-5 text-muted">Sistemi nuk akuzon automatikisht. Sheno kontekstin e call/test signals per evidence.</p>
+            <label htmlFor="review-outcome" className="label mt-5">Rezultati</label>
+            <select id="review-outcome" className="input" value={outcome} onChange={(e) => setOutcome(e.target.value)}>
               <option>Review completed</option>
               <option>Insufficient evidence</option>
             </select>
-            <label className="label mt-4">Shenime</label>
-            <textarea className="input min-h-32 resize-y" value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Konteksti dhe arsyetimi i shqyrtimit..." required minLength={3} />
-            {message && <p className="mt-3 text-sm text-emerald-700">{message}</p>}
+            <label htmlFor="review-notes" className="label mt-4">Shenime</label>
+            <textarea id="review-notes" className="input min-h-32 resize-y" value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Konteksti dhe arsyetimi i shqyrtimit..." required minLength={3} />
+            {message && <p role="status" className="mt-3 text-sm text-emerald-700">{message}</p>}
             <button className="btn-primary mt-4 w-full">Ruaj shenimet</button>
           </form>
         </div>
@@ -259,5 +258,5 @@ export default function SessionDetailPage() {
 }
 
 function Row({ label, value }: { label: string; value: string }) {
-  return <div className="flex justify-between gap-4"><dt className="text-slate-500">{label}</dt><dd className="text-right font-medium capitalize">{value}</dd></div>;
+  return <div className="flex justify-between gap-4"><dt className="text-muted">{label}</dt><dd className="text-right font-medium capitalize">{value}</dd></div>;
 }

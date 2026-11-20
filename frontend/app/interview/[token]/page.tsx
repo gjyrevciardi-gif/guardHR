@@ -25,18 +25,18 @@ export default function InterviewRoom() {
 
   if (ended) {
     return (
-      <main className="flex min-h-screen items-center justify-center bg-mist p-6">
+      <main id="main" className="flex min-h-screen items-center justify-center bg-mist p-6">
         <div className="card max-w-md p-10 text-center">
           <CheckCircle2 className="mx-auto text-emerald-600" size={48} />
           <h1 className="mt-5 text-2xl font-bold">Call-i përfundoi</h1>
-          <p className="mt-3 text-slate-500">Faleminderit. Activity signals ruhen për host-in e call-it.</p>
+          <p className="mt-3 text-muted">Faleminderit. Activity signals ruhen për host-in e call-it.</p>
         </div>
       </main>
     );
   }
 
-  if (error) return <main className="flex min-h-screen items-center justify-center bg-mist p-6 text-center text-red-700">{error}</main>;
-  if (!session) return <main className="flex min-h-screen items-center justify-center bg-mist p-6">Duke ngarkuar...</main>;
+  if (error) return <main id="main" className="flex min-h-screen items-center justify-center bg-mist p-6 text-center text-red-700">{error}</main>;
+  if (!session) return <main id="main" className="flex min-h-screen items-center justify-center bg-mist p-6">Duke ngarkuar...</main>;
 
   return <MeetingRoom token={token} role="candidate" session={session} onFinish={() => setEnded(true)} />;
 }

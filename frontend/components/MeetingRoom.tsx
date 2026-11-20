@@ -442,7 +442,7 @@ export function MeetingRoom({ token, role, session, onFinish }: Props) {
   }, []);
 
   return (
-    <div ref={roomRef} className="min-h-screen bg-[#0c1f1a] text-white">
+    <div ref={roomRef} className="dark-ui min-h-screen bg-[#0c1f1a] text-white">
       {roomAlerts.length > 0 && (
         <div className="fixed right-5 top-20 z-50 w-[min(380px,calc(100vw-2.5rem))] space-y-3">
           {roomAlerts.map((alert) => (
@@ -476,7 +476,7 @@ export function MeetingRoom({ token, role, session, onFinish }: Props) {
         </div>
       </header>
 
-      <main className="mx-auto grid max-w-7xl gap-5 p-5 lg:grid-cols-[1fr_320px]">
+      <main id="main" className="mx-auto grid max-w-7xl gap-5 p-5 lg:grid-cols-[1fr_320px]">
         <audio ref={remoteAudioRef} autoPlay playsInline className="hidden" />
         <section className="grid gap-4 md:grid-cols-2">
           <VideoPanel label={role === "hr" ? "Ti (host)" : session.candidate_name} videoRef={localVideoRef} active={!!localStream && cameraEnabled} speaking={localSpeaking} muted />
@@ -631,7 +631,7 @@ function DeviceSelect({ label, kind, devices, value, onChange }: { label: string
   return (
     <label className="block text-xs font-semibold text-slate-300">
       {label}
-      <select value={value} onChange={(event) => onChange(event.target.value)} className="mt-1 w-full rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-sm text-white">
+      <select value={value} onChange={(event) => onChange(event.target.value)} className="mt-1 min-h-11 w-full rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-sm text-white">
         <option value="">Default</option>
         {rows.map((device, index) => (
           <option key={device.deviceId} value={device.deviceId}>

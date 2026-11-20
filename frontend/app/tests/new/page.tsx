@@ -116,20 +116,20 @@ export default function NewTestPage() {
 
   return (
     <AppShell>
-      <Link href="/tests" className="mb-6 inline-flex items-center gap-2 text-sm font-semibold text-slate-500 hover:text-teal">
+      <Link href="/tests" className="mb-6 inline-flex items-center gap-2 text-sm font-semibold text-muted hover:text-teal min-h-11">
         <ArrowLeft size={17} /> Testet & formularet
       </Link>
 
       <div className="mx-auto max-w-4xl">
         <h1 className="text-3xl font-black">{formMode ? "Krijo formular publik" : "Krijo test me zgjedhje"}</h1>
-        <p className="mt-2 text-slate-500">
+        <p className="mt-2 text-muted">
           Krijo test per call ose formular standalone qe e shperndan me link.
         </p>
 
         {created ? (
           <section className="card mt-8 p-8 text-center">
             <h2 className="text-2xl font-black">{created.form_mode ? "Formulari u krijua" : "Testi u krijua"}</h2>
-            <p className="mt-2 text-slate-500">{created.title} - {created.question_count} pyetje</p>
+            <p className="mt-2 text-muted">{created.title} - {created.question_count} pyetje</p>
             <div className="mt-6 flex flex-wrap justify-center gap-3">
               <Link href={`/tests/${created.id}`} className="btn-primary">
                 <Eye size={18} /> Review / Edit / Share
@@ -170,7 +170,7 @@ export default function NewTestPage() {
                     <span className="rounded-2xl bg-teal/10 p-3 text-teal"><FileUp /></span>
                     <div>
                       <h2 className="text-xl font-black">Auto-generate nga dokumenti</h2>
-                      <p className="mt-1 text-sm text-slate-500">
+                      <p className="mt-1 text-sm text-muted">
                         Ngarko PDF, DOCX, TXT ose MD. Pyetjet importohen/gjenerohen automatikisht.
                       </p>
                     </div>
@@ -200,13 +200,13 @@ export default function NewTestPage() {
 
             <form onSubmit={submit} className="card mt-6 space-y-6 p-7">
               <div>
-                <label className="label">Titulli</label>
-                <input className="input" value={title} onChange={(event) => setTitle(event.target.value)} required minLength={2} />
+                <label htmlFor="test-title" className="label">Titulli</label>
+                <input id="test-title" className="input" value={title} onChange={(event) => setTitle(event.target.value)} required minLength={2} />
               </div>
 
               <div>
-                <label className="label">Pershkrimi / instruksionet</label>
-                <textarea className="input min-h-24" value={description} onChange={(event) => setDescription(event.target.value)} />
+                <label htmlFor="test-description" className="label">Pershkrimi / instruksionet</label>
+                <textarea id="test-description" className="input min-h-24" value={description} onChange={(event) => setDescription(event.target.value)} />
               </div>
 
               <div className="space-y-4">
@@ -215,34 +215,34 @@ export default function NewTestPage() {
                     <div className="flex flex-wrap items-center justify-between gap-3">
                       <h2 className="font-black">Pyetja {questionIndex + 1}</h2>
                       <div className="flex items-center gap-2">
-                        <select className="input py-2" value={question.question_type} onChange={(event) => changeQuestionType(questionIndex, event.target.value as QuestionType)}>
+                        <select aria-label={`Lloji i pyetjes ${questionIndex + 1}`} className="input min-h-11 py-2" value={question.question_type} onChange={(event) => changeQuestionType(questionIndex, event.target.value as QuestionType)}>
                           <option value="multiple_choice">Multiple choice</option>
                           <option value="short_text">Short text</option>
                         </select>
                         {questions.length > 1 && (
-                          <button type="button" onClick={() => setQuestions((current) => current.filter((_, i) => i !== questionIndex))} className="rounded-full p-2 text-red-500 hover:bg-red-50" aria-label="Fshij pyetjen">
+                          <button type="button" onClick={() => setQuestions((current) => current.filter((_, i) => i !== questionIndex))} className="flex h-11 w-11 items-center justify-center rounded-full text-red-500 hover:bg-red-50" aria-label={`Fshij pyetjen ${questionIndex + 1}`}>
                             <Trash2 size={17} />
                           </button>
                         )}
                       </div>
                     </div>
 
-                    <label className="label mt-4">Teksti i pyetjes</label>
-                    <textarea className="input min-h-20" value={question.prompt} onChange={(event) => updateQuestion(questionIndex, { prompt: event.target.value })} required />
+                    <label htmlFor={`question-${questionIndex}-prompt`} className="label mt-4">Teksti i pyetjes</label>
+                    <textarea id={`question-${questionIndex}-prompt`} className="input min-h-20" value={question.prompt} onChange={(event) => updateQuestion(questionIndex, { prompt: event.target.value })} required />
 
                     {question.question_type === "multiple_choice" ? (
                       <>
                         <div className="mt-4 space-y-2">
                           {question.options.map((option, optionIndex) => (
-                            <label key={optionIndex} className="flex items-center gap-3">
+                            <div key={optionIndex} className="flex items-center gap-3">
                               {!formMode && (
-                                <input type="radio" name={`correct-${questionIndex}`} checked={question.correct_option_index === optionIndex} onChange={() => updateQuestion(questionIndex, { correct_option_index: optionIndex })} className="accent-teal" />
+                                <label className="flex h-11 w-11 shrink-0 cursor-pointer items-center justify-center"><input type="radio" aria-label={`Opsioni ${optionIndex + 1} është përgjigjja e saktë`} name={`correct-${questionIndex}`} checked={question.correct_option_index === optionIndex} onChange={() => updateQuestion(questionIndex, { correct_option_index: optionIndex })} className="h-6 w-6 accent-teal" /></label>
                               )}
-                              <input className="input" placeholder={`Opsioni ${optionIndex + 1}`} value={option} onChange={(event) => updateOption(questionIndex, optionIndex, event.target.value)} required />
-                              <button type="button" onClick={() => removeOption(questionIndex, optionIndex)} className="rounded-full p-2 text-slate-400 hover:bg-red-50 hover:text-red-500" aria-label="Fshij opsionin">
+                              <input className="input" aria-label={`Opsioni ${optionIndex + 1}`} placeholder={`Opsioni ${optionIndex + 1}`} value={option} onChange={(event) => updateOption(questionIndex, optionIndex, event.target.value)} required />
+                              <button type="button" onClick={() => removeOption(questionIndex, optionIndex)} className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-muted hover:bg-red-50 hover:text-red-500" aria-label={`Fshij opsionin ${optionIndex + 1}`}>
                                 <Trash2 size={16} />
                               </button>
-                            </label>
+                            </div>
                           ))}
                         </div>
                         <button type="button" onClick={() => updateQuestion(questionIndex, { options: [...question.options, ""], correct_option_index: question.correct_option_index ?? (formMode ? null : 0) })} className="btn-secondary mt-3" disabled={question.options.length >= 8}>
@@ -250,7 +250,7 @@ export default function NewTestPage() {
                         </button>
                       </>
                     ) : (
-                      <p className="mt-4 rounded-2xl bg-white p-3 text-sm text-slate-500">Pjesemarresi do shkruaje pergjigje te lire.</p>
+                      <p className="mt-4 rounded-2xl bg-white p-3 text-sm text-muted">Pjesemarresi do shkruaje pergjigje te lire.</p>
                     )}
                   </section>
                 ))}

@@ -37,11 +37,11 @@ export default function ConsentPage() {
   const kept = session ? `Fshihen ${session.retention_days} ditë pas përfundimit të call-it.` : "";
 
   if (loading) return <Centered>Duke verifikuar linkun...</Centered>;
-  if (!session) return <Centered><strong>Linku nuk mund te hapet.</strong><span className="text-sm text-slate-500">{error}</span></Centered>;
-  if (session.status === "expired") return <Centered><strong>Ky link ka skaduar.</strong><span className="text-sm text-slate-500">Kontakto host-in që ta ka dërguar ftesën.</span></Centered>;
+  if (!session) return <Centered><strong>Linku nuk mund te hapet.</strong><span className="text-sm text-muted">{error}</span></Centered>;
+  if (session.status === "expired") return <Centered><strong>Ky link ka skaduar.</strong><span className="text-sm text-muted">Kontakto host-in që ta ka dërguar ftesën.</span></Centered>;
 
   return (
-    <main className="min-h-screen bg-mist px-5 py-10">
+    <main id="main" className="min-h-screen bg-mist px-5 py-10">
       <div className="mx-auto max-w-3xl">
         <div className="mb-8 flex items-center justify-center gap-3 font-bold text-navy">
           <span className="rounded-xl bg-navy p-2 text-white"><ShieldCheck size={20} /></span>
@@ -81,7 +81,7 @@ export default function ConsentPage() {
             <strong>Nuk përdoret</strong> emotion recognition, lie detection, analizë personaliteti ose akuzim automatik. Eventet janë sinjale për host-in.
           </div>
           <div className="border-t border-slate-200 bg-slate-50 p-7 sm:p-9">
-            <p className="mb-4 text-sm text-slate-500">Linku skadon: {dateTime(session.expires_at)} · <Link href="/privacy" target="_blank" className="font-semibold text-teal underline">Politika e privatësisë</Link></p>
+            <p className="mb-4 text-sm text-muted">Linku skadon: {dateTime(session.expires_at)} · <Link href="/privacy" target="_blank" className="font-semibold text-teal underline">Politika e privatësisë</Link></p>
             {!session.consented_at && (
               <label className="flex cursor-pointer items-start gap-3">
                 <input type="checkbox" className="mt-1 h-5 w-5 accent-teal" checked={accepted} onChange={(event) => setAccepted(event.target.checked)} />
@@ -112,5 +112,5 @@ function Info({ icon, title, why, kept, children }: { icon: React.ReactNode; tit
 }
 
 function Centered({ children }: { children: React.ReactNode }) {
-  return <main className="flex min-h-screen flex-col items-center justify-center gap-2 bg-mist p-6 text-center">{children}</main>;
+  return <main id="main" className="flex min-h-screen flex-col items-center justify-center gap-2 bg-mist p-6 text-center">{children}</main>;
 }
