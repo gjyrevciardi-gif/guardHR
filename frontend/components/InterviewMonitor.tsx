@@ -17,10 +17,8 @@ interface Props {
 export function InterviewMonitor({ token, videoRef, active, cameraStream, screenStream, onSignal }: Props) {
   const [faceReady, setFaceReady] = useState(false);
   const faceDetector = useRef<FaceDetector | null>(null);
-  const hiddenAt = useRef<number | null>(null);
-  const blurredAt = useRef<number | null>(null);
-  const hiddenLiveSent = useRef(false);
-  const blurLiveSent = useRef(false);
+  const episodes = useRef<Record<string, { start: number; id: Promise<string | null> }>>({});
+  const faceReadyRef = useRef(false);
   const blurTimer = useRef<number | null>(null);
   const resizeTimer = useRef<number | null>(null);
   const initialWindowSize = useRef<{ width: number; height: number } | null>(null);
@@ -28,12 +26,13 @@ export function InterviewMonitor({ token, videoRef, active, cameraStream, screen
   const cooldowns = useRef<Record<string, number>>({});
   const disconnects = useRef<number[]>([]);
 
-  const report = useCallback(async (eventType: EventType, options: { startedAt?: Date; duration?: number; confidence?: number; metadata?: Record<string, unknown> } = {}) => {
+  const report = useCallback(async (eventType: EventType, options: { startedAt?: Date; duration?: number; confidence?: number; metadata?: Record<string, unknown> } = {}): Promise<string | null> => {
     const now = new Date();
     try {
-      await api(`/public/sessions/${token}/events`, { method: "POST", body: JSON.stringify({ event_type: eventType, started_at: (options.startedAt || now).toISOString(), ended_at: options.duration != null ? now.toISOString() : null, duration_seconds: options.duration ?? null, confidence_score: options.confidence ?? null, metadata: options.metadata || {} }) }, false);
+      const created = await api<{ id: string }>(`/public/sessions/${token}/events`, { method: "POST", body: JSON.stringify({ event_type: eventType, started_at: (options.startedAt || now).toISOString(), ended_at: options.duration != null ? now.toISOString() : null, duration_seconds: options.duration ?? null, confidence_score: options.confidence ?? null, metadata: options.metadata || {} }) }, false);
       onSignal(eventType);
-    } catch { /* connection failures are handled by online/offline listeners */ }
+      return created.id;
+    } catch { return null; /* connection failures are handled by online/offline listeners */ }
   }, [onSignal, token]);
 
   const reportWithCooldown = useCallback((type: EventType, cooldownMs: number, confidence?: number, metadata?: Record<string, unknown>) => {
@@ -45,36 +44,37 @@ export function InterviewMonitor({ token, videoRef, active, cameraStream, screen
 
   useEffect(() => {
     if (!active) return;
+    // One tab switch is one event: it is posted when it starts (so the host sees it live) and closed when it ends.
+    const beginEpisode = (key: string, confidence: number, metadata: Record<string, unknown>) => {
+      if (episodes.current[key]) return;
+      episodes.current[key] = { start: Date.now(), id: report("tab_hidden", { confidence, metadata: { ...metadata, phase: "started" } }) };
+    };
+    const endEpisode = (key: string) => {
+      const episode = episodes.current[key];
+      if (!episode) return;
+      delete episodes.current[key];
+      const seconds = (Date.now() - episode.start) / 1000;
+      void episode.id.then((id) => {
+        if (id) void api(`/public/sessions/${token}/events/${id}`, { method: "PATCH", body: JSON.stringify({ ended_at: new Date().toISOString(), duration_seconds: seconds }) }, false).catch(() => undefined);
+      });
+    };
     const visibility = () => {
       if (document.hidden) {
-        hiddenAt.current = Date.now();
-        hiddenLiveSent.current = true;
-        void report("tab_hidden", { confidence: 1, metadata: { source: "visibilitychange", reason: "browser_tab_not_visible", phase: "started" } });
-      }
-      else if (hiddenAt.current) {
-        const start = hiddenAt.current;
-        hiddenAt.current = null;
-        hiddenLiveSent.current = false;
-        void report("tab_hidden", { startedAt: new Date(start), duration: (Date.now() - start) / 1000, confidence: 1, metadata: { source: "visibilitychange", reason: "browser_tab_not_visible", phase: "ended" } });
-      }
+        if (blurTimer.current) window.clearTimeout(blurTimer.current);
+        endEpisode("blur"); // hiding the tab supersedes a window-focus loss that was already open
+        beginEpisode("visibility", 1, { source: "visibilitychange", reason: "browser_tab_not_visible" });
+      } else endEpisode("visibility");
     };
     const blur = () => {
-      if (document.hidden || blurredAt.current) return;
-      blurredAt.current = Date.now();
+      if (document.hidden || episodes.current.blur) return;
+      if (blurTimer.current) window.clearTimeout(blurTimer.current);
       blurTimer.current = window.setTimeout(() => {
-        if (!blurredAt.current || blurLiveSent.current) return;
-        blurLiveSent.current = true;
-        void report("tab_hidden", { confidence: 0.85, metadata: { source: "window_blur", reason: "candidate_left_page_focus_or_minimized", phase: "started" } });
+        if (!document.hidden && !episodes.current.visibility) beginEpisode("blur", 0.85, { source: "window_blur", reason: "candidate_left_page_focus_or_minimized" });
       }, 700);
     };
     const focus = () => {
-      if (!blurredAt.current) return;
-      const start = blurredAt.current;
-      blurredAt.current = null;
-      blurLiveSent.current = false;
       if (blurTimer.current) window.clearTimeout(blurTimer.current);
-      const duration = (Date.now() - start) / 1000;
-      if (duration >= 1) void report("tab_hidden", { startedAt: new Date(start), duration, confidence: 0.85, metadata: { source: "window_blur", reason: "candidate_left_page_focus_or_minimized", phase: "ended" } });
+      endEpisode("blur");
     };
     const pageHide = () => reportWithCooldown("tab_hidden", 3000, 1, { source: "pagehide", reason: "page_closed_or_navigated" });
     const fullscreen = () => { if (!document.fullscreenElement) reportWithCooldown("fullscreen_exit", 3000); };
@@ -129,7 +129,7 @@ export function InterviewMonitor({ token, videoRef, active, cameraStream, screen
     window.addEventListener("pagehide", pageHide);
     window.addEventListener("offline", offline);
     return () => { if (blurTimer.current) window.clearTimeout(blurTimer.current); if (resizeTimer.current) window.clearTimeout(resizeTimer.current); document.removeEventListener("visibilitychange", visibility); document.removeEventListener("fullscreenchange", fullscreen); document.removeEventListener("copy", clipboard); document.removeEventListener("paste", clipboard); document.removeEventListener("cut", clipboard); window.removeEventListener("resize", resize); window.removeEventListener("blur", blur); window.removeEventListener("focus", focus); window.removeEventListener("pagehide", pageHide); window.removeEventListener("offline", offline); };
-  }, [active, report, reportWithCooldown]);
+  }, [active, report, reportWithCooldown, token]);
 
   useEffect(() => {
     if (!active) return;
@@ -197,6 +197,17 @@ export function InterviewMonitor({ token, videoRef, active, cameraStream, screen
     }, 700);
     return () => window.clearInterval(timer);
   }, [active, faceReady, report, reportWithCooldown, videoRef]);
+
+  useEffect(() => { faceReadyRef.current = faceReady; }, [faceReady]);
+
+  // The host's "monitor was active X% of the call" figure comes from these: silence longer than ~45 s is a gap.
+  useEffect(() => {
+    if (!active) return;
+    const beat = () => void api(`/public/sessions/${token}/heartbeat`, { method: "POST", body: JSON.stringify({ face_detection: faceReadyRef.current }) }, false).catch(() => undefined);
+    beat();
+    const timer = window.setInterval(beat, 10_000);
+    return () => window.clearInterval(timer);
+  }, [active, token]);
 
   useEffect(() => {
     if (!active) return;
