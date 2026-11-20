@@ -32,6 +32,10 @@ def record_audit(db: Session, *, user_id: str | None, ip: str | None, action: st
     db.add(AuditLog(user_id=user_id, session_id=session_id, action=action, entity_type=entity_type, entity_id=entity_id, details=details or {}, ip_address=ip))
 
 
+# Outcome of the background invite email, recorded by app.email.deliver_invite.
+INVITE_OUTCOMES = {"participant.invite.email_sent": "sent", "participant.invite.email_failed": "failed"}
+
+
 def audit(db: Session, user: User | None, request: HTTPConnection, action: str, entity_type: str, entity_id: str | None = None, session_id: str | None = None, details: dict | None = None) -> None:
     record_audit(db, user_id=user.id if user else None, ip=request_ip(request), action=action, entity_type=entity_type, entity_id=entity_id, session_id=session_id, details=details)
 
@@ -45,10 +49,13 @@ def session_to_out(
 ) -> SessionOut:
     """`event_count` / `question_count` let list views pass COUNT results instead of loading rows."""
     submission = None
+    invite_status = None
     if include_details:
         db = object_session(session)
         found = db.scalar(select(TestSubmission).where(TestSubmission.session_id == session.id)) if db else None
         submission = TestSubmissionOut.model_validate(found) if found else None
+        last_invite = db.scalar(select(AuditLog.action).where(AuditLog.session_id == session.id, AuditLog.action.in_(INVITE_OUTCOMES)).order_by(AuditLog.created_at.desc()).limit(1)) if db else None
+        invite_status = INVITE_OUTCOMES.get(last_invite)
     return SessionOut(
         id=session.id,
         title=session.title,
@@ -56,6 +63,7 @@ def session_to_out(
         status=session.status,
         review_status=session.review_status,
         invite_email_queued=invite_email_queued,
+        invite_status=invite_status,
         require_screen_share=session.require_screen_share,
         test=TestOut.from_test(session.test, include_questions=include_details, question_count=question_count) if session.test else None,
         test_submission=submission,

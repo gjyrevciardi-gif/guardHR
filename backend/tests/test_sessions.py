@@ -151,3 +151,42 @@ def test_deleting_a_test_keeps_sessions_but_drops_submissions(client, hr, new_se
     with SessionLocal() as db:
         assert db.query(TestSubmission).count() == 0
         assert db.query(InterviewSession).count() == 1
+
+
+def view_audit_rows(session_id: str) -> list[AuditLog]:
+    with SessionLocal() as db:
+        return list(db.query(AuditLog).filter(AuditLog.session_id == session_id, AuditLog.action == "session.viewed"))
+
+
+def test_polling_a_session_writes_one_view_audit_row_per_hour(client, hr, new_session):
+    session_id = new_session(hr)["id"]
+    for _ in range(5):
+        assert client.get(f"/api/sessions/{session_id}", headers=hr).status_code == 200
+    assert len(view_audit_rows(session_id)) == 1
+
+    with SessionLocal() as db:  # pretend the first view was more than an hour ago
+        row = db.query(AuditLog).filter(AuditLog.session_id == session_id, AuditLog.action == "session.viewed").one()
+        row.created_at = datetime.now(timezone.utc) - timedelta(hours=2)
+        db.commit()
+    client.get(f"/api/sessions/{session_id}", headers=hr)
+    assert len(view_audit_rows(session_id)) == 2
+
+
+def test_a_non_owner_request_is_not_audited_as_a_view(client, hr, other_hr, new_session):
+    session_id = new_session(hr)["id"]
+    client.get(f"/api/sessions/{session_id}", headers=hr)
+    assert client.get(f"/api/sessions/{session_id}", headers=other_hr).status_code == 404  # not theirs: never audited as a view
+    assert len(view_audit_rows(session_id)) == 1
+
+
+def test_session_detail_reports_the_invite_outcome(client, hr, new_session, monkeypatch):
+    sent = new_session(hr)
+    assert client.get(f"/api/sessions/{sent['id']}", headers=hr).json()["invite_status"] == "sent"
+
+    def broken(_session):
+        raise OSError("refused")
+
+    monkeypatch.setattr("app.email.send_candidate_invite", broken)
+    failed = new_session(hr)
+    assert client.get(f"/api/sessions/{failed['id']}", headers=hr).json()["invite_status"] == "failed"
+    assert all(row["invite_status"] is None for row in client.get("/api/sessions", headers=hr).json())  # list view stays cheap

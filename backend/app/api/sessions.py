@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request
 from sqlalchemy import func, select
@@ -7,13 +7,16 @@ from sqlalchemy.orm import Session, selectinload
 from ..database import get_db
 from ..email import deliver_invite
 from ..enums import ReviewStatus
-from ..models import Candidate, IntegrityEvent, InterviewSession, SessionReview, Test, TestQuestion, User
+from ..models import AuditLog, Candidate, IntegrityEvent, InterviewSession, SessionReview, Test, TestQuestion, User
 from ..retention import delete_session
 from ..schemas import ReviewCreate, ReviewOut, SessionCreate, SessionOut
 from ..security import get_current_user
 from ..services import audit, parse_uuid, request_ip, session_to_out
 
 router = APIRouter(prefix="/sessions", tags=["sessions"])
+
+# The host page polls this endpoint every few seconds; one audit row per hour records access without flooding the log.
+VIEW_AUDIT_INTERVAL = timedelta(hours=1)
 
 
 def owned_session(db: Session, session_id: str, user: User) -> InterviewSession:
@@ -74,8 +77,10 @@ def create_session(payload: SessionCreate, request: Request, background: Backgro
 @router.get("/{session_id}", response_model=SessionOut)
 def get_session(session_id: str, request: Request, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     session = owned_session(db, session_id, user)
-    audit(db, user, request, "session.viewed", "interview_session", session.id, session.id)
-    db.commit()
+    recently_viewed = db.scalar(select(AuditLog.id).where(AuditLog.user_id == user.id, AuditLog.session_id == session.id, AuditLog.action == "session.viewed", AuditLog.created_at > datetime.now(timezone.utc) - VIEW_AUDIT_INTERVAL).limit(1))
+    if not recently_viewed:
+        audit(db, user, request, "session.viewed", "interview_session", session.id, session.id)
+        db.commit()
     return session_to_out(session, include_details=True)
 
 

@@ -27,6 +27,8 @@ class Settings(BaseSettings):
     rate_limit_enabled: bool = True
     # 0 disables the in-process scheduled retention purge.
     retention_purge_interval_hours: int = 24
+    # A call still `in_progress` this long after it started is treated as abandoned (tab closed, no /finish) and closed.
+    abandoned_session_hours: int = 12
     ice_servers: str = '[{"urls": "stun:stun.l.google.com:19302"}]'
     yolo_model_path: str = "yolo11n.pt"
     public_app_url: str = "http://localhost:3100"
