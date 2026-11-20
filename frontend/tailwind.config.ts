@@ -16,6 +16,8 @@ export default {
         teal: "#164a41",
         mist: "#e7f1e0",
         sage: "#5c7a66",
+        // Secondary text on light surfaces: 4.5:1 or better even on the darkest page gradient.
+        muted: "#567060",
         moss: "#4d774e",
 
         // Shell greens, lightest to deepest.
@@ -50,7 +52,7 @@ export default {
           300: "#cbdcc1",
           400: "#9cb3a2",
           500: "#7c9683",
-          600: "#5c7a66",
+          600: "#4f6a59", // 5:1 on the darkest page gradient (was #5c7a66, 4.0:1)
           700: "#456354",
           800: "#2f4c40",
           900: "#1e3830",

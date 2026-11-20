@@ -31,9 +31,9 @@ export function MonitoringCard({ monitoring, status }: { monitoring: Monitoring;
         </div>
       )}
       <p className={`mt-4 text-sm leading-6 ${bad ? "font-semibold text-amber-900" : "text-slate-600"}`}>{messages[quality]}</p>
-      {lastSeen && <p className="mt-2 text-xs text-slate-500">Sinjali i fundit: {dateTime(lastSeen)}</p>}
+      {lastSeen && <p className="mt-2 text-xs text-muted">Sinjali i fundit: {dateTime(lastSeen)}</p>}
       {silentNow && <p role="alert" className="mt-2 text-sm font-semibold text-amber-900">Monitori nuk po raporton për më shumë se {Math.round(silentFor! / 60) || 1} min: kandidati mund ta ketë mbyllur faqen.</p>}
-      <p className="mt-3 text-xs leading-5 text-slate-500">Të dhënat vijnë nga browser-i i kandidatit. Nuk mund të zbulojnë pajisje të dyta dhe nuk janë provë.</p>
+      <p className="mt-3 text-xs leading-5 text-muted">Të dhënat vijnë nga browser-i i kandidatit. Nuk mund të zbulojnë pajisje të dyta dhe nuk janë provë.</p>
     </section>
   );
 }

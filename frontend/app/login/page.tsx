@@ -34,7 +34,7 @@ export default function LoginPage() {
   }
 
   return (
-    <main className="grid min-h-screen lg:grid-cols-2">
+    <main id="main" className="grid min-h-screen lg:grid-cols-2">
       <section className="shell-field relative hidden overflow-hidden p-16 text-navy lg:flex lg:flex-col lg:justify-between">
         <Link href="/" className="relative z-10 flex items-center gap-3 text-xl font-black">
           <span className="flex h-12 w-12 items-center justify-center rounded-full bg-white/75 shadow-sm">
@@ -67,15 +67,15 @@ export default function LoginPage() {
         <form onSubmit={submit} className="card w-full max-w-md p-8 sm:p-10">
           <span className="mb-6 inline-flex rounded-2xl bg-teal/10 p-3 text-teal"><LockKeyhole /></span>
           <h2 className="text-3xl font-black text-ink">Hyrje per host</h2>
-          <p className="mb-8 mt-2 text-sm leading-6 text-slate-500">
+          <p className="mb-8 mt-2 text-sm leading-6 text-muted">
             Perdor account-in per te krijuar call/teste dhe per te pare live activity signals.
           </p>
 
           <label className="label" htmlFor="email">Email</label>
-          <input id="email" className="input mb-5" type="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
+          <input id="email" autoComplete="email" className="input mb-5" type="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
 
           <label className="label" htmlFor="password">Fjalekalimi</label>
-          <input id="password" className="input" type="password" value={password} onChange={(e) => setPassword(e.target.value)} required />
+          <input id="password" autoComplete="current-password" className="input" type="password" value={password} onChange={(e) => setPassword(e.target.value)} required />
 
           {error && <p role="alert" className="mt-4 rounded-xl bg-red-50 p-3 text-sm text-red-700">{error}</p>}
 
@@ -83,7 +83,7 @@ export default function LoginPage() {
             {loading ? "Duke hyre..." : "Hyr ne dashboard"}
           </button>
 
-          <p className="mt-5 text-center text-sm text-slate-500">
+          <p className="mt-5 text-center text-sm text-muted">
             S&apos;ke host account? <Link href="/register" className="font-semibold text-teal">Regjistrohu</Link>
           </p>
         </form>

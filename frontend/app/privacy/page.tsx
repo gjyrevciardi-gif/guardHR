@@ -3,7 +3,7 @@ import Link from "next/link";
 import { ShieldCheck } from "lucide-react";
 import { Wordmark } from "@/components/Wordmark";
 
-export const metadata: Metadata = { title: "Politika e privatësisë · NemoGuardHR", robots: { index: false } };
+export const metadata: Metadata = { title: "Politika e privatësisë", robots: { index: false } };
 
 // Describes what the software does. The operator running this deployment is responsible for the data and
 // should add its legal entity and contact below (see docs/deployment.md, "Privacy page").
@@ -45,7 +45,7 @@ const sections: Array<{ title: string; body: string[] }> = [
 
 export default function PrivacyPage() {
   return (
-    <main className="min-h-screen bg-mist px-5 py-10">
+    <main id="main" className="min-h-screen bg-mist px-5 py-10">
       <div className="mx-auto max-w-3xl">
         <div className="mb-8 flex items-center justify-center gap-3 font-bold text-navy">
           <span className="rounded-xl bg-navy p-2 text-white"><ShieldCheck size={20} /></span>
