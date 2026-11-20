@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import JSON, Boolean, CheckConstraint, DateTime, Float, ForeignKey, Index, Integer, Numeric, String, Text, UniqueConstraint, Uuid
+from sqlalchemy import JSON, Boolean, CheckConstraint, DateTime, Float, ForeignKey, Index, Integer, Numeric, String, Text, UniqueConstraint, Uuid, false
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .database import Base
@@ -62,6 +62,15 @@ class InterviewSession(Base):
     require_screen_share: Mapped[bool] = mapped_column(Boolean, default=False)
     consented_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     consent_ip: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    # Email one-time code (see app/verification.py). Off for calls created before this option existed.
+    verify_candidate_email: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
+    verification_code_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    verification_sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    verification_sends: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    verification_attempts: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # The host's private working notes (autosaved during the call). Never part of a public/candidate response.
+    host_notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     ended_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     # Monitor heartbeat bookkeeping (see app/signals.py). NULL monitored_seconds = coverage was not tracked for this call.

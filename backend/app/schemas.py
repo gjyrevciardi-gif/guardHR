@@ -49,6 +49,7 @@ class SessionCreate(BaseModel):
     candidate_email: EmailStr
     expires_at: datetime
     require_screen_share: bool = False
+    verify_candidate_email: bool = False
     test_id: str | None = None
 
 
@@ -264,6 +265,14 @@ class EventOut(BaseModel):
         return Severity(value).name if isinstance(value, int) else value
 
 
+class NotesUpdate(BaseModel):
+    notes: str = Field(max_length=10000)
+
+
+class NotesOut(BaseModel):
+    saved_at: datetime
+
+
 class ReviewCreate(BaseModel):
     outcome: ReviewOutcome
     notes: str = Field(min_length=3, max_length=5000)
@@ -289,6 +298,9 @@ class SessionOut(BaseModel):
     signal_level: Literal["none", "info", "low", "medium", "high"] = "none"
     monitoring: MonitoringOut | None = None
     require_screen_share: bool
+    verify_candidate_email: bool = False
+    verified_at: datetime | None = None
+    host_notes: str | None = None  # only filled on the detail view
     test: TestOut | None = None
     test_submission: TestSubmissionOut | None = None
     candidate: CandidateOut
@@ -311,11 +323,23 @@ class PublicSessionOut(BaseModel):
     require_screen_share: bool
     expires_at: datetime
     consented_at: datetime | None
+    verification_required: bool = False  # the host asked for an email code and it has not been entered yet
+    candidate_email_hint: str | None = None  # masked, shown only while verification is pending
     test: PublicTestOut | None = None
 
 
 class ConsentRequest(BaseModel):
     accepted: bool
+
+
+class VerificationSentOut(BaseModel):
+    email_hint: str
+    expires_in_seconds: int
+    resend_after_seconds: int
+
+
+class VerificationConfirm(BaseModel):
+    code: str = Field(pattern=r"^[0-9]{6}$")
 
 
 class RetentionUpdate(BaseModel):
