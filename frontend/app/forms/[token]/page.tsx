@@ -3,9 +3,11 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { CheckCircle2, ClipboardList, Waves } from "lucide-react";
+import { CheckCircle2, ClipboardList, Loader2 } from "lucide-react";
 import { api } from "@/lib/api";
 import { Test, TestAnswer, TestSubmission } from "@/lib/types";
+import { ShellMark } from "@/components/ShellMark";
+import { ThemeToggle } from "@/components/ThemeToggle";
 import { Wordmark } from "@/components/Wordmark";
 
 export default function PublicFormPage() {
@@ -21,7 +23,7 @@ export default function PublicFormPage() {
   useEffect(() => {
     api<Test>(`/public/tests/${token}`, {}, false)
       .then(setTest)
-      .catch((err) => setError(err instanceof Error ? err.message : "Linku nuk eshte valid"));
+      .catch((err) => setError(err instanceof Error ? err.message : "Linku nuk është i vlefshëm"));
   }, [token]);
 
   const allAnswered = useMemo(() => test?.questions.every((question) => {
@@ -45,46 +47,48 @@ export default function PublicFormPage() {
         }),
       }, false));
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Nuk u dergua");
+      setError(err instanceof Error ? err.message : "Nuk u dërgua");
     } finally {
       setLoading(false);
     }
   }
 
   return (
-    <main id="main" className="shell-field min-h-screen px-5 py-6 text-navy">
-      <nav className="mx-auto flex max-w-4xl items-center justify-between rounded-full border border-white/80 bg-white/90 px-5 py-3 shadow-soft backdrop-blur-xl">
-        <Link href="/" className="flex min-h-11 items-center gap-3 text-sm font-black">
-          <span className="rounded-full bg-shell-200 p-2 text-teal"><Waves size={17} /></span>
-          <Wordmark />
-        </Link>
-        <span className="rounded-full bg-shell-200 px-4 py-2 text-xs font-bold text-teal">public link</span>
-      </nav>
+    <div className="min-h-screen bg-canvas text-navy">
+      <header className="border-b border-line bg-white">
+        <div className="mx-auto flex max-w-4xl items-center justify-between gap-3 px-5 py-2.5">
+          <Link href="/" className="flex min-h-11 items-center gap-3 font-bold">
+            <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-shell-200"><ShellMark className="h-6 w-6" /></span>
+            <Wordmark />
+          </Link>
+          <ThemeToggle />
+        </div>
+      </header>
 
-      <section className="mx-auto mt-10 max-w-4xl">
+      <main id="main" className="mx-auto max-w-4xl px-5 py-8">
         {error && !test ? (
           <div className="card p-8 text-center">
-            <h1 className="text-2xl font-black">Linku nuk u hap</h1>
-            <p className="mt-2 text-sm text-red-600">{error}</p>
+            <h1 className="text-2xl font-bold">Linku nuk hapet</h1>
+            <p className="mt-2 text-sm text-red-700">{error}</p>
           </div>
         ) : !test ? (
-          <div className="card p-8 text-center text-muted">Duke ngarkuar...</div>
+          <div className="card flex items-center justify-center gap-3 p-8 text-muted" role="status"><Loader2 className="animate-spin motion-reduce:animate-none" aria-hidden="true" /> Duke ngarkuar…</div>
         ) : submission ? (
           <div className="card p-10 text-center">
-            <CheckCircle2 className="mx-auto text-emerald-600" size={42} />
-            <h1 className="mt-4 text-3xl font-black">{test.form_mode ? "Formulari u dergua" : "Testi u dorezua"}</h1>
+            <CheckCircle2 className="mx-auto text-moss" size={42} aria-hidden="true" />
+            <h1 className="mt-4 text-3xl font-bold">{test.form_mode ? "Formulari u dërgua" : "Testi u dorëzua"}</h1>
             <p className="mt-3 text-muted">
               {submission.total > 0 ? `Rezultati: ${submission.score}/${submission.total}. ` : ""}
-              Faleminderit, pergjigjet u ruajten.
+              Faleminderit, përgjigjet u ruajtën.
             </p>
           </div>
         ) : (
           <form onSubmit={submit} className="card p-7 sm:p-9">
             <div className="flex items-start gap-3">
-              <span className="rounded-2xl bg-shell-200 p-3 text-teal"><ClipboardList /></span>
+              <span className="rounded-xl bg-shell-200 p-3 text-teal"><ClipboardList aria-hidden="true" /></span>
               <div>
-                <p className="text-sm font-bold uppercase tracking-[0.22em] text-teal">{test.form_mode ? "Public form" : "Public test"}</p>
-                <h1 className="mt-2 text-3xl font-black">{test.title}</h1>
+                <p className="eyebrow">{test.form_mode ? "Formular publik" : "Test publik"}</p>
+                <h1 className="mt-2 text-3xl font-bold">{test.title}</h1>
                 {test.description && <p className="mt-3 text-sm leading-6 text-slate-600">{test.description}</p>}
               </div>
             </div>
@@ -102,13 +106,13 @@ export default function PublicFormPage() {
 
             <div className="mt-8 space-y-5">
               {test.questions.map((question) => (
-                <section key={question.id} aria-labelledby={`q-${question.id}`} className="rounded-3xl border border-slate-200 bg-slate-50/70 p-5">
-                  <p id={`q-${question.id}`} className="font-black">{question.position}. {question.prompt}</p>
+                <section key={question.id} aria-labelledby={`q-${question.id}`} className="rounded-xl border border-line bg-shell-100 p-5">
+                  <p id={`q-${question.id}`} className="font-bold">{question.position}. {question.prompt}</p>
                   {question.question_type === "short_text" ? (
                     <textarea
                       aria-label={`Përgjigjja për pyetjen ${question.position}`}
                       className="input mt-4 min-h-28"
-                      placeholder="Shkruaj pergjigjen..."
+                      placeholder="Shkruaj përgjigjen…"
                       value={typeof answers[question.id] === "string" ? answers[question.id] : ""}
                       onChange={(event) => setAnswers((current) => ({ ...current, [question.id]: event.target.value }))}
                       required
@@ -116,7 +120,7 @@ export default function PublicFormPage() {
                   ) : (
                     <div className="mt-4 space-y-2">
                       {question.options.map((option, index) => (
-                        <label key={index} className="flex cursor-pointer items-start gap-3 rounded-2xl border border-slate-200 bg-white p-3 text-sm hover:border-shell-400 hover:bg-shell-100">
+                        <label key={index} className="flex cursor-pointer items-start gap-3 rounded-xl border border-line bg-white p-3 text-sm hover:border-line-strong hover:bg-shell-100">
                           <input
                             type="radio"
                             className="mt-0.5 h-6 w-6 shrink-0 accent-teal"
@@ -134,14 +138,14 @@ export default function PublicFormPage() {
               ))}
             </div>
 
-            {error && <p className="mt-5 rounded-2xl bg-red-50 p-3 text-sm font-semibold text-red-700">{error}</p>}
+            {error && <p role="alert" className="mt-5 rounded-xl border border-red-200 bg-red-50 p-3 text-sm font-semibold text-red-700">{error}</p>}
 
             <button className="btn-primary mt-6 w-full" disabled={loading || !allAnswered}>
-              {loading ? "Duke derguar..." : test.form_mode ? "Dergo formularin" : "Dorezo testin"}
+              {loading ? "Duke dërguar…" : test.form_mode ? "Dërgo formularin" : "Dorëzo testin"}
             </button>
           </form>
         )}
-      </section>
-    </main>
+      </main>
+    </div>
   );
 }

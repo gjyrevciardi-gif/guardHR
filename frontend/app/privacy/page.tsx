@@ -19,6 +19,7 @@ const sections: Array<{ title: string; body: string[] }> = [
       "Çdo 5 sekonda një pamje e vogël e kamerës dërgohet te serveri për të numëruar persona dhe për të gjetur telefon. Pamja analizohet në kujtesë dhe hidhet; nuk ruhet.",
       "Koha dhe adresa IP e pranimit, përgjigjet e testit (nëse ka), emri dhe email-i yt si i ftuar.",
       "Video, zëri dhe ekrani live shkojnë drejtpërdrejt te organizatori. Platforma nuk i regjistron.",
+      "Nëse organizatori ka kërkuar verifikim me email, të dërgohet një kod 6-shifror te adresa me të cilën të ftoi. Kodi ruhet vetëm si hash dhe vlen 10 minuta; ruhen koha dhe adresa IP e verifikimit. Kjo provon vetëm se ke akses te ajo kuti postare, jo kush je.",
     ],
   },
   {
@@ -45,7 +46,7 @@ const sections: Array<{ title: string; body: string[] }> = [
 
 export default function PrivacyPage() {
   return (
-    <main id="main" className="min-h-screen bg-mist px-5 py-10">
+    <main id="main" className="min-h-screen bg-canvas px-5 py-10">
       <div className="mx-auto max-w-3xl">
         <div className="mb-8 flex items-center justify-center gap-3 font-bold text-navy">
           <span className="rounded-xl bg-navy p-2 text-white"><ShieldCheck size={20} /></span>

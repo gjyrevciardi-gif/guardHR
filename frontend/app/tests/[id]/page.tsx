@@ -7,7 +7,7 @@ import { AlertTriangle, ArrowLeft, CheckCircle2, Clipboard, ClipboardList, Edit3
 import { AppShell } from "@/components/AppShell";
 import { StatusBadge } from "@/components/StatusBadge";
 import { api } from "@/lib/api";
-import { dateTime, eventLabels } from "@/lib/format";
+import { dateTime, eventLabels, sessionStatusLabels } from "@/lib/format";
 import { QuestionType, TestAnswer, TestDetail } from "@/lib/types";
 
 type DraftQuestion = {
@@ -152,7 +152,7 @@ export default function TestDetailPage() {
         options: [...question.options],
         correct_option_index: question.correct_option_index,
       })));
-      setMessage(`${updated.form_mode ? "Formulari" : "Testi"} u ruajt. Ndryshimet jane ne audit log.`);
+      setMessage(`${updated.form_mode ? "Formulari" : "Testi"} u ruajt. Ndryshimet regjistrohen në audit log.`);
       setMode("review");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Ndryshimet nuk u ruajten");
@@ -162,88 +162,88 @@ export default function TestDetailPage() {
   }
 
   if (!test) {
-    return <AppShell><p>Duke ngarkuar...</p></AppShell>;
+    return <AppShell><p role="status" className="text-muted">Duke ngarkuar…</p></AppShell>;
   }
 
   return (
     <AppShell>
       <Link href="/tests" className="mb-6 inline-flex items-center gap-2 text-sm font-semibold text-slate-600 hover:text-teal min-h-11">
-        <ArrowLeft size={17} /> Testet & formularet
+        <ArrowLeft size={17} aria-hidden="true" /> Testet dhe formularët
       </Link>
 
       <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
         <div>
-          <p className="text-sm font-bold uppercase tracking-[0.24em] text-teal">{test.form_mode ? "Qendra e review për formularin" : "Qendra e review për testin"}</p>
-          <h1 className="mt-2 text-3xl font-black text-navy">{test.title}</h1>
-          <p className="mt-2 max-w-3xl text-sm leading-6 text-muted">{test.description || "Pa pershkrim"}</p>
+          <p className="eyebrow">{test.form_mode ? "Formular" : "Test"} · shqyrtim</p>
+          <h1 className="mt-1 text-3xl font-bold tracking-tight">{test.title}</h1>
+          <p className="mt-2 max-w-3xl text-sm leading-6 text-muted">{test.description || "Pa përshkrim"}</p>
         </div>
-        <div className="flex rounded-full border border-slate-200 bg-white p-1 shadow-sm">
-          <button onClick={() => setMode("review")} className={`min-h-11 rounded-full px-4 text-sm font-bold transition ${mode === "review" ? "bg-shell-200 text-teal" : "text-muted hover:text-navy"}`}>Review</button>
-          <button onClick={() => setMode("edit")} className={`min-h-11 rounded-full px-4 text-sm font-bold transition ${mode === "edit" ? "bg-shell-200 text-teal" : "text-muted hover:text-navy"}`}>Edit</button>
-          <button onClick={() => void removeTest()} className="min-h-11 rounded-full px-4 text-sm font-bold text-red-700 transition hover:bg-red-50" aria-label="Fshi testin">Fshi</button>
+        <div className="flex rounded-xl border border-line bg-white p-1">
+          <button onClick={() => setMode("review")} aria-pressed={mode === "review"} className={`min-h-11 rounded-lg px-4 text-sm font-semibold transition ${mode === "review" ? "bg-shell-200 text-teal" : "text-muted hover:text-navy"}`}>Shqyrto</button>
+          <button onClick={() => setMode("edit")} aria-pressed={mode === "edit"} className={`min-h-11 rounded-lg px-4 text-sm font-semibold transition ${mode === "edit" ? "bg-shell-200 text-teal" : "text-muted hover:text-navy"}`}>Ndrysho</button>
+          <button onClick={() => void removeTest()} className="min-h-11 rounded-lg px-4 text-sm font-semibold text-red-700 transition hover:bg-red-50" aria-label="Fshi testin">Fshi</button>
         </div>
       </div>
 
       <section className="card mt-8 p-5">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div>
-            <h2 className="font-black">Linku publik</h2>
+            <h2 className="font-bold">Linku publik</h2>
             <p className="mt-1 text-sm text-muted">
-              Njerzit hyjne pa account dhe plotesojne vetem kete {test.form_mode ? "formular" : "test"}.
+              Njerëzit e hapin pa llogari dhe plotësojnë vetëm këtë {test.form_mode ? "formular" : "test"}.
             </p>
           </div>
           <div className="flex min-w-0 flex-1 flex-col gap-2 sm:flex-row lg:max-w-2xl">
-            <code className="min-w-0 flex-1 truncate rounded-2xl bg-slate-100 px-4 py-3 text-xs">{publicLink()}</code>
-            <button onClick={() => navigator.clipboard.writeText(publicLink())} className="btn-secondary"><Clipboard size={16} /> Kopjo</button>
-            <a href={publicLink()} target="_blank" className="btn-primary">Hap <ExternalLink size={16} /></a>
+            <code className="min-w-0 flex-1 truncate rounded-xl bg-slate-100 px-4 py-3 text-xs">{publicLink()}</code>
+            <button onClick={() => navigator.clipboard.writeText(publicLink())} className="btn-secondary"><Clipboard size={16} aria-hidden="true" /> Kopjo</button>
+            <a href={publicLink()} target="_blank" className="btn-primary">Hap <ExternalLink size={16} aria-hidden="true" /></a>
           </div>
         </div>
-        {!test.is_public && <p className="mt-4 rounded-2xl bg-amber-50 p-3 text-sm font-semibold text-amber-800">Linku publik eshte i mbyllur. Aktivizoje te Edit.</p>}
+        {!test.is_public && <p className="mt-4 rounded-xl bg-amber-50 p-3 text-sm font-semibold text-amber-900">Linku publik është i mbyllur. Aktivizoje te “Ndrysho”.</p>}
       </section>
 
       <div className="mt-6 grid gap-4 md:grid-cols-4">
         <Metric label="Pyetje" value={String(test.question_count)} />
-        <Metric label="Calls" value={String(test.sessions.length)} />
+        <Metric label="Call-e" value={String(test.sessions.length)} />
         <Metric label="Përgjigje publike" value={String(standaloneCount)} />
         <Metric label="Mesatarja" value={averageScore == null ? "-" : `${averageScore}%`} />
       </div>
 
-      {message && <p role="status" className="mt-5 rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm font-semibold text-emerald-800">{message}</p>}
-      {error && mode === "review" && <p role="alert" className="mt-5 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm font-semibold text-red-700">{error}</p>}
+      {message && <p role="status" className="mt-5 rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm font-semibold text-emerald-800">{message}</p>}
+      {error && mode === "review" && <p role="alert" className="mt-5 rounded-xl border border-red-200 bg-red-50 p-4 text-sm font-semibold text-red-700">{error}</p>}
 
       {mode === "review" ? (
         <ReviewPanel test={test} />
       ) : (
         <form onSubmit={save} className="card mt-8 space-y-6 p-7">
           <div className="flex items-center gap-3">
-            <span className="rounded-2xl bg-shell-200 p-3 text-teal"><Edit3 /></span>
+            <span className="rounded-xl bg-shell-200 p-3 text-teal"><Edit3 aria-hidden="true" /></span>
             <div>
-              <h2 className="text-xl font-black">Edito {formMode ? "formularin" : "testin"}</h2>
-              <p className="mt-1 text-sm text-muted">Ndrysho titullin, pyetjet, opsionet dhe share settings.</p>
+              <h2 className="text-xl font-bold">Ndrysho {formMode ? "formularin" : "testin"}</h2>
+              <p className="mt-1 text-sm text-muted">Ndrysho titullin, pyetjet, opsionet dhe cilësimet e ndarjes.</p>
             </div>
           </div>
 
           {submittedCount > 0 && (
-            <div className="flex gap-3 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm leading-6 text-amber-800">
-              <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0" />
-              <p>Ka {submittedCount} submission. Nese ndryshon pyetjet/opsionet, review i vjeter lexohet sipas versionit aktual.</p>
+            <div className="flex gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm leading-6 text-amber-900">
+              <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0" aria-hidden="true" />
+              <p>Ka {submittedCount} dorëzim(e). Nëse ndryshon pyetjet ose opsionet, përgjigjet e vjetra lexohen sipas versionit aktual.</p>
             </div>
           )}
 
           <div className="grid gap-3 sm:grid-cols-3">
-            <label className="rounded-3xl border border-slate-200 bg-white p-4">
+            <label className="rounded-xl border border-line bg-white p-4">
               <input type="checkbox" checked={formMode} onChange={(event) => changeFormMode(event.target.checked)} className="mr-2 accent-teal" />
-              <span className="font-bold">Formular mode</span>
-              <p className="mt-2 text-xs leading-5 text-muted">Pyetje te lira ose MCQ pa score te detyrueshem.</p>
+              <span className="font-bold">Formular</span>
+              <p className="mt-2 text-xs leading-5 text-muted">Pyetje me përgjigje të lirë ose me zgjedhje, pa pikë të detyrueshme.</p>
             </label>
-            <label className="rounded-3xl border border-slate-200 bg-white p-4">
+            <label className="rounded-xl border border-line bg-white p-4">
               <input type="checkbox" checked={isPublic} onChange={(event) => setIsPublic(event.target.checked)} className="mr-2 accent-teal" />
-              <span className="font-bold">Public link active</span>
-              <p className="mt-2 text-xs leading-5 text-muted">Lejo plotesim nga linku publik.</p>
+              <span className="font-bold">Linku publik aktiv</span>
+              <p className="mt-2 text-xs leading-5 text-muted">Lejo plotësimin nga linku publik.</p>
             </label>
-            <div className="rounded-3xl border border-slate-200 bg-white p-4">
-              <p className="font-bold">Mode</p>
-              <p className="mt-2 text-sm text-muted">{formMode ? "Formular / survey" : "Test me score"}</p>
+            <div className="rounded-xl border border-line bg-white p-4">
+              <p className="font-bold">Lloji</p>
+              <p className="mt-2 text-sm text-muted">{formMode ? "Formular / pyetësor" : "Test me pikë"}</p>
             </div>
           </div>
 
@@ -253,22 +253,22 @@ export default function TestDetailPage() {
           </div>
 
           <div>
-            <label htmlFor="test-description" className="label">Pershkrimi / instruksionet</label>
+            <label htmlFor="test-description" className="label">Përshkrimi ose udhëzimet</label>
             <textarea id="test-description" className="input min-h-24" value={description} onChange={(event) => setDescription(event.target.value)} />
           </div>
 
           <div className="space-y-4">
             {questions.map((question, questionIndex) => (
-              <section key={question.id || questionIndex} className="rounded-3xl border border-slate-200 bg-slate-50/70 p-5">
+              <section key={question.id || questionIndex} className="rounded-xl border border-line bg-shell-100 p-5">
                 <div className="flex flex-wrap items-center justify-between gap-3">
-                  <h3 className="font-black">Pyetja {questionIndex + 1}</h3>
+                  <h3 className="font-bold">Pyetja {questionIndex + 1}</h3>
                   <div className="flex items-center gap-2">
                     <select aria-label={`Lloji i pyetjes ${questionIndex + 1}`} className="input min-h-11 py-2" value={question.question_type} onChange={(event) => changeQuestionType(questionIndex, event.target.value as QuestionType)}>
-                      <option value="multiple_choice">Multiple choice</option>
-                      <option value="short_text">Short text</option>
+                      <option value="multiple_choice">Zgjedhje e shumëfishtë</option>
+                      <option value="short_text">Përgjigje e shkurtër</option>
                     </select>
                     {questions.length > 1 && (
-                      <button type="button" onClick={() => setQuestions((current) => current.filter((_, i) => i !== questionIndex))} className="flex h-11 w-11 items-center justify-center rounded-full text-red-500 hover:bg-red-50" aria-label={`Fshij pyetjen ${questionIndex + 1}`}>
+                      <button type="button" onClick={() => setQuestions((current) => current.filter((_, i) => i !== questionIndex))} className="flex h-11 w-11 items-center justify-center rounded-xl text-red-700 hover:bg-red-50" aria-label={`Fshij pyetjen ${questionIndex + 1}`}>
                         <Trash2 size={17} />
                       </button>
                     )}
@@ -287,31 +287,31 @@ export default function TestDetailPage() {
                             <label className="flex h-11 w-11 shrink-0 cursor-pointer items-center justify-center"><input type="radio" aria-label={`Opsioni ${optionIndex + 1} është përgjigjja e saktë`} name={`correct-${questionIndex}`} checked={question.correct_option_index === optionIndex} onChange={() => updateQuestion(questionIndex, { correct_option_index: optionIndex })} className="h-6 w-6 accent-teal" /></label>
                           )}
                           <input className="input" aria-label={`Opsioni ${optionIndex + 1}`} placeholder={`Opsioni ${optionIndex + 1}`} value={option} onChange={(event) => updateOption(questionIndex, optionIndex, event.target.value)} required />
-                          <button type="button" onClick={() => removeOption(questionIndex, optionIndex)} className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-muted hover:bg-red-50 hover:text-red-500" aria-label={`Fshij opsionin ${optionIndex + 1}`}>
+                          <button type="button" onClick={() => removeOption(questionIndex, optionIndex)} className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-muted hover:bg-red-50 hover:text-red-700" aria-label={`Fshij opsionin ${optionIndex + 1}`}>
                             <Trash2 size={16} />
                           </button>
                         </div>
                       ))}
                     </div>
                     <button type="button" onClick={() => updateQuestion(questionIndex, { options: [...question.options, ""], correct_option_index: question.correct_option_index ?? (formMode ? null : 0) })} className="btn-secondary mt-3" disabled={question.options.length >= 8}>
-                      <Plus size={16} /> Shto opsion
+                      <Plus size={16} aria-hidden="true" /> Shto opsion
                     </button>
                   </>
                 ) : (
-                  <p className="mt-4 rounded-2xl bg-white p-3 text-sm text-muted">Pjesemarresi do shkruaje pergjigje te lire.</p>
+                  <p className="mt-4 rounded-xl bg-white p-3 text-sm text-muted">Pjesëmarrësi do të shkruajë përgjigje të lirë.</p>
                 )}
               </section>
             ))}
           </div>
 
           <button type="button" onClick={() => setQuestions((current) => [...current, emptyQuestion(formMode)])} className="btn-secondary">
-            <Plus size={16} /> Shto pyetje
+            <Plus size={16} aria-hidden="true" /> Shto pyetje
           </button>
 
-          {error && <p className="rounded-xl bg-red-50 p-3 text-sm text-red-700">{error}</p>}
+          {error && <p role="alert" className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</p>}
 
           <button className="btn-primary w-full" disabled={saving}>
-            <Save size={18} /> {saving ? "Duke ruajtur..." : "Ruaj ndryshimet"}
+            <Save size={18} aria-hidden="true" /> {saving ? "Duke ruajtur…" : "Ruaj ndryshimet"}
           </button>
         </form>
       )}
@@ -324,23 +324,23 @@ function ReviewPanel({ test }: { test: TestDetail }) {
     <div className="mt-8 grid gap-6 lg:grid-cols-[1fr_1.35fr]">
       <section className="card p-6">
         <div className="flex items-center gap-3">
-          <span className="rounded-2xl bg-shell-200 p-3 text-teal"><ClipboardList /></span>
+          <span className="rounded-xl bg-shell-200 p-3 text-teal"><ClipboardList aria-hidden="true" /></span>
           <div>
-            <h2 className="text-xl font-black">{test.form_mode ? "Form questions" : "Answer key"}</h2>
-            <p className="mt-1 text-sm text-muted">Kjo shihet vetem nga host/admin.</p>
+            <h2 className="text-xl font-bold">{test.form_mode ? "Pyetjet e formularit" : "Çelësi i përgjigjeve"}</h2>
+            <p className="mt-1 text-sm text-muted">Kjo shihet vetëm nga host-et.</p>
           </div>
         </div>
         <div className="mt-5 space-y-4">
           {test.questions.map((question) => (
-            <div key={question.id} className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+            <div key={question.id} className="rounded-xl border border-line bg-shell-100 p-4">
               <p className="font-bold">{question.position}. {question.prompt}</p>
               {question.question_type === "short_text" ? (
-                <p className="mt-3 rounded-xl bg-white px-3 py-2 text-sm font-semibold text-slate-600">Pergjigje tekst</p>
+                <p className="mt-3 rounded-xl bg-white px-3 py-2 text-sm font-semibold text-slate-600">Përgjigje me tekst</p>
               ) : question.correct_option_index == null ? (
-                <p className="mt-3 rounded-xl bg-shell-100 px-3 py-2 text-sm font-semibold text-teal">Multiple choice pa answer key</p>
+                <p className="mt-3 rounded-xl bg-shell-100 px-3 py-2 text-sm font-semibold text-teal">Zgjedhje e shumëfishtë, pa çelës përgjigjesh</p>
               ) : (
                 <p className="mt-3 rounded-xl bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-800">
-                  Sakte: {question.options[question.correct_option_index]}
+                  E saktë: {question.options[question.correct_option_index]}
                 </p>
               )}
             </div>
@@ -349,23 +349,23 @@ function ReviewPanel({ test }: { test: TestDetail }) {
       </section>
 
       <section className="space-y-4">
-        <h2 className="text-xl font-black">Përgjigje publike</h2>
+        <h2 className="text-xl font-bold">Përgjigje publike</h2>
         {test.standalone_submissions.length === 0 ? (
           <div className="card p-8 text-center">
-            <ClipboardList className="mx-auto text-teal" size={34} />
-            <h3 className="mt-4 text-lg font-black">Ende nuk ka public submissions</h3>
-            <p className="mt-2 text-sm text-muted">Shperndaje linkun publik per me mbledh pergjigje pa call.</p>
+            <ClipboardList className="mx-auto text-teal" size={34} aria-hidden="true" />
+            <h3 className="mt-4 text-lg font-bold">Ende nuk ka përgjigje publike</h3>
+            <p className="mt-2 text-sm text-muted">Ndaje linkun publik për të mbledhur përgjigje pa call.</p>
           </div>
         ) : (
           test.standalone_submissions.map((submission) => (
             <article key={submission.id} className="card p-6">
               <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                 <div>
-                  <h3 className="text-lg font-black">{submission.participant_name || "Anonim"}</h3>
-                  <p className="text-sm text-muted">{submission.participant_email || "pa email"} - {dateTime(submission.submitted_at)}</p>
+                  <h3 className="text-lg font-bold">{submission.participant_name || "Anonim"}</h3>
+                  <p className="text-sm text-muted">{submission.participant_email || "pa email"} · {dateTime(submission.submitted_at)}</p>
                 </div>
-                <span className="rounded-full bg-shell-100 px-3 py-1 text-sm font-bold text-teal">
-                  {submission.total > 0 ? `${submission.score}/${submission.total}` : "Form"}
+                <span className="chip bg-shell-100 text-slate-700 ring-line">
+                  {submission.total > 0 ? `${submission.score}/${submission.total}` : "Formular"}
                 </span>
               </div>
               <AnswersList test={test} answers={submission.answers} />
@@ -373,12 +373,12 @@ function ReviewPanel({ test }: { test: TestDetail }) {
           ))
         )}
 
-        <h2 className="pt-4 text-xl font-black">Call submissions</h2>
+        <h2 className="pt-4 text-xl font-bold">Përgjigjet nga call-et</h2>
         {test.sessions.length === 0 ? (
           <div className="card p-8 text-center">
-            <ClipboardList className="mx-auto text-teal" size={34} />
-            <h3 className="mt-4 text-lg font-black">Ende nuk eshte perdorur ne call</h3>
-            <p className="mt-2 text-sm text-muted">Krijo nje call dhe zgjidhe kete test per te pare submissions ketu.</p>
+            <ClipboardList className="mx-auto text-teal" size={34} aria-hidden="true" />
+            <h3 className="mt-4 text-lg font-bold">Ende nuk është përdorur në call</h3>
+            <p className="mt-2 text-sm text-muted">Krijo një call dhe zgjidh këtë test; përgjigjet shfaqen këtu.</p>
             <Link href="/sessions/new" className="btn-primary mt-5">Krijo call</Link>
           </div>
         ) : (
@@ -387,26 +387,26 @@ function ReviewPanel({ test }: { test: TestDetail }) {
               <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
                 <div>
                   <div className="flex flex-wrap items-center gap-2">
-                    <h3 className="text-lg font-black text-navy">{session.candidate_name}</h3>
+                    <h3 className="text-lg font-bold text-navy">{session.candidate_name}</h3>
                     <StatusBadge status={session.review_status} />
                   </div>
-                  <p className="mt-1 text-sm text-muted">{session.session_title} - {session.candidate_email || "pa email"}</p>
+                  <p className="mt-1 text-sm text-muted">{session.session_title} · {session.candidate_email || "pa email"}</p>
                 </div>
                 <Link href={`/sessions/${session.session_id}`} className="btn-secondary">
-                  Timeline <ExternalLink size={16} />
+                  Hap call-in <ExternalLink size={16} aria-hidden="true" />
                 </Link>
               </div>
 
               <div className="mt-5 grid gap-3 sm:grid-cols-3">
-                <Metric label="Status" value={session.status.replace("_", " ")} />
-                <Metric label="Evente" value={String(session.event_count)} />
-                <Metric label="Score" value={session.score == null || !session.total ? "-" : `${session.score}/${session.total}`} />
+                <Metric label="Gjendja" value={sessionStatusLabels[session.status] ?? session.status} />
+                <Metric label="Sinjale" value={String(session.event_count)} />
+                <Metric label="Pikë" value={session.score == null || !session.total ? "-" : `${session.score}/${session.total}`} />
               </div>
 
               {Object.keys(session.event_summary).length > 0 && (
                 <div className="mt-4 flex flex-wrap gap-2">
                   {Object.entries(session.event_summary).map(([type, count]) => (
-                    <span key={type} className="rounded-full bg-amber-50 px-3 py-1 text-xs font-bold text-amber-800">
+                    <span key={type} className="chip bg-amber-50 text-amber-900 ring-amber-900/25">
                       {eventLabels[type] || type}: {count}
                     </span>
                   ))}
@@ -415,14 +415,14 @@ function ReviewPanel({ test }: { test: TestDetail }) {
 
               {session.submitted_at && session.answers ? (
                 <div className="mt-5">
-                  <div className="flex items-center gap-2 rounded-2xl bg-emerald-50 p-3 text-sm font-semibold text-emerald-800">
-                    <CheckCircle2 size={17} /> Dorezuar: {dateTime(session.submitted_at)}
+                  <div className="flex items-center gap-2 rounded-xl bg-emerald-50 p-3 text-sm font-semibold text-emerald-800">
+                    <CheckCircle2 size={17} aria-hidden="true" /> Dorëzuar: {dateTime(session.submitted_at)}
                   </div>
                   <AnswersList test={test} answers={session.answers} />
                 </div>
               ) : (
-                <div className="mt-5 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm font-semibold text-amber-800">
-                  Pjesemarresi ende nuk e ka dorezuar.
+                <div className="mt-5 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm font-semibold text-amber-900">
+                  Pjesëmarrësi ende nuk e ka dorëzuar.
                 </div>
               )}
             </article>
@@ -440,16 +440,16 @@ function AnswersList({ test, answers }: { test: TestDetail; answers: Record<stri
         const answer = answers[question.id];
         const correct = question.question_type === "multiple_choice" && question.correct_option_index != null && answer === question.correct_option_index;
         return (
-          <div key={question.id} className={`rounded-2xl border p-4 ${correct ? "border-emerald-200 bg-emerald-50/60" : "border-slate-200 bg-slate-50/80"}`}>
+          <div key={question.id} className={`rounded-xl border p-4 ${correct ? "border-emerald-200 bg-emerald-50/60" : "border-line bg-shell-100"}`}>
             <p className="font-semibold">{question.position}. {question.prompt}</p>
             <div className="mt-3 grid gap-2 text-sm sm:grid-cols-2">
               <p>
-                <span className="font-bold text-muted">Pergjigja:</span>{" "}
+                <span className="font-bold text-muted">Përgjigja:</span>{" "}
                 {formatAnswer(question, answer)}
               </p>
               {question.question_type === "multiple_choice" && question.correct_option_index != null && (
                 <p>
-                  <span className="font-bold text-muted">Sakte:</span>{" "}
+                  <span className="font-bold text-muted">E saktë:</span>{" "}
                   {question.options[question.correct_option_index]}
                 </p>
               )}
@@ -462,7 +462,7 @@ function AnswersList({ test, answers }: { test: TestDetail; answers: Record<stri
 }
 
 function formatAnswer(question: TestDetail["questions"][number], answer: TestAnswer | undefined) {
-  if (answer == null || answer === "") return "Pa pergjigje";
+  if (answer == null || answer === "") return "Pa përgjigje";
   if (question.question_type === "short_text") return String(answer);
   const index = typeof answer === "number" ? answer : Number(answer);
   return question.options[index] || `Opsioni ${index + 1}`;
@@ -470,8 +470,8 @@ function formatAnswer(question: TestDetail["questions"][number], answer: TestAns
 
 function Metric({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-3xl border border-white/80 bg-white/75 p-4 shadow-sm backdrop-blur-xl">
-      <p className="text-2xl font-black text-navy capitalize">{value}</p>
+    <div className="rounded-xl border border-line bg-white p-4">
+      <p className="text-2xl font-bold tabular-nums text-navy">{value}</p>
       <p className="mt-1 text-xs font-semibold text-muted">{label}</p>
     </div>
   );

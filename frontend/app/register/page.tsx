@@ -3,11 +3,10 @@
 import { FormEvent, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { UserPlus } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import { api } from "@/lib/api";
 import { User } from "@/lib/types";
-import { ShellMark } from "@/components/ShellMark";
-import { Wordmark } from "@/components/Wordmark";
+import { AuthShell } from "@/components/AuthShell";
 
 export default function RegisterPage() {
   const router = useRouter();
@@ -33,63 +32,32 @@ export default function RegisterPage() {
   }
 
   return (
-    <main id="main" className="grid min-h-screen lg:grid-cols-2">
-      <section className="shell-field relative hidden overflow-hidden p-16 text-navy lg:flex lg:flex-col lg:justify-between">
-        <Link href="/" className="relative z-10 flex items-center gap-3 text-xl font-black">
-          <span className="flex h-12 w-12 items-center justify-center rounded-full bg-white/75 shadow-sm">
-            <ShellMark className="h-8 w-8" />
-          </span>
-          <Wordmark />
-        </Link>
+    <AuthShell kicker="Llogari host" title={<>Krijo llogarinë.<br />Fto kandidatin e parë.</>} blurb="Pas regjistrimit krijon një call, dërgon ftesën me email dhe e drejton intervistën nga një dhomë e vetme. Përfundimin e shkruan gjithmonë ti.">
+      <form onSubmit={submit} className="card w-full max-w-md p-7 sm:p-9 animate-rise">
+        <h1 className="text-2xl font-bold tracking-tight">Krijo llogari host</h1>
+        <p className="mb-7 mt-2 text-sm leading-6 text-muted">Llogaria përdoret për të krijuar call-e dhe teste dhe për të shqyrtuar sinjalet.</p>
 
-        <div className="relative z-10 max-w-xl">
-          <p className="mb-5 text-sm font-bold uppercase tracking-[.24em] text-teal">Host/Admin account</p>
-          <h1 className="display-tech text-5xl font-black leading-tight">
-            Create the room.
-            <br />
-            Keep review human.
-          </h1>
-          <p className="mt-6 text-lg leading-8 text-slate-600">
-            Host-i regjistrohet per te krijuar call, per te ftuar pjesemarres me email dhe per te shfaqur teste live.
-          </p>
-          <div className="mt-10 rounded-[2rem] border border-white/80 bg-white/65 p-8 shadow-soft backdrop-blur-xl">
-            <ShellMark animated className="mx-auto h-48 w-48" />
-          </div>
-        </div>
+        <label className="label" htmlFor="name">Emri</label>
+        <input id="name" autoComplete="name" className="input mb-5" value={form.full_name} onChange={(e) => setForm({ ...form, full_name: e.target.value })} required minLength={2} />
 
-        <p className="relative z-10 text-sm font-semibold text-slate-600">
-          Email invites - Live signals - Manual review
+        <label className="label" htmlFor="email">Email</label>
+        <input id="email" autoComplete="email" className="input mb-5" type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} required />
+
+        <label className="label" htmlFor="password">Fjalëkalimi</label>
+        <input id="password" autoComplete="new-password" aria-describedby="password-hint" className="input" type="password" minLength={8} value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} required />
+        <p id="password-hint" className="mt-2 text-xs text-muted">Të paktën 8 shkronja ose shifra.</p>
+
+        {error && <p role="alert" className="mt-4 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</p>}
+
+        <button className="btn-primary mt-6 w-full" disabled={loading}>
+          {loading && <Loader2 size={16} className="animate-spin motion-reduce:animate-none" aria-hidden="true" />}
+          {loading ? "Duke krijuar…" : "Krijo llogarinë"}
+        </button>
+
+        <p className="mt-5 text-center text-sm text-muted">
+          Ke llogari? <Link href="/login" className="font-semibold text-teal underline underline-offset-2">Hyr këtu</Link>
         </p>
-      </section>
-
-      <section className="flex items-center justify-center bg-mist p-6">
-        <form onSubmit={submit} className="card w-full max-w-md p-8 sm:p-10">
-          <span className="mb-6 inline-flex rounded-2xl bg-teal/10 p-3 text-teal"><UserPlus /></span>
-          <h2 className="text-3xl font-black text-ink">Register per host</h2>
-          <p className="mb-8 mt-2 text-sm leading-6 text-muted">
-            Ky account perdoret per krijim call, teste dhe monitorim te sinjaleve live.
-          </p>
-
-          <label className="label" htmlFor="name">Emri</label>
-          <input id="name" autoComplete="name" className="input mb-5" value={form.full_name} onChange={(e) => setForm({ ...form, full_name: e.target.value })} required minLength={2} />
-
-          <label className="label" htmlFor="email">Email</label>
-          <input id="email" autoComplete="email" className="input mb-5" type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} required />
-
-          <label className="label" htmlFor="password">Fjalekalimi</label>
-          <input id="password" autoComplete="new-password" className="input" type="password" minLength={8} value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} required />
-
-          {error && <p role="alert" className="mt-4 rounded-xl bg-red-50 p-3 text-sm text-red-700">{error}</p>}
-
-          <button className="btn-primary mt-6 w-full" disabled={loading}>
-            {loading ? "Duke krijuar..." : "Krijo account"}
-          </button>
-
-          <p className="mt-5 text-center text-sm text-muted">
-            Ke account? <Link href="/login" className="font-semibold text-teal">Hyr ketu</Link>
-          </p>
-        </form>
-      </section>
-    </main>
+      </form>
+    </AuthShell>
   );
 }
