@@ -6,7 +6,8 @@ import { useRouter } from "next/navigation";
 import { CalendarDays, ChevronRight, Clock3, History, Plus, Search, Settings2, ShieldAlert, Trash2 } from "lucide-react";
 import { AppShell } from "@/components/AppShell";
 import { StatusBadge } from "@/components/StatusBadge";
-import { api } from "@/lib/api";
+import { OfflineBanner } from "@/components/OfflineBanner";
+import { ApiError, api } from "@/lib/api";
 import { dateTime } from "@/lib/format";
 import { AuditLog, InterviewSession, User } from "@/lib/types";
 
@@ -18,13 +19,17 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const [retention, setRetention] = useState(30);
   const [message, setMessage] = useState("");
+  const [offline, setOffline] = useState(false);
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
 
   const load = useCallback(async () => {
     try {
       const [me, rows, logs] = await Promise.all([api<User>("/auth/me"), api<InterviewSession[]>("/sessions"), api<AuditLog[]>("/audit-logs")]);
-      setUser(me); setRetention(me.retention_days); setSessions(rows); setAuditLogs(logs);
-    } catch { router.replace("/login"); }
+      setUser(me); setRetention(me.retention_days); setSessions(rows); setAuditLogs(logs); setOffline(false);
+    } catch (err) {
+      // Only an expired session ends up on /login; a network blip or a 5xx keeps the last data on screen.
+      if (err instanceof ApiError && err.status === 401) router.replace("/login"); else setOffline(true);
+    }
     finally { setLoading(false); }
   }, [router]);
   useEffect(() => { load(); }, [load]);
@@ -46,6 +51,7 @@ export default function DashboardPage() {
   }
 
   return <AppShell>
+    {offline && <OfflineBanner/>}
     <div className="flex flex-col justify-between gap-5 sm:flex-row sm:items-end">
       <div><p className="font-mono text-xs font-medium uppercase tracking-[0.22em] text-slate-500">NemoGuardHR dashboard</p><h1 className="mt-1 text-3xl font-bold">Mirë se erdhe, {user?.full_name || "Host"}</h1><p className="mt-2 text-slate-500">Krijo call, fto pjesëmarrës dhe shiko live activity signals.</p></div>
       <Link href="/sessions/new" className="btn-primary"><Plus size={18}/> Call i ri</Link>

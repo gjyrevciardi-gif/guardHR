@@ -49,11 +49,15 @@ The credential is visible to anyone who opens a call link, so use short-lived TU
 | Topic | What happens |
 |---|---|
 | Migrations | The backend container runs `alembic upgrade head` on every start. To run it by hand: `docker compose exec backend alembic upgrade head`. |
-| Retention | An in-process job purges expired data every `RETENTION_PURGE_INTERVAL_HOURS` (default 24; `0` disables it). Run `python -m app.retention` from cron instead if you prefer. See the README for what is deleted. |
+| Retention | An in-process job purges expired data when the API starts and then every `RETENTION_PURGE_INTERVAL_HOURS` (default 24; `0` disables it). Run `python -m app.retention` from cron instead if you prefer. A call still `in_progress` `ABANDONED_SESSION_HOURS` (default 12) after it started is closed as abandoned (audit entry `session.auto_closed`, `ended_at` = last event or start time) so it ages out like any finished call; links that expired before the retention cutoff without ever running lose their stored consent IP. See the README for what is deleted. |
 | Deleting data | `DELETE /api/sessions/{id}` and `DELETE /api/tests/{id}` hard-delete, including candidate PII left in audit entries. |
 | Invites | Sent in a background task after the response. The outcome is an audit entry (`participant.invite.email_sent` / `email_failed`); SMTP errors are written to the server log only. |
 | Health | `GET /api/health` returns `{"status": "ok", "vision": true|false}`. The backend image has a Docker healthcheck. |
 | Backups | Back up the `interviewguard_data` volume (PostgreSQL). Video and audio are never stored. |
+
+## Upgrading from the previous release
+
+Migration `0003` only adds an index on `audit_logs(session_id, action, created_at)` and can be downgraded. Dependency pins moved (FastAPI 0.165 / Starlette 1.x, PyJWT 2.15, python-multipart 0.0.31, pypdf 6.21, Next.js 15.5.29); rebuild both images rather than reusing cached layers. Calls abandoned before the upgrade are closed by the first purge after the API starts.
 
 ## Known limits (deliberate)
 
@@ -63,7 +67,14 @@ The credential is visible to anyone who opens a call link, so use short-lived TU
 - **A running call stays valid after `expires_at`.** The expiry only blocks starting; an in-progress session continues until it finishes.
 - **Duplicate public submissions** are prevented per email with an application check, not a database constraint, so two simultaneous submissions with the same email can both succeed.
 - **The in-progress retention job runs in the API process.** With several replicas it would run on each; it is idempotent, but a single cron is cleaner at that point.
+- **Frame analysis is serialised.** Phone/extra-person detection runs one frame at a time (Ultralytics models are not thread-safe) in a thread, so it cannot stall signaling. A frame that waits more than 3 s gets `503` and is dropped; the client treats vision as best-effort and retries on its next 5 s tick. Many simultaneous candidates on a slow CPU will therefore be analysed less often; measure real inference time before sizing a host.
 - Phone/extra-person detection needs the `INSTALL_CV=true` image and the `yolo11n.pt` weights (downloaded on first use unless `YOLO_MODEL_PATH` points to a local file).
+
+## Privacy page
+
+`/privacy` describes what the software does. The consent page shows the host's name and the retention period from the database. Before real candidates use a deployment, the operator should add their own legal entity, contact address and legal basis to `frontend/app/privacy/page.tsx`: the page does not name an operator because the software cannot know it, and nothing in it is legal advice.
+
+The face-detection model and its WASM runtime are served from the app itself (`frontend/public/mediapipe/`, see the README there), so the candidate's browser makes no CDN request. Candidate pages load no third-party scripts; the only third party a candidate's IP reaches is the STUN/TURN server in `ICE_SERVERS` (Google STUN by default).
 
 ## Upgrading from the pre-Alembic version
 

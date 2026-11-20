@@ -5,7 +5,7 @@ import { AlertTriangle, Camera, CameraOff, Eye, Maximize, Mic, MicOff, MonitorUp
 import { InterviewMonitor } from "@/components/InterviewMonitor";
 import { CandidateTestPanel } from "@/components/TestPanel";
 import { api, wsUrl } from "@/lib/api";
-import { EventType, PublicSession } from "@/lib/types";
+import { EventType, RoomSession } from "@/lib/types";
 import { dateTime, eventLabels } from "@/lib/format";
 import { Wordmark } from "@/components/Wordmark";
 
@@ -23,7 +23,7 @@ type LiveEvent = {
 interface Props {
   token: string;
   role: Role;
-  session: PublicSession;
+  session: RoomSession;
   onFinish?: () => void;
 }
 

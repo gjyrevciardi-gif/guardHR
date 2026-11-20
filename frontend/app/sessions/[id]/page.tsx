@@ -6,7 +6,8 @@ import Link from "next/link";
 import { AlertTriangle, ArrowLeft, Clipboard, ExternalLink, FileCheck2, Trash2, Video, X } from "lucide-react";
 import { AppShell } from "@/components/AppShell";
 import { StatusBadge } from "@/components/StatusBadge";
-import { api } from "@/lib/api";
+import { OfflineBanner } from "@/components/OfflineBanner";
+import { ApiError, api } from "@/lib/api";
 import { dateTime, eventLabels } from "@/lib/format";
 import { InterviewSession } from "@/lib/types";
 
@@ -17,9 +18,11 @@ export default function SessionDetailPage() {
   const [notes, setNotes] = useState("");
   const [outcome, setOutcome] = useState("Review completed");
   const [message, setMessage] = useState("");
+  const [offline, setOffline] = useState(false);
   const [alerts, setAlerts] = useState<Array<{ id: string; title: string; message: string }>>([]);
   const knownEventIds = useRef<Set<string>>(new Set());
   const initializedEvents = useRef(false);
+  const reviewLoaded = useRef(false);
 
   const pushAlert = useCallback((alert: { id: string; title: string; message: string }) => {
     setAlerts((current) => [alert, ...current.filter((item) => item.id !== alert.id)].slice(0, 4));
@@ -47,13 +50,17 @@ export default function SessionDetailPage() {
       knownEventIds.current = nextIds;
       initializedEvents.current = true;
       setSession(data);
+      setOffline(false);
       const prior = data.reviews.at(-1);
-      if (prior) {
+      if (prior && !reviewLoaded.current) { // prefill once: later polls must not overwrite what the host is typing
+        reviewLoaded.current = true;
         setNotes(prior.notes);
         setOutcome(prior.outcome);
       }
-    } catch {
-      router.replace("/dashboard");
+    } catch (err) {
+      // 401 is handled by api() (redirect to /login). A missing call goes back to the list; anything else keeps the last data.
+      if (err instanceof ApiError && err.status === 404) router.replace("/dashboard");
+      else if (!(err instanceof ApiError && err.status === 401)) setOffline(true);
     }
   }, [id, pushAlert, router]);
 
@@ -83,12 +90,13 @@ export default function SessionDetailPage() {
     await load();
   }
 
-  if (!session) return <AppShell><p>Duke ngarkuar...</p></AppShell>;
+  if (!session) return <AppShell>{offline && <OfflineBanner />}<p>Duke ngarkuar...</p></AppShell>;
 
   const candidateLink = `${window.location.origin}/join/${session.public_token}`;
 
   return (
     <AppShell>
+      {offline && <OfflineBanner />}
       {alerts.length > 0 && (
         <div className="fixed right-5 top-5 z-50 w-[min(360px,calc(100vw-2.5rem))] space-y-3">
           {alerts.map((alert) => (
@@ -174,6 +182,7 @@ export default function SessionDetailPage() {
               <Row label="Perfunduar" value={dateTime(session.ended_at)} />
               <Row label="Screen sharing" value={session.require_screen_share ? "Kerkohet" : "Opsional"} />
             </dl>
+            {session.invite_status === "failed" && <p role="alert" className="mt-4 rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">Emaili i ftesës nuk u dërgua. Kopjo linkun më poshtë dhe dërgoja pjesëmarrësit manualisht.</p>}
             <div className="mt-5 flex items-center gap-2 rounded-xl bg-slate-100 p-3">
               <code className="min-w-0 flex-1 truncate text-xs">{candidateLink}</code>
               <button onClick={() => navigator.clipboard.writeText(candidateLink)} aria-label="Kopjo"><Clipboard size={17} /></button>

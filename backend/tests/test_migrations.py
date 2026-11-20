@@ -50,7 +50,7 @@ def test_fresh_database_reaches_head(scratch_engine):
     with scratch_engine.connect() as connection:
         tables = {row[0] for row in connection.execute(text("SELECT table_name FROM information_schema.tables WHERE table_schema = 'public'"))}
         assert {"users", "candidates", "interview_sessions", "tests", "test_submissions", "alembic_version"} <= tables
-        assert connection.execute(text("SELECT version_num FROM alembic_version")).scalar() == "0002"
+        assert connection.execute(text("SELECT version_num FROM alembic_version")).scalar() == "0003"
     upgrade(scratch_engine)  # running again is a no-op
 
 

@@ -5,15 +5,6 @@ import { FaceDetector, FilesetResolver } from "@mediapipe/tasks-vision";
 import { api } from "@/lib/api";
 import { EventType } from "@/lib/types";
 
-type ScreenDetailsLike = {
-  screens?: unknown[];
-  currentScreen?: unknown;
-};
-
-type WindowWithScreenDetails = Window & {
-  getScreenDetails?: () => Promise<ScreenDetailsLike>;
-};
-
 interface Props {
   token: string;
   videoRef: React.RefObject<HTMLVideoElement | null>;
@@ -143,28 +134,15 @@ export function InterviewMonitor({ token, videoRef, active, cameraStream, screen
   useEffect(() => {
     if (!active) return;
 
-    const detectDisplays = async () => {
-      const extended = Boolean((window.screen as Screen & { isExtended?: boolean }).isExtended);
-      const getScreenDetails = (window as WindowWithScreenDetails).getScreenDetails;
-      if (typeof getScreenDetails === "function" && window.isSecureContext) {
-        try {
-          const details = await getScreenDetails();
-          const screenCount = details.screens?.length || 1;
-          if (screenCount > 1) {
-            reportWithCooldown("multiple_monitors", 60_000, 0.9, { source: "window-management-api", screen_count: screenCount });
-            return;
-          }
-        } catch {
-          /* Permission can be denied; fallback below is best-effort. */
-        }
-      }
-
-      if (extended) {
+    // screen.isExtended needs no permission. getScreenDetails() was dropped: it shows the candidate a
+    // "manage windows on all your displays" prompt that the consent page does not explain.
+    const detectDisplays = () => {
+      if ((window.screen as Screen & { isExtended?: boolean }).isExtended) {
         reportWithCooldown("multiple_monitors", 60_000, 0.7, { source: "screen.isExtended", screen_count: "unknown_more_than_one" });
       }
     };
 
-    void detectDisplays();
+    detectDisplays();
   }, [active, reportWithCooldown]);
 
   useEffect(() => {
@@ -186,8 +164,8 @@ export function InterviewMonitor({ token, videoRef, active, cameraStream, screen
     let cancelled = false;
     (async () => {
       try {
-        const vision = await FilesetResolver.forVisionTasks("https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.22/wasm");
-        const detector = await FaceDetector.createFromOptions(vision, { baseOptions: { modelAssetPath: "https://storage.googleapis.com/mediapipe-models/face_detector/blaze_face_short_range/float16/latest/blaze_face_short_range.tflite", delegate: "GPU" }, runningMode: "VIDEO", minDetectionConfidence: 0.5 });
+        const vision = await FilesetResolver.forVisionTasks("/mediapipe/wasm");
+        const detector = await FaceDetector.createFromOptions(vision, { baseOptions: { modelAssetPath: "/mediapipe/blaze_face_short_range.tflite", delegate: "GPU" }, runningMode: "VIDEO", minDetectionConfidence: 0.5 });
         if (cancelled) { detector.close(); return; }
         faceDetector.current = detector; setFaceReady(true);
       } catch { setFaceReady(false); }
@@ -222,19 +200,22 @@ export function InterviewMonitor({ token, videoRef, active, cameraStream, screen
 
   useEffect(() => {
     if (!active) return;
+    let inFlight = false; // a slow detector must not stack up uploads from the same candidate
     const analyze = async () => {
       const video = videoRef.current;
-      if (!video || video.readyState < 2) return;
+      if (inFlight || !video || video.readyState < 2) return;
+      inFlight = true;
       const canvas = document.createElement("canvas"); canvas.width = 640; canvas.height = Math.round(640 * video.videoHeight / video.videoWidth);
       canvas.getContext("2d")?.drawImage(video, 0, 0, canvas.width, canvas.height);
       const blob = await new Promise<Blob | null>(resolve => canvas.toBlob(resolve, "image/jpeg", 0.72));
-      if (!blob) return;
+      if (!blob) { inFlight = false; return; }
       const form = new FormData(); form.append("frame", blob, "frame.jpg");
       try {
         const result = await api<{ person_count: number; person_confidence: number; phone_detected: boolean; phone_confidence: number }>(`/public/sessions/${token}/analyze-frame`, { method: "POST", body: form }, false);
         if (result.person_count > 1) reportWithCooldown("multiple_people", 10000, result.person_confidence, { source: "yolo", count: result.person_count });
         if (result.phone_detected) reportWithCooldown("phone_detected", 10000, result.phone_confidence, { source: "yolo" });
       } catch { /* vision is best-effort; interview continues if model is unavailable */ }
+      finally { inFlight = false; }
     };
     const timer = window.setInterval(analyze, 5000); void analyze();
     return () => window.clearInterval(timer);

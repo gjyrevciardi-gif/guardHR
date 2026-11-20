@@ -37,11 +37,13 @@ export interface TestDetail extends Test { sessions: TestReviewSession[]; standa
 export interface PublicTest { id: string; title: string; description: string | null; form_mode: boolean; question_count: number; questions: TestQuestion[] }
 export interface InterviewSession {
   id: string; title: string; public_token: string; status: string; review_status: ReviewStatus;
-  invite_email_queued: boolean;
+  invite_email_queued: boolean; invite_status: "sent" | "failed" | null;
   test: Test | null; test_submission: TestSubmission | null;
   require_screen_share: boolean; candidate: Candidate; expires_at: string; consented_at: string | null;
   started_at: string | null; ended_at: string | null; created_at: string; event_count: number;
   events: IntegrityEvent[]; reviews: Review[];
 }
-export interface PublicSession { title: string; candidate_name: string; status: string; require_screen_share: boolean; expires_at: string; consented_at: string | null; test: PublicTest | null }
+export interface PublicSession { title: string; candidate_name: string; host_name: string; retention_days: number; status: string; require_screen_share: boolean; expires_at: string; consented_at: string | null; test: PublicTest | null }
 export interface AuditLog { id: string; action: string; entity_type: string; entity_id: string | null; details: Record<string, unknown>; ip_address: string | null; created_at: string }
+/** What the call room needs: the consent-page-only fields are not part of it. */
+export type RoomSession = Omit<PublicSession, "host_name" | "retention_days">;

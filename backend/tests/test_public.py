@@ -198,3 +198,46 @@ def test_invalid_answers_are_rejected(client, hr, answer):
     questions = client.get(f"/api/public/tests/{created['public_token']}").json()["questions"]
     question_id = questions[0]["id"] if not isinstance(answer, str) else questions[1]["id"]
     assert client.post(f"/api/public/tests/{created['public_token']}/submissions", json={"answers": {question_id: answer}}).status_code == 422
+
+
+def test_analyze_frame_runs_off_the_event_loop(client, started_session, monkeypatch):
+    import threading
+
+    seen = {}
+
+    def fake(content):
+        seen["thread"] = threading.current_thread()
+        return {"vision_available": True}
+
+    monkeypatch.setattr(public, "detect_objects", fake)
+    url = f"/api/public/sessions/{started_session['public_token']}/analyze-frame"
+    assert client.post(url, files={"frame": ("f.jpg", b"1", "image/jpeg")}).status_code == 200
+    assert seen["thread"] is not threading.main_thread()
+
+
+def test_analyze_frame_drops_frames_when_detector_is_busy(client, started_session, monkeypatch):
+    import asyncio
+
+    monkeypatch.setattr(public, "_inference_slot", asyncio.Semaphore(0))
+    monkeypatch.setattr(public, "FRAME_QUEUE_SECONDS", 0.05)
+    monkeypatch.setattr(public, "detect_objects", lambda content: pytest.fail("must not run while the slot is taken"))
+    url = f"/api/public/sessions/{started_session['public_token']}/analyze-frame"
+    response = client.post(url, files={"frame": ("f.jpg", b"1", "image/jpeg")})
+    assert response.status_code == 503 and response.headers["retry-after"] == "5"
+
+
+def test_analyze_frame_releases_slot_after_invalid_image(client, started_session, monkeypatch):
+    def bad(content):
+        raise ValueError("Invalid image")
+
+    monkeypatch.setattr(public, "detect_objects", bad)
+    url = f"/api/public/sessions/{started_session['public_token']}/analyze-frame"
+    for _ in range(3):  # a leaked slot would turn the second call into a 503
+        assert client.post(url, files={"frame": ("f.jpg", b"1", "image/jpeg")}).status_code == 422
+
+
+def test_public_session_tells_the_candidate_who_keeps_the_data_and_for_how_long(client, hr, new_session):
+    client.put("/api/settings/retention", headers=hr, json={"retention_days": 45})
+    body = client.get(f"/api/public/sessions/{new_session(hr)['public_token']}").json()
+    assert body["host_name"] == "Test User" and body["retention_days"] == 45
+    assert not {"host_email", "created_by", "public_token"} & set(body)  # the host's contact details and the token stay private

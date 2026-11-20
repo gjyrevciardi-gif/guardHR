@@ -1,6 +1,8 @@
+import asyncio
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
+from fastapi.concurrency import run_in_threadpool
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, selectinload
 
@@ -16,6 +18,11 @@ from .tests import grade_answers
 
 MAX_EVENTS_PER_SESSION = 2000
 MAX_FRAME_BYTES = 2_500_000
+FRAME_QUEUE_SECONDS = 3.0
+# One inference at a time: Ultralytics models are not thread-safe and inference is CPU-bound.
+# Frames that wait longer than FRAME_QUEUE_SECONDS are dropped (the client treats vision as best-effort).
+# ponytail: single in-process slot; move detection to a worker process when one host needs more throughput.
+_inference_slot = asyncio.Semaphore(1)
 
 router = APIRouter(prefix="/public/sessions", tags=["candidate"], dependencies=[Depends(rate_limit("public", 240, 60))])
 
@@ -23,7 +30,7 @@ router = APIRouter(prefix="/public/sessions", tags=["candidate"], dependencies=[
 def public_session(db: Session, token: str) -> InterviewSession:
     session = db.scalar(
         select(InterviewSession)
-        .options(selectinload(InterviewSession.candidate), selectinload(InterviewSession.test).selectinload(Test.questions))
+        .options(selectinload(InterviewSession.candidate), selectinload(InterviewSession.creator), selectinload(InterviewSession.test).selectinload(Test.questions))
         .where(InterviewSession.public_token == parse_uuid(token, "Interview link is invalid"))
     )
     if not session:
@@ -47,6 +54,8 @@ def to_public_out(session: InterviewSession) -> PublicSessionOut:
     return PublicSessionOut(
         title=session.title,
         candidate_name=session.candidate.full_name,
+        host_name=session.creator.full_name,
+        retention_days=session.creator.retention_days,
         status=session.status,
         require_screen_share=session.require_screen_share,
         expires_at=session.expires_at,
@@ -114,8 +123,7 @@ def start(token: str, request: Request, db: Session = Depends(get_db)):
     db.commit()
 
 
-@router.post("/{token}/events", response_model=EventOut, status_code=201, dependencies=[Depends(rate_limit("events", 120, 60, "token"))])
-async def create_event(token: str, payload: EventCreate, db: Session = Depends(get_db)):
+def record_event(db: Session, token: str, payload: EventCreate) -> tuple[InterviewSession, EventOut]:
     session = public_session(db, token)
     require_in_progress(session)
     if db.scalar(select(func.count(IntegrityEvent.id)).where(IntegrityEvent.session_id == session.id)) >= MAX_EVENTS_PER_SESSION:
@@ -126,7 +134,13 @@ async def create_event(token: str, payload: EventCreate, db: Session = Depends(g
         session.review_status = ReviewStatus.requires_review
     db.commit()
     db.refresh(event)
-    output = EventOut.model_validate(event)
+    return session, EventOut.model_validate(event)
+
+
+@router.post("/{token}/events", response_model=EventOut, status_code=201, dependencies=[Depends(rate_limit("events", 120, 60, "token"))])
+async def create_event(token: str, payload: EventCreate, db: Session = Depends(get_db)):
+    # Database work runs in the threadpool so a slow query cannot stall signaling on the single event loop.
+    session, output = await run_in_threadpool(record_event, db, token, payload)
     await broadcast_to_role(session.public_token, "hr", {"type": "integrity-event", "event": output.model_dump(mode="json")})
     return output
 
@@ -134,17 +148,22 @@ async def create_event(token: str, payload: EventCreate, db: Session = Depends(g
 @router.post("/{token}/analyze-frame", dependencies=[Depends(rate_limit("frames", 30, 60, "token"))])
 async def analyze_frame(token: str, frame: UploadFile = File(...), db: Session = Depends(get_db)):
     """Run transient YOLO inference. The uploaded frame is never persisted."""
-    session = public_session(db, token)
-    require_in_progress(session)
+    await run_in_threadpool(lambda: require_in_progress(public_session(db, token)))
     if frame.content_type not in {"image/jpeg", "image/webp", "image/png"}:
         raise HTTPException(status_code=415, detail="Unsupported image type")
     content = await frame.read(MAX_FRAME_BYTES + 1)
     if len(content) > MAX_FRAME_BYTES:
         raise HTTPException(status_code=413, detail="Frame is too large")
     try:
-        return detect_objects(content)
+        await asyncio.wait_for(_inference_slot.acquire(), FRAME_QUEUE_SECONDS)
+    except TimeoutError:
+        raise HTTPException(status_code=503, detail="Detector busy", headers={"Retry-After": "5"}) from None
+    try:
+        return await run_in_threadpool(detect_objects, content)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
+    finally:
+        _inference_slot.release()
 
 
 @router.post("/{token}/finish", status_code=204)
