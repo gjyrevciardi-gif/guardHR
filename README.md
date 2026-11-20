@@ -25,6 +25,8 @@ cheatHR/
 ├── docs/deployment.md        # prodhimi, TURN, scheduling, kufizimet
 ├── docs/signals.md           # rëndësia e sinjaleve, rregulli i rishikimit, mbulimi
 ├── docs/accessibility.md     # WCAG 2.2 AA: rregullat, si u verifikua, kufijtë
+├── docs/candidate-checks.md  # testi i pajisjes dhe kodi me email para hyrjes
+├── docs/product-design.md    # drejtimi i dizajnit, sistemi i tokenëve, çfarë u ndërtua dhe çfarë mbetet
 └── .env.example
 ```
 
@@ -90,6 +92,7 @@ Skema nuk krijohet më nga `database/schema.sql` por nga Alembic. Një databazë
 | GET/POST | `/api/sessions` | Lista (`limit`, `offset`) / krijimi i sesioneve; ftesa dërgohet në sfond |
 | GET/DELETE | `/api/sessions/{id}` | Timeline dhe reviews / fshirje e plotë |
 | POST | `/api/sessions/{id}/reviews` | Review manual |
+| PUT | `/api/sessions/{id}/notes` | Ruan shënimet private të host-it (vetëm pronari; shfaqen vetëm te detaji i call-it, kurrë te kandidati) |
 | GET/POST | `/api/tests` | Teste/formularë (listë me `limit`, `offset`); `POST /api/tests/generate-from-file` nga PDF/DOCX/TXT/MD |
 | GET/PUT/DELETE | `/api/tests/{id}` | Detaje, editim, fshirje |
 | GET | `/api/public/sessions/{token}` | Detaje publike minimale (pa link publik të testit) |
@@ -115,11 +118,12 @@ Skema nuk krijohet më nga `database/schema.sql` por nga Alembic. Një databazë
 - MediaPipe Face Detector punon në browser. Mungesa e fytyrës raportohet vetëm pas 5 sekondash.
 - Një frame JPEG i zvogëluar dërgohet çdo 5 sekonda te YOLO/OpenCV vetëm për klasat `person` dhe `cell phone`; bytes nuk ruhen.
 - Video/audio nuk regjistrohen në MVP.
-- **Retention:** në nisje të API-t dhe çdo ditë (`RETENTION_PURGE_INTERVAL_HOURS`) dhe me kërkesë (`/settings/retention/purge`) fshihen `integrity_events`, përgjigjet e testeve, `consent_ip` dhe IP-të në audit log për call-et e përfunduara përtej afatit. Call-et që mbeten `in_progress` më shumë se `ABANDONED_SESSION_HOURS` (12 orë) mbyllen si të braktisura dhe ndjekin të njëjtin afat; linket e skaduara që s'u përdorën kurrë humbin vetëm IP-në e pranimit. Sesioni, review-t dhe emri i kandidatit mbeten derisa HR të fshijë call-in (`DELETE /api/sessions/{id}`), që heq gjithçka, përfshirë kandidatin nëse nuk ka call tjetër. Mund ta ekzekutosh edhe nga cron: `python -m app.retention`.
+- **Retention:** në nisje të API-t dhe çdo ditë (`RETENTION_PURGE_INTERVAL_HOURS`) dhe me kërkesë (`/settings/retention/purge`) fshihen `integrity_events`, përgjigjet e testeve, `consent_ip` dhe IP-të në audit log për call-et e përfunduara përtej afatit. Call-et që mbeten `in_progress` më shumë se `ABANDONED_SESSION_HOURS` (12 orë) mbyllen si të braktisura dhe ndjekin të njëjtin afat; linket e skaduara që s'u përdorën kurrë humbin vetëm IP-në e pranimit. Sesioni, review-t, shënimet private të host-it dhe emri i kandidatit mbeten derisa HR të fshijë call-in (`DELETE /api/sessions/{id}`), që heq gjithçka, përfshirë kandidatin nëse nuk ka call tjetër. Mund ta ekzekutosh edhe nga cron: `python -m app.retention`.
 - IP-ja e kandidatit (consent, audit) merret nga lidhja TCP. `X-Forwarded-For` besohet vetëm kur `TRUST_PROXY_HEADERS=true` (Nginx i përfshirë e mbishkruan).
 - Rëndësia e sinjaleve, rregulli i rishikimit dhe mbulimi i monitorimit: [docs/signals.md](docs/signals.md).
 - Qasshmëria (WCAG 2.2 AA), konventat e UI dhe kufijtë e njohur: [docs/accessibility.md](docs/accessibility.md).
-- Etiketat e vetme janë: `No events detected`, `Requires review`, `Review completed`, `Insufficient evidence`.
+- Testi i pajisjes dhe verifikimi i email-it para hyrjes (çfarë provon dhe çfarë jo): [docs/candidate-checks.md](docs/candidate-checks.md).
+- Etiketat e vetme (vlerat e ruajtura dhe të API-t) janë: `No events detected`, `Requires review`, `Review completed`, `Insufficient evidence`. UI i shfaq shqip: "Pa sinjale", "Kërkon shqyrtim", "Shqyrtuar", "Prova të pamjaftueshme" (`reviewStatusLabels` në `frontend/lib/format.ts`).
 - Nuk ka emotion recognition, lie detection, personality analysis ose refuzim automatik.
 
 ## Siguria në pika

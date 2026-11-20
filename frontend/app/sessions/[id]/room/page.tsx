@@ -1,9 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import Link from "next/link";
-import { ArrowLeft } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import { useParams, useRouter } from "next/navigation";
+import { CallSummary } from "@/components/CallSummary";
 import { MeetingRoom } from "@/components/MeetingRoom";
 import { api } from "@/lib/api";
 import { InterviewSession, RoomSession } from "@/lib/types";
@@ -12,6 +12,7 @@ export default function HrMeetingRoom() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
   const [session, setSession] = useState<InterviewSession | null>(null);
+  const [left, setLeft] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -25,7 +26,9 @@ export default function HrMeetingRoom() {
     load();
   }, [load]);
 
-  if (!session) return <main id="main" className="flex min-h-screen items-center justify-center bg-mist p-6">Duke ngarkuar...</main>;
+  if (!session) return <main id="main" className="flex min-h-screen items-center justify-center gap-3 bg-canvas p-6 text-muted" role="status"><Loader2 className="animate-spin motion-reduce:animate-none" aria-hidden="true" /> Duke ngarkuar…</main>;
+
+  if (left) return <CallSummary sessionId={session.id} onReturn={() => setLeft(false)} />;
 
   const publicSession: RoomSession = {
     title: session.title,
@@ -34,17 +37,10 @@ export default function HrMeetingRoom() {
     require_screen_share: session.require_screen_share,
     expires_at: session.expires_at,
     consented_at: session.consented_at,
+    verification_required: false,
+    candidate_email_hint: null,
     test: session.test,
   };
 
-  return (
-    <div>
-      <nav aria-label="Kthehu" className="dark-ui bg-[#0b1520] px-5 py-1">
-        <Link href={`/sessions/${session.id}`} className="inline-flex min-h-11 items-center gap-2 text-sm font-semibold text-slate-300">
-          <ArrowLeft size={16} /> Kthehu te call-i
-        </Link>
-      </nav>
-      <MeetingRoom token={session.public_token} role="hr" session={publicSession} />
-    </div>
-  );
+  return <MeetingRoom token={session.public_token} role="hr" session={publicSession} sessionId={session.id} backHref={`/sessions/${session.id}`} onFinish={() => setLeft(true)} />;
 }

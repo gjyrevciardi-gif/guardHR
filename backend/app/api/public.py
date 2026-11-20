@@ -6,13 +6,15 @@ from fastapi.concurrency import run_in_threadpool
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, selectinload
 
+from .. import email as mailer
 from ..database import get_db
 from ..enums import ReviewStatus, SessionStatus
 from ..models import IntegrityEvent, InterviewSession, Test, TestQuestion, TestSubmission
 from ..ratelimit import rate_limit
-from ..schemas import ConsentRequest, EventCreate, EventFinish, EventOut, HeartbeatIn, PublicSessionOut, PublicTestOut, TestSubmissionOut, TestSubmit
+from ..schemas import ConsentRequest, EventCreate, EventFinish, EventOut, HeartbeatIn, PublicSessionOut, PublicTestOut, TestSubmissionOut, TestSubmit, VerificationConfirm, VerificationSentOut
 from ..services import audit, parse_uuid, request_ip
 from ..signals import needs_review, record_heartbeat, severity_for
+from ..verification import CODE_TTL_SECONDS, MAX_ATTEMPTS, RESEND_COOLDOWN_SECONDS, check_code, issue_code, mask_email
 from ..vision import detect_objects
 from .signaling import broadcast_to_role
 from .tests import grade_answers
@@ -61,6 +63,8 @@ def to_public_out(session: InterviewSession) -> PublicSessionOut:
         require_screen_share=session.require_screen_share,
         expires_at=session.expires_at,
         consented_at=session.consented_at,
+        verification_required=session.verify_candidate_email and session.verified_at is None,
+        candidate_email_hint=mask_email(session.candidate.email) if session.verify_candidate_email and session.verified_at is None and session.candidate.email else None,
         test=PublicTestOut.from_test(session.test) if session.test else None,
     )
 
@@ -86,6 +90,52 @@ def consent(token: str, payload: ConsentRequest, request: Request, db: Session =
         audit(db, None, request, "candidate.consent.accepted", "interview_session", session.id, session.id)
     if session.status == SessionStatus.scheduled:
         session.status = SessionStatus.consented
+    db.commit()
+    return to_public_out(session)
+
+
+@router.post("/{token}/verification", response_model=VerificationSentOut, dependencies=[Depends(rate_limit("verify-send", 12, 600, "token"))])
+def send_verification(token: str, request: Request, db: Session = Depends(get_db)):
+    """Email a one-time code to the invited address. Sent inline so a delivery failure is reported, not hidden."""
+    session = public_session(db, token)
+    if session.status == SessionStatus.expired:
+        raise HTTPException(status_code=410, detail="Interview link has expired")
+    if session.status == SessionStatus.completed:
+        raise HTTPException(status_code=409, detail="Session is already completed")
+    if session.verified_at:
+        raise HTTPException(status_code=409, detail="Email is already verified")
+    code = issue_code(session)
+    db.commit()
+    try:
+        mailer.send_verification_code(session, code)
+    except Exception:
+        mailer.logger.exception("Verification email for session %s could not be delivered", session.id)
+        session.verification_code_hash = None
+        session.verification_sent_at = None  # nothing arrived, so the candidate may retry straight away
+        audit(db, None, request, "candidate.verification.code_failed", "interview_session", session.id, session.id)
+        db.commit()
+        raise HTTPException(status_code=502, detail="The code could not be sent. Try again or ask the host.") from None
+    audit(db, None, request, "candidate.verification.code_sent", "interview_session", session.id, session.id, {"sends": session.verification_sends})
+    db.commit()
+    return VerificationSentOut(email_hint=mask_email(session.candidate.email or ""), expires_in_seconds=CODE_TTL_SECONDS, resend_after_seconds=RESEND_COOLDOWN_SECONDS)
+
+
+@router.post("/{token}/verification/confirm", response_model=PublicSessionOut, dependencies=[Depends(rate_limit("verify-confirm", 30, 600, "token"))])
+def confirm_verification(token: str, payload: VerificationConfirm, request: Request, db: Session = Depends(get_db)):
+    session = public_session(db, token)
+    if session.status in (SessionStatus.expired, SessionStatus.completed):
+        raise HTTPException(status_code=409, detail="Session is not open for verification")
+    if session.verified_at:
+        return to_public_out(session)  # idempotent: replaying a correct code changes nothing
+    accepted = check_code(session, payload.code)  # raises when no usable code exists
+    if not accepted:
+        locked = session.verification_attempts >= MAX_ATTEMPTS
+        if locked:
+            audit(db, None, request, "candidate.verification.locked", "interview_session", session.id, session.id)
+        db.commit()
+        detail = "Too many wrong attempts. Request a new code." if locked else "The code is incorrect"
+        raise HTTPException(status_code=429 if locked else 422, detail=detail)
+    audit(db, None, request, "candidate.verification.succeeded", "interview_session", session.id, session.id)
     db.commit()
     return to_public_out(session)
 
@@ -118,6 +168,8 @@ def start(token: str, request: Request, db: Session = Depends(get_db)):
         raise HTTPException(status_code=409, detail="Session is already completed")
     if not session.consented_at:
         raise HTTPException(status_code=403, detail="Consent is required before starting")
+    if session.verify_candidate_email and not session.verified_at:
+        raise HTTPException(status_code=403, detail="Email verification is required before starting")
     session.started_at = session.started_at or datetime.now(timezone.utc)
     session.status = SessionStatus.in_progress
     if session.monitored_seconds is None:  # from now on this call has a coverage figure

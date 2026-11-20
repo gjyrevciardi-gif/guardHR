@@ -24,7 +24,7 @@ const emptyQuestion = (formMode = false): DraftQuestion => ({
 
 export default function NewTestPage() {
   const [formMode, setFormMode] = useState(false);
-  const [title, setTitle] = useState("NemoGuardHR test");
+  const [title, setTitle] = useState("Test i ri");
   const [description, setDescription] = useState("");
   const [questions, setQuestions] = useState<DraftQuestion[]>([emptyQuestion(false)]);
   const [created, setCreated] = useState<Test | null>(null);
@@ -37,7 +37,7 @@ export default function NewTestPage() {
 
   function setMode(nextFormMode: boolean) {
     setFormMode(nextFormMode);
-    setTitle(nextFormMode ? "Event signup form" : "NemoGuardHR test");
+    setTitle(nextFormMode ? "Formular regjistrimi" : "Test i ri");
     setQuestions((current) => current.map((question) => ({
       ...question,
       correct_option_index: nextFormMode || question.question_type === "short_text" ? null : question.correct_option_index ?? 0,
@@ -83,7 +83,7 @@ export default function NewTestPage() {
       formData.append("question_count", String(questionCount));
       setCreated(await api<Test>("/tests/generate-from-file", { method: "POST", body: formData }));
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Nuk u gjenerua testi nga dokumenti");
+      setError(err instanceof Error ? err.message : "Testi nuk u krijua nga dokumenti");
     } finally {
       setUploading(false);
     }
@@ -108,7 +108,7 @@ export default function NewTestPage() {
       };
       setCreated(await api<Test>("/tests", { method: "POST", body: JSON.stringify(payload) }));
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Testi/formulari nuk u krijua");
+      setError(err instanceof Error ? err.message : "Testi ose formulari nuk u krijua");
     } finally {
       setLoading(false);
     }
@@ -117,26 +117,26 @@ export default function NewTestPage() {
   return (
     <AppShell>
       <Link href="/tests" className="mb-6 inline-flex items-center gap-2 text-sm font-semibold text-muted hover:text-teal min-h-11">
-        <ArrowLeft size={17} /> Testet & formularet
+        <ArrowLeft size={17} aria-hidden="true" /> Testet dhe formularët
       </Link>
 
       <div className="mx-auto max-w-4xl">
-        <h1 className="text-3xl font-black">{formMode ? "Krijo formular publik" : "Krijo test me zgjedhje"}</h1>
+        <h1 className="text-3xl font-bold">{formMode ? "Krijo formular publik" : "Krijo test me zgjedhje të shumëfishta"}</h1>
         <p className="mt-2 text-muted">
-          Krijo test per call ose formular standalone qe e shperndan me link.
+          Krijo një test për call ose një formular të pavarur që e ndan me link.
         </p>
 
         {created ? (
           <section className="card mt-8 p-8 text-center">
-            <h2 className="text-2xl font-black">{created.form_mode ? "Formulari u krijua" : "Testi u krijua"}</h2>
+            <h2 className="text-2xl font-bold">{created.form_mode ? "Formulari u krijua" : "Testi u krijua"}</h2>
             <p className="mt-2 text-muted">{created.title} - {created.question_count} pyetje</p>
             <div className="mt-6 flex flex-wrap justify-center gap-3">
               <Link href={`/tests/${created.id}`} className="btn-primary">
-                <Eye size={18} /> Review / Edit / Share
+                <Eye size={18} aria-hidden="true" /> Shqyrto, ndrysho ose ndaj
               </Link>
               <a href={`/forms/${created.public_token}`} target="_blank" className="btn-secondary">Hap linkun publik</a>
               <button onClick={() => { setCreated(null); setQuestions([emptyQuestion(formMode)]); }} className="btn-secondary">
-                Krijo tjeter
+                Krijo një tjetër
               </button>
             </div>
           </section>
@@ -147,18 +147,18 @@ export default function NewTestPage() {
                 <button
                   type="button"
                   onClick={() => setMode(false)}
-                  className={`rounded-3xl border p-5 text-left transition ${!formMode ? "border-shell-500 bg-shell-100 text-navy" : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"}`}
+                  className={`rounded-xl border p-5 text-left transition ${!formMode ? "border-shell-500 bg-shell-100 text-navy" : "border-line bg-white text-slate-600 hover:bg-shell-100"}`}
                 >
-                  <p className="font-black">Test me score</p>
-                  <p className="mt-2 text-sm leading-6">Per pyetje me pergjigje te sakta, score dhe review pas submission.</p>
+                  <p className="font-bold">Test me pikë</p>
+                  <p className="mt-2 text-sm leading-6">Për pyetje me përgjigje të sakta: llogaritet rezultati dhe e shqyrton pas dorëzimit.</p>
                 </button>
                 <button
                   type="button"
                   onClick={() => setMode(true)}
-                  className={`rounded-3xl border p-5 text-left transition ${formMode ? "border-shell-500 bg-shell-100 text-navy" : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"}`}
+                  className={`rounded-xl border p-5 text-left transition ${formMode ? "border-shell-500 bg-shell-100 text-navy" : "border-line bg-white text-slate-600 hover:bg-shell-100"}`}
                 >
-                  <p className="font-black">Formular publik</p>
-                  <p className="mt-2 text-sm leading-6">Per event signup, feedback, pjesemarrje, survey ose pyetje te lira.</p>
+                  <p className="font-bold">Formular publik</p>
+                  <p className="mt-2 text-sm leading-6">Për regjistrime, mendime, pjesëmarrje, pyetësorë ose pyetje me përgjigje të lirë.</p>
                 </button>
               </div>
             </section>
@@ -167,11 +167,11 @@ export default function NewTestPage() {
               <section className="card mt-6 p-7">
                 <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
                   <div className="flex items-center gap-3">
-                    <span className="rounded-2xl bg-teal/10 p-3 text-teal"><FileUp /></span>
+                    <span className="rounded-xl bg-teal/10 p-3 text-teal"><FileUp aria-hidden="true" /></span>
                     <div>
-                      <h2 className="text-xl font-black">Auto-generate nga dokumenti</h2>
+                      <h2 className="text-xl font-bold">Krijo pyetjet nga një dokument</h2>
                       <p className="mt-1 text-sm text-muted">
-                        Ngarko PDF, DOCX, TXT ose MD. Pyetjet importohen/gjenerohen automatikisht.
+                        Ngarko PDF, DOCX, TXT ose MD. Pyetjet nxirren automatikisht nga teksti.
                       </p>
                     </div>
                   </div>
@@ -181,7 +181,7 @@ export default function NewTestPage() {
                       <input className="input mt-1 w-28" type="number" min={2} max={50} value={questionCount} onChange={(event) => setQuestionCount(Number(event.target.value))} />
                     </label>
                     <label className="btn-primary cursor-pointer">
-                      <FileUp size={17} /> {uploading ? "Duke gjeneruar..." : "Ngarko dokument"}
+                      <FileUp size={17} aria-hidden="true" /> {uploading ? "Duke krijuar…" : "Ngarko dokument"}
                       <input
                         type="file"
                         className="hidden"
@@ -192,8 +192,8 @@ export default function NewTestPage() {
                     </label>
                   </div>
                 </div>
-                <p className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 p-3 text-xs leading-5 text-amber-800">
-                  Nese PDF-i nuk ka answer key, kontrollo pergjigjet ne Review/Edit para se ta perdoresh ne call.
+                <p className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs leading-5 text-amber-900">
+                  Nëse dokumenti nuk ka çelës përgjigjesh, kontrollo përgjigjet e sakta te faqja e testit para se ta përdorësh në call.
                 </p>
               </section>
             )}
@@ -205,22 +205,22 @@ export default function NewTestPage() {
               </div>
 
               <div>
-                <label htmlFor="test-description" className="label">Pershkrimi / instruksionet</label>
+                <label htmlFor="test-description" className="label">Përshkrimi ose udhëzimet</label>
                 <textarea id="test-description" className="input min-h-24" value={description} onChange={(event) => setDescription(event.target.value)} />
               </div>
 
               <div className="space-y-4">
                 {questions.map((question, questionIndex) => (
-                  <section key={questionIndex} className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4">
+                  <section key={questionIndex} className="rounded-xl border border-line bg-shell-100 p-4">
                     <div className="flex flex-wrap items-center justify-between gap-3">
-                      <h2 className="font-black">Pyetja {questionIndex + 1}</h2>
+                      <h2 className="font-bold">Pyetja {questionIndex + 1}</h2>
                       <div className="flex items-center gap-2">
                         <select aria-label={`Lloji i pyetjes ${questionIndex + 1}`} className="input min-h-11 py-2" value={question.question_type} onChange={(event) => changeQuestionType(questionIndex, event.target.value as QuestionType)}>
-                          <option value="multiple_choice">Multiple choice</option>
-                          <option value="short_text">Short text</option>
+                          <option value="multiple_choice">Zgjedhje e shumëfishtë</option>
+                          <option value="short_text">Përgjigje e shkurtër</option>
                         </select>
                         {questions.length > 1 && (
-                          <button type="button" onClick={() => setQuestions((current) => current.filter((_, i) => i !== questionIndex))} className="flex h-11 w-11 items-center justify-center rounded-full text-red-500 hover:bg-red-50" aria-label={`Fshij pyetjen ${questionIndex + 1}`}>
+                          <button type="button" onClick={() => setQuestions((current) => current.filter((_, i) => i !== questionIndex))} className="flex h-11 w-11 items-center justify-center rounded-xl text-red-700 hover:bg-red-50" aria-label={`Fshij pyetjen ${questionIndex + 1}`}>
                             <Trash2 size={17} />
                           </button>
                         )}
@@ -239,31 +239,31 @@ export default function NewTestPage() {
                                 <label className="flex h-11 w-11 shrink-0 cursor-pointer items-center justify-center"><input type="radio" aria-label={`Opsioni ${optionIndex + 1} është përgjigjja e saktë`} name={`correct-${questionIndex}`} checked={question.correct_option_index === optionIndex} onChange={() => updateQuestion(questionIndex, { correct_option_index: optionIndex })} className="h-6 w-6 accent-teal" /></label>
                               )}
                               <input className="input" aria-label={`Opsioni ${optionIndex + 1}`} placeholder={`Opsioni ${optionIndex + 1}`} value={option} onChange={(event) => updateOption(questionIndex, optionIndex, event.target.value)} required />
-                              <button type="button" onClick={() => removeOption(questionIndex, optionIndex)} className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-muted hover:bg-red-50 hover:text-red-500" aria-label={`Fshij opsionin ${optionIndex + 1}`}>
+                              <button type="button" onClick={() => removeOption(questionIndex, optionIndex)} className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-muted hover:bg-red-50 hover:text-red-700" aria-label={`Fshij opsionin ${optionIndex + 1}`}>
                                 <Trash2 size={16} />
                               </button>
                             </div>
                           ))}
                         </div>
                         <button type="button" onClick={() => updateQuestion(questionIndex, { options: [...question.options, ""], correct_option_index: question.correct_option_index ?? (formMode ? null : 0) })} className="btn-secondary mt-3" disabled={question.options.length >= 8}>
-                          <Plus size={16} /> Shto opsion
+                          <Plus size={16} aria-hidden="true" /> Shto opsion
                         </button>
                       </>
                     ) : (
-                      <p className="mt-4 rounded-2xl bg-white p-3 text-sm text-muted">Pjesemarresi do shkruaje pergjigje te lire.</p>
+                      <p className="mt-4 rounded-xl bg-white p-3 text-sm text-muted">Pjesëmarrësi do të shkruajë përgjigje të lirë.</p>
                     )}
                   </section>
                 ))}
               </div>
 
               <button type="button" onClick={() => setQuestions((current) => [...current, emptyQuestion(formMode)])} className="btn-secondary">
-                <Plus size={16} /> Shto pyetje
+                <Plus size={16} aria-hidden="true" /> Shto pyetje
               </button>
 
-              {error && <p className="rounded-xl bg-red-50 p-3 text-sm text-red-700">{error}</p>}
+              {error && <p role="alert" className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</p>}
 
               <button className="btn-primary w-full" disabled={loading}>
-                <Save size={18} /> {loading ? "Duke ruajtur..." : formMode ? "Ruaj formularin" : "Ruaj testin"}
+                <Save size={18} aria-hidden="true" /> {loading ? "Duke ruajtur…" : formMode ? "Ruaj formularin" : "Ruaj testin"}
               </button>
             </form>
           </>
