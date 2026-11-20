@@ -57,7 +57,7 @@ The credential is visible to anyone who opens a call link, so use short-lived TU
 
 ## Upgrading from the previous release
 
-Migration `0003` only adds an index on `audit_logs(session_id, action, created_at)` and can be downgraded. Dependency pins moved (FastAPI 0.165 / Starlette 1.x, PyJWT 2.15, python-multipart 0.0.31, pypdf 6.21, Next.js 15.5.29); rebuild both images rather than reusing cached layers. Calls abandoned before the upgrade are closed by the first purge after the API starts.
+Migration `0004` adds `integrity_events.severity` (backfilled from the event type) and the heartbeat columns on `interview_sessions`; it is additive and downgradable, existing review statuses are not recomputed, and calls that began earlier report coverage as unknown rather than as a failure (see `docs/signals.md`). Migration `0003` only adds an index on `audit_logs(session_id, action, created_at)` and can be downgraded. Dependency pins moved (FastAPI 0.165 / Starlette 1.x, PyJWT 2.15, python-multipart 0.0.31, pypdf 6.21, Next.js 15.5.29); rebuild both images rather than reusing cached layers. Calls abandoned before the upgrade are closed by the first purge after the API starts.
 
 ## Known limits (deliberate)
 

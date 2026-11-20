@@ -17,6 +17,7 @@ type LiveEvent = {
   started_at: string;
   duration_seconds: number | null;
   confidence_score: number | null;
+  severity?: "info" | "low" | "medium" | "high";
   metadata: Record<string, unknown>;
 };
 
@@ -230,11 +231,18 @@ export function MeetingRoom({ token, role, session, onFinish }: Props) {
       if (message.type === "integrity-event" && role === "hr") {
         const event = message.event as LiveEvent;
         setLiveEvents((current) => [event, ...current.filter((item) => item.id !== event.id)].slice(0, 20));
-        pushRoomAlert({
-          id: event.id,
-          title: hrLiveEventTitle(event),
-          message: hrLiveEventDetails(event),
-        });
+        if (event.severity !== "info") {
+          pushRoomAlert({
+            id: event.id,
+            title: hrLiveEventTitle(event),
+            message: hrLiveEventDetails(event),
+          });
+        }
+      }
+      if (message.type === "integrity-event-closed" && role === "hr") {
+        const event = message.event as LiveEvent;
+        setLiveEvents((current) => current.map((item) => (item.id === event.id ? event : item)));
+        pushRoomAlert({ id: `${event.id}-closed`, title: "Pjesëmarrësi u kthye në faqe", message: `Mungoi ${Math.round(event.duration_seconds ?? 0)} sekonda` });
       }
 
       if ((message.type === "peers" && role === "hr" && message.roles.length > 0) || (message.type === "peer-joined" && role === "hr")) {

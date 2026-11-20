@@ -121,3 +121,17 @@ def test_connection_attempts_are_rate_limited(client, settings, monkeypatch):
     for _ in range(30):
         assert_rejected(client, room_url(UNKNOWN, "candidate"), signaling.NOT_FOUND)
     assert_rejected(client, room_url(UNKNOWN, "candidate"), signaling.RATE_LIMITED)
+
+
+def test_closing_an_episode_tells_the_host_the_participant_returned(client, hr, started_session):
+    token = started_session["public_token"]
+    with client.websocket_connect(room_url(token, "hr"), headers=cookie_for(client, hr)) as host:
+        host.receive_json()
+        with client.websocket_connect(room_url(token, "candidate")) as candidate:
+            candidate.receive_json()
+            host.receive_json()
+            opened = client.post(f"/api/public/sessions/{token}/events", json=event_payload(duration_seconds=None, ended_at=None)).json()
+            assert host.receive_json()["type"] == "integrity-event"
+            assert client.patch(f"/api/public/sessions/{token}/events/{opened['id']}", json={"ended_at": event_payload()["started_at"], "duration_seconds": 42}).status_code == 200
+            message = host.receive_json()
+            assert message["type"] == "integrity-event-closed" and message["event"]["id"] == opened["id"] and message["event"]["duration_seconds"] == 42

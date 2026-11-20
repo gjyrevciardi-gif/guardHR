@@ -8,7 +8,8 @@ import { AppShell } from "@/components/AppShell";
 import { StatusBadge } from "@/components/StatusBadge";
 import { OfflineBanner } from "@/components/OfflineBanner";
 import { ApiError, api } from "@/lib/api";
-import { dateTime, eventLabels } from "@/lib/format";
+import { MonitoringCard } from "@/components/MonitoringCard";
+import { dateTime, eventLabels, severityLabels, severityStyles } from "@/lib/format";
 import { InterviewSession } from "@/lib/types";
 
 export default function SessionDetailPage() {
@@ -37,7 +38,7 @@ export default function SessionDetailPage() {
       const nextIds = new Set(data.events.map((event) => event.id));
       if (initializedEvents.current) {
         data.events
-          .filter((event) => !knownEventIds.current.has(event.id))
+          .filter((event) => !knownEventIds.current.has(event.id) && event.severity !== "info")
           .forEach((event) => {
             const label = eventLabels[event.event_type] || event.event_type;
             pushAlert({
@@ -93,6 +94,8 @@ export default function SessionDetailPage() {
   if (!session) return <AppShell>{offline && <OfflineBanner />}<p>Duke ngarkuar...</p></AppShell>;
 
   const candidateLink = `${window.location.origin}/join/${session.public_token}`;
+  const severityCounts = session.events.reduce<Record<string, number>>((counts, event) => ({ ...counts, [event.severity]: (counts[event.severity] || 0) + 1 }), {});
+  const monitoringIsWeak = session.monitoring.quality === "none" || session.monitoring.quality === "partial";
 
   return (
     <AppShell>
@@ -124,7 +127,7 @@ export default function SessionDetailPage() {
         <div>
           <div className="flex flex-wrap items-center gap-3">
             <h1 className="text-3xl font-black">{session.candidate.full_name}</h1>
-            <StatusBadge status={session.review_status} />
+            <StatusBadge status={session.review_status} signalLevel={session.signal_level} monitoring={session.monitoring} />
           </div>
           <p className="mt-2 text-slate-500">{session.title} - {session.candidate.email || "Pa email"}</p>
         </div>
@@ -148,11 +151,27 @@ export default function SessionDetailPage() {
             </div>
             <span className="rounded-lg bg-slate-100 px-3 py-2 text-sm font-semibold">{session.events.length} evente</span>
           </div>
+          {session.events.length > 0 && (
+            <p className="mt-3 flex flex-wrap gap-2 text-xs" aria-label="Përmbledhje sipas rëndësisë">
+              {(["high", "medium", "low", "info"] as const).filter((level) => severityCounts[level]).map((level) => (
+                <span key={level} className={`rounded-full px-2.5 py-1 font-semibold ring-1 ring-inset ${severityStyles[level]}`}>{severityLabels[level]}: {severityCounts[level]}</span>
+              ))}
+            </p>
+          )}
 
           {session.events.length === 0 ? (
             <div className="mt-8 rounded-xl border border-dashed border-slate-300 p-10 text-center">
-              <p className="font-semibold text-emerald-700">No events detected</p>
-              <p className="mt-1 text-sm text-slate-500">Nuk ka activity signals te regjistruara ne kete call.</p>
+              {monitoringIsWeak ? (
+                <>
+                  <p className="font-semibold text-amber-800">Asnjë sinjal i regjistruar, por monitorimi nuk ishte i plotë</p>
+                  <p className="mt-1 text-sm text-slate-600">Kjo nuk do të thotë se nuk ndodhi asgjë. Shih «Besueshmëria e monitorimit».</p>
+                </>
+              ) : (
+                <>
+                  <p className="font-semibold text-emerald-700">No events detected</p>
+                  <p className="mt-1 text-sm text-slate-500">Nuk ka activity signals te regjistruara ne kete call.</p>
+                </>
+              )}
             </div>
           ) : (
             <ol className="relative mt-8 border-l border-slate-200">
@@ -160,7 +179,10 @@ export default function SessionDetailPage() {
                 <li key={item.id} className="mb-7 ml-6">
                   <span className="absolute -left-2 mt-1.5 h-4 w-4 rounded-full border-4 border-white bg-teal" />
                   <div className="flex flex-wrap items-center justify-between gap-2">
-                    <h3 className="font-semibold">{eventLabels[item.event_type] || item.event_type}</h3>
+                    <h3 className="flex flex-wrap items-center gap-2 font-semibold">
+                      {eventLabels[item.event_type] || item.event_type}
+                      <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ring-1 ring-inset ${severityStyles[item.severity]}`}>{severityLabels[item.severity]}</span>
+                    </h3>
                     <time className="text-xs text-slate-500">{dateTime(item.started_at)}</time>
                   </div>
                   <div className="mt-2 flex gap-4 text-xs text-slate-500">
@@ -174,6 +196,7 @@ export default function SessionDetailPage() {
         </section>
 
         <div className="space-y-6">
+          <MonitoringCard monitoring={session.monitoring} status={session.status} />
           <section className="card p-6">
             <h2 className="font-black">Detajet e call-it</h2>
             <dl className="mt-4 space-y-3 text-sm">
