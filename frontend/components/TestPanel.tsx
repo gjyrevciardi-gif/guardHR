@@ -51,6 +51,7 @@ export function CandidateTestPanel({ token, test }: { token: string; test: Publi
             <p className="text-sm font-semibold">{question.position}. {question.prompt}</p>
             {question.question_type === "short_text" ? (
               <textarea
+                aria-label={`Përgjigjja për pyetjen ${question.position}`}
                 className="mt-3 min-h-24 w-full rounded-xl border border-white/10 bg-white/10 p-3 text-sm text-white outline-none placeholder:text-slate-500 focus:border-teal"
                 placeholder="Shkruaj pergjigjen..."
                 value={typeof answers[question.id] === "string" ? answers[question.id] : ""}
@@ -62,7 +63,7 @@ export function CandidateTestPanel({ token, test }: { token: string; test: Publi
                   <label key={index} className="flex cursor-pointer items-start gap-2 rounded-lg bg-white/5 p-2 text-sm text-slate-200 hover:bg-white/10">
                     <input
                       type="radio"
-                      className="mt-1 accent-teal"
+                      className="mt-0.5 h-6 w-6 shrink-0 accent-teal"
                       name={question.id}
                       checked={answers[question.id] === index}
                       onChange={() => setAnswers((current) => ({ ...current, [question.id]: index }))}

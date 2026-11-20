@@ -40,7 +40,7 @@ export default function TestsPage() {
         <div>
           <p className="text-sm font-bold uppercase tracking-[0.24em] text-teal">Biblioteka e testeve</p>
           <h1 className="mt-2 text-3xl font-black text-navy">Testet & formularet</h1>
-          <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-500">
+          <p className="mt-2 max-w-2xl text-sm leading-6 text-muted">
             Ketu i sheh testet/formularet, i editon pyetjet, merr link publik dhe hap review per pergjigjet e pjesemarresve.
           </p>
         </div>
@@ -52,29 +52,29 @@ export default function TestsPage() {
       <section className="card mt-8 p-5">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="relative">
-            <Search className="absolute left-3 top-3 text-slate-400" size={18} />
+            <Search className="absolute left-3 top-3 text-muted" size={18} />
             <input
-              className="input pl-10 sm:w-80"
+              aria-label="Kërko test" className="input pl-10 sm:w-80"
               placeholder="Kërko test…"
               value={query}
               onChange={(event) => setQuery(event.target.value)}
             />
           </div>
-          <p className="text-sm font-semibold text-slate-500">
+          <p className="text-sm font-semibold text-muted">
             {filtered.length} nga {tests.length} teste
           </p>
         </div>
       </section>
 
       {loading ? (
-        <section className="card mt-6 p-10 text-center text-slate-500">Duke ngarkuar testet...</section>
+        <section className="card mt-6 p-10 text-center text-muted">Duke ngarkuar testet...</section>
       ) : error ? (
         <section role="alert" className="card mt-6 p-10 text-center text-red-700">{error}</section>
       ) : filtered.length === 0 ? (
         <section className="card mt-6 p-10 text-center">
           <ClipboardList className="mx-auto text-teal" size={34} />
           <h2 className="mt-4 text-xl font-black">Nuk ka teste ende</h2>
-          <p className="mt-2 text-sm text-slate-500">Krijo test me score ose formular publik per event/survey.</p>
+          <p className="mt-2 text-sm text-muted">Krijo test me score ose formular publik per event/survey.</p>
           <Link href="/tests/new" className="btn-primary mt-5">Krijo te parin</Link>
         </section>
       ) : (
@@ -84,7 +84,7 @@ export default function TestsPage() {
               <div className="flex items-start justify-between gap-4">
                 <div>
                   <h2 className="text-xl font-black text-navy">{test.title}</h2>
-                  <p className="mt-2 line-clamp-2 text-sm leading-6 text-slate-500">
+                  <p className="mt-2 line-clamp-2 text-sm leading-6 text-muted">
                     {test.description || "Pa pershkrim"}
                   </p>
                 </div>
@@ -94,7 +94,7 @@ export default function TestsPage() {
               </div>
               <div className="mt-6 flex flex-wrap items-center justify-between gap-3 text-sm">
                 <span className="rounded-full bg-shell-100 px-3 py-1 font-bold text-teal">{test.form_mode ? "Formular" : "Test"} - {test.question_count} pyetje</span>
-                <span className="text-slate-500">{dateTime(test.created_at)}</span>
+                <span className="text-muted">{dateTime(test.created_at)}</span>
               </div>
               <div className="mt-5 flex items-center gap-2 text-sm font-bold text-teal">
                 Review / Edit <ArrowRight className="transition group-hover:translate-x-1" size={17} />
