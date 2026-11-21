@@ -1,13 +1,17 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { AlertTriangle, Camera, CameraOff, Eye, Maximize, Mic, MicOff, MonitorUp, PhoneOff, ShieldCheck, Users, X } from "lucide-react";
+import Link from "next/link";
+import { AlertTriangle, ArrowLeft, Camera, CameraOff, EyeOff, Maximize, Mic, MicOff, MonitorUp, PanelRightClose, PanelRightOpen, PhoneOff, ShieldCheck, Users, X } from "lucide-react";
+import { HostRail } from "@/components/HostRail";
 import { InterviewMonitor } from "@/components/InterviewMonitor";
+import { Lobby } from "@/components/Lobby";
 import { CandidateTestPanel } from "@/components/TestPanel";
-import { api, wsUrl } from "@/lib/api";
-import { EventType, RoomSession } from "@/lib/types";
-import { dateTime, eventLabels } from "@/lib/format";
 import { Wordmark } from "@/components/Wordmark";
+import { api, wsUrl } from "@/lib/api";
+import { clock, dateTime, eventLabels, parseApiDate } from "@/lib/format";
+import { monitorHealth } from "@/lib/monitor";
+import { EventType, InterviewSession, RoomSession } from "@/lib/types";
 
 type Role = "candidate" | "hr";
 type RemoteTarget = "camera" | "screen";
@@ -26,7 +30,12 @@ interface Props {
   role: Role;
   session: RoomSession;
   onFinish?: () => void;
+  /** Host only: the call's id (for the review rail) and where "back" leads. */
+  sessionId?: string;
+  backHref?: string;
 }
+
+type TileId = "remoteCamera" | "remoteScreen" | "localCamera" | "localScreen";
 
 // Used only if /rtc-config cannot be reached; the server-provided list (STUN/TURN) normally replaces it.
 const fallbackRtcConfig: RTCConfiguration = {
@@ -79,7 +88,7 @@ function hrLiveEventDetails(event: LiveEvent) {
   return `${eventLabels[event.event_type] || event.event_type} · ${duration}${confidence}${metadata.length ? ` · ${metadata.join(" · ")}` : ""} · ${dateTime(event.started_at)}`;
 }
 
-export function MeetingRoom({ token, role, session, onFinish }: Props) {
+export function MeetingRoom({ token, role, session, onFinish, sessionId, backHref }: Props) {
   const localVideoRef = useRef<HTMLVideoElement>(null);
   const localScreenRef = useRef<HTMLVideoElement>(null);
   const remoteVideoRef = useRef<HTMLVideoElement>(null);
@@ -100,6 +109,7 @@ export function MeetingRoom({ token, role, session, onFinish }: Props) {
   const [remoteAudioStream, setRemoteAudioStream] = useState<MediaStream | null>(null);
   const [active, setActive] = useState(false);
   const [peerPresent, setPeerPresent] = useState(false);
+  const [verified, setVerified] = useState(!session.verification_required);
   const [cameraEnabled, setCameraEnabled] = useState(true);
   const [micEnabled, setMicEnabled] = useState(true);
   const [devices, setDevices] = useState<MediaDeviceInfo[]>([]);
@@ -108,7 +118,11 @@ export function MeetingRoom({ token, role, session, onFinish }: Props) {
   const [error, setError] = useState("");
   const [lastSignal, setLastSignal] = useState("");
   const [roomAlerts, setRoomAlerts] = useState<Array<{ id: string; title: string; message: string }>>([]);
-  const [liveEvents, setLiveEvents] = useState<LiveEvent[]>([]);
+  const [hostData, setHostData] = useState<InterviewSession | null>(null);
+  const [joinedAt, setJoinedAt] = useState<string | null>(null);
+  const [focusChoice, setFocusChoice] = useState<TileId | null>(null);
+  const [focusMode, setFocusMode] = useState(false);
+  const [now, setNow] = useState(() => Date.now());
   const localSpeaking = useSpeaking(localStream, micEnabled);
   const remoteSpeaking = useSpeaking(remoteAudioStream, true);
   const mediaBlockedByBrowser = typeof window !== "undefined" && !window.isSecureContext;
@@ -230,7 +244,6 @@ export function MeetingRoom({ token, role, session, onFinish }: Props) {
       if (message.type === "peer-joined" && message.role !== role) setPeerPresent(true);
       if (message.type === "integrity-event" && role === "hr") {
         const event = message.event as LiveEvent;
-        setLiveEvents((current) => [event, ...current.filter((item) => item.id !== event.id)].slice(0, 20));
         if (event.severity !== "info") {
           pushRoomAlert({
             id: event.id,
@@ -241,7 +254,6 @@ export function MeetingRoom({ token, role, session, onFinish }: Props) {
       }
       if (message.type === "integrity-event-closed" && role === "hr") {
         const event = message.event as LiveEvent;
-        setLiveEvents((current) => current.map((item) => (item.id === event.id ? event : item)));
         pushRoomAlert({ id: `${event.id}-closed`, title: "Pjesëmarrësi u kthye në faqe", message: `Mungoi ${Math.round(event.duration_seconds ?? 0)} sekonda` });
       }
 
@@ -274,7 +286,9 @@ export function MeetingRoom({ token, role, session, onFinish }: Props) {
 
       rtcConfigRef.current = await api<RTCConfiguration>("/rtc-config", {}, false).catch(() => fallbackRtcConfig);
       setActive(true);
+      setJoinedAt(new Date().toISOString());
       connectSignaling();
+      void startCamera();
       if (role === "candidate") await roomRef.current?.requestFullscreen().catch(() => undefined);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Monitorimi nuk mund të nisej");
@@ -407,23 +421,29 @@ export function MeetingRoom({ token, role, session, onFinish }: Props) {
 
   useEffect(() => {
     void attachStream(localVideoRef.current, localStream);
-  }, [localStream]);
+  }, [localStream, active]);
 
   useEffect(() => {
     void attachStream(localScreenRef.current, screenStream);
-  }, [screenStream]);
+  }, [screenStream, active]);
 
   useEffect(() => {
     void attachStream(remoteVideoRef.current, remoteCameraStream);
-  }, [remoteCameraStream]);
+  }, [remoteCameraStream, active]);
 
   useEffect(() => {
     void attachStream(remoteScreenRef.current, remoteScreenStream);
-  }, [remoteScreenStream]);
+  }, [remoteScreenStream, active]);
 
   useEffect(() => {
     void attachStream(remoteAudioRef.current, remoteAudioStream);
-  }, [remoteAudioStream]);
+  }, [remoteAudioStream, active]);
+
+  useEffect(() => {
+    if (!active) return;
+    const timer = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, [active]);
 
   useEffect(() => {
     void refreshDevices();
@@ -441,145 +461,215 @@ export function MeetingRoom({ token, role, session, onFinish }: Props) {
     };
   }, []);
 
+  const hostView = role === "hr";
+  const startedAt = hostData?.started_at ?? joinedAt;
+  const elapsed = startedAt ? Math.max(0, (now - parseApiDate(startedAt).getTime()) / 1000) : 0;
+  const health = hostData ? monitorHealth(hostData.monitoring, hostData.status, now) : null;
+  const connected = peerPresent || !!remoteCameraStream;
+  const otherName = hostView ? session.candidate_name : "Host-i";
+  const showRail = !hostView || !focusMode;
+
+  const tiles: Record<TileId, { label: string; videoRef: React.RefObject<HTMLVideoElement | null>; hasVideo: boolean; offText: string; speaking: boolean; muted: boolean; screen: boolean; visible: boolean }> = {
+    remoteCamera: { label: otherName, videoRef: remoteVideoRef, hasVideo: !!remoteCameraStream, offText: connected ? "Kamera e fikur" : `Duke pritur ${otherName}…`, speaking: remoteSpeaking, muted: false, screen: false, visible: true },
+    remoteScreen: { label: hostView ? "Ekrani i kandidatit" : "Ekrani i host-it", videoRef: remoteScreenRef, hasVideo: !!remoteScreenStream, offText: "", speaking: false, muted: false, screen: true, visible: !!remoteScreenStream },
+    localCamera: { label: "Ti", videoRef: localVideoRef, hasVideo: !!localStream && cameraEnabled, offText: localStream ? "Kamera e fikur" : "Kamera nuk është hapur", speaking: localSpeaking, muted: true, screen: false, visible: true },
+    localScreen: { label: "Ekrani yt", videoRef: localScreenRef, hasVideo: !!screenStream, offText: "", speaking: false, muted: true, screen: true, visible: !!screenStream },
+  };
+  const order: TileId[] = ["remoteCamera", "remoteScreen", "localCamera", "localScreen"];
+  const autoFocus: TileId = remoteScreenStream ? "remoteScreen" : "remoteCamera";
+  const focused: TileId = focusChoice && tiles[focusChoice].visible ? focusChoice : autoFocus;
+  const thumbs = order.filter((id) => tiles[id].visible && id !== focused);
+
+  const controls = (
+    <div className="flex flex-wrap items-center justify-center gap-2 pt-3" role="toolbar" aria-label="Kontrollet e call-it">
+      <ControlButton on={!!localStream && micEnabled} pressed={!!localStream && micEnabled} onClick={toggleMic} icon={micEnabled && localStream ? <Mic size={18} /> : <MicOff size={18} />} label={!localStream ? "Hap mikrofonin" : micEnabled ? "Mikrofoni" : "Mikrofoni i fikur"} />
+      <ControlButton on={!!localStream && cameraEnabled} pressed={!!localStream && cameraEnabled} onClick={toggleCamera} icon={cameraEnabled && localStream ? <Camera size={18} /> : <CameraOff size={18} />} label={!localStream ? "Hap kamerën" : cameraEnabled ? "Kamera" : "Kamera e fikur"} />
+      <ControlButton on={!!screenStream} highlight pressed={!!screenStream} onClick={screenStream ? stopScreenShare : startScreenShare} icon={<MonitorUp size={18} />} label={screenStream ? "Ndalo ekranin" : "Ndaj ekranin"} />
+      <ControlButton on={false} onClick={() => (document.fullscreenElement ? void document.exitFullscreen() : void roomRef.current?.requestFullscreen())} icon={<Maximize size={18} />} label="Ekran i plotë" />
+      {hostView && (
+        <ControlButton on={focusMode} highlight pressed={focusMode} onClick={() => setFocusMode((value) => !value)} icon={focusMode ? <PanelRightOpen size={18} /> : <PanelRightClose size={18} />} label={focusMode ? "Shfaq panelin" : "Pamje e pastër"} />
+      )}
+      <button type="button" onClick={finish} className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-[#b91c1c] px-4 text-sm font-semibold text-[#ffffff] transition hover:bg-[#a31818]">
+        <PhoneOff size={18} aria-hidden="true" /> <span>{hostView ? "Dil" : "Dil nga call-i"}</span>
+      </button>
+    </div>
+  );
+
   return (
-    <div ref={roomRef} className="dark-ui min-h-screen bg-[#0c1f1a] text-white">
-      {roomAlerts.length > 0 && (
-        <div className="fixed right-5 top-20 z-50 w-[min(380px,calc(100vw-2.5rem))] space-y-3">
-          {roomAlerts.map((alert) => (
-            <div key={alert.id} className="rounded-2xl border border-amber-300/50 bg-[#152f27] p-4 shadow-2xl">
-              <div className="flex items-start gap-3">
-                <span className="rounded-xl bg-amber-300/15 p-2 text-amber-200"><AlertTriangle size={18} /></span>
-                <div className="min-w-0 flex-1">
-                  <p className="font-semibold text-white">{alert.title}</p>
-                  <p className="mt-1 text-sm leading-5 text-slate-300">{alert.message}</p>
+    <div ref={roomRef} className={active ? "bg-stage" : "bg-canvas"}>
+      {!active ? (
+        <Lobby
+          token={token}
+          role={role}
+          session={session}
+          verified={verified}
+          onVerified={() => setVerified(true)}
+          devices={devices}
+          cameraDeviceId={cameraDeviceId}
+          micDeviceId={micDeviceId}
+          onCamera={setCameraDeviceId}
+          onMic={setMicDeviceId}
+          onPermissionGranted={() => void refreshDevices()}
+          onJoin={start}
+          error={error}
+          mediaBlocked={mediaBlockedByBrowser}
+          mediaBlockedMessage={mediaBlockedMessage}
+          backHref={backHref}
+        />
+      ) : (
+        <div className="dark-ui flex min-h-dvh flex-col bg-stage text-stage-ink lg:h-dvh lg:overflow-hidden">
+          <audio ref={remoteAudioRef} autoPlay playsInline className="hidden" />
+          {/* Always mounted: a live region is only announced if it exists before its content changes. */}
+          <div role="status" aria-live="polite" className="pointer-events-none fixed left-1/2 top-16 z-50 w-[min(420px,calc(100vw-2rem))] -translate-x-1/2 space-y-2">
+            {roomAlerts.map((alert) => (
+              <div key={alert.id} className="pointer-events-auto rounded-xl border border-amber-300/40 bg-stage-raised p-3.5 shadow-2xl">
+                <div className="flex items-start gap-3">
+                  <span className="rounded-lg bg-amber-300/15 p-1.5 text-amber-200"><AlertTriangle size={16} aria-hidden="true" /></span>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-semibold text-stage-ink">{alert.title}</p>
+                    <p className="mt-0.5 text-xs leading-5 text-stage-muted">{alert.message}</p>
+                    <p className="mt-1 text-[11px] text-stage-muted">Sinjal për shqyrtim, jo verdikt.</p>
+                  </div>
+                  <button onClick={() => setRoomAlerts((current) => current.filter((item) => item.id !== alert.id))} className="-mr-1.5 -mt-1.5 flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-stage-muted hover:bg-white/10 hover:text-stage-ink" aria-label="Mbyll njoftimin">
+                    <X size={16} aria-hidden="true" />
+                  </button>
                 </div>
-                <button onClick={() => setRoomAlerts((current) => current.filter((item) => item.id !== alert.id))} className="rounded-lg p-1 text-slate-400 hover:bg-white/10 hover:text-white" aria-label="Mbyll njoftimin">
-                  <X size={16} />
-                </button>
               </div>
+            ))}
+          </div>
+
+          <header className="flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-stage-line px-4 py-2.5">
+            {backHref && (
+              <Link href={backHref} className="-ml-2 inline-flex h-11 w-11 items-center justify-center rounded-xl text-stage-muted hover:bg-white/10 hover:text-stage-ink" aria-label="Kthehu te call-i"><ArrowLeft size={18} aria-hidden="true" /></Link>
+            )}
+            <div className="min-w-0">
+              <h1 className="truncate text-sm font-semibold">{session.title}</h1>
+              <p className="truncate text-xs text-stage-muted">{hostView ? `me ${session.candidate_name}` : <Wordmark tone="light" />}</p>
             </div>
-          ))}
+            <time className="rounded-lg bg-white/5 px-2.5 py-1 font-mono text-sm tabular-nums" aria-label="Kohëzgjatja e call-it">{clock(elapsed)}</time>
+            <span className={`inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-semibold ${connected ? "bg-stage-accent/15 text-stage-accent" : "bg-white/10 text-stage-muted"}`}>
+              <span className={`h-2 w-2 rounded-full ${connected ? "bg-stage-accent" : "bg-stage-muted"}`} aria-hidden="true" />
+              {connected ? `${otherName} u lidh` : `Duke pritur ${otherName}`}
+            </span>
+            {hostView && health && (
+              <span className={`inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-semibold ${health.state === "active" ? "bg-stage-accent/15 text-stage-accent" : health.state === "silent" ? "bg-amber-300/15 text-amber-200" : "bg-white/10 text-stage-muted"}`}>
+                {health.state === "silent" ? <AlertTriangle size={12} aria-hidden="true" /> : health.state === "active" ? <ShieldCheck size={12} aria-hidden="true" /> : <EyeOff size={12} aria-hidden="true" />}
+                {health.label}
+              </span>
+            )}
+            {!hostView && (
+              <span className="ml-auto">
+                <InterviewMonitor token={token} videoRef={localVideoRef} active={active} cameraStream={localStream} screenStream={screenStream} onSignal={setLastSignal} />
+              </span>
+            )}
+          </header>
+
+          <div className={`grid min-h-0 flex-1 grid-cols-1 ${showRail ? "lg:grid-cols-[minmax(0,1fr)_380px]" : ""}`}>
+            <main id="main" className="flex min-h-0 flex-col p-3 sm:p-4">
+              {(error || mediaBlockedByBrowser) && (
+                <p role="alert" className="mb-3 rounded-xl border border-amber-300/40 bg-amber-300/10 p-3 text-xs leading-5 text-amber-100">{error || mediaBlockedMessage}</p>
+              )}
+              <div className="relative aspect-video min-h-[240px] w-full flex-1 overflow-hidden rounded-2xl border border-stage-line bg-black [--th:4.5rem] sm:[--th:6.19rem] lg:aspect-auto">
+                {order.map((id) => {
+                  const tile = tiles[id];
+                  const thumbIndex = thumbs.indexOf(id);
+                  return (
+                    <Tile
+                      key={id}
+                      label={tile.label}
+                      videoRef={tile.videoRef}
+                      hasVideo={tile.hasVideo}
+                      offText={tile.offText}
+                      speaking={tile.speaking}
+                      muted={tile.muted}
+                      screen={tile.screen}
+                      mirror={id === "localCamera"}
+                      visible={tile.visible}
+                      thumb={id !== focused}
+                      thumbIndex={Math.max(0, thumbIndex)}
+                      onFocus={() => setFocusChoice(id)}
+                    />
+                  );
+                })}
+                {hostView && focusMode && (
+                  <span className="absolute left-3 top-3 z-20 inline-flex items-center gap-2 rounded-full bg-black/60 px-3 py-1.5 text-xs font-semibold text-stage-ink">
+                    {health?.label ?? "Monitori"} · pamje e pastër
+                  </span>
+                )}
+              </div>
+              {controls}
+            </main>
+
+            {hostView ? (
+              <aside aria-label="Paneli i shqyrtimit" className={`${focusMode ? "hidden" : "flex"} max-h-[70vh] min-h-0 flex-col border-t border-stage-line bg-stage-rail lg:max-h-none lg:border-l lg:border-t-0`}>
+                {sessionId && (
+                  <HostRail
+                    sessionId={sessionId}
+                    now={now}
+                    live={{ peerPresent: connected, remoteCamera: !!remoteCameraStream, remoteScreen: !!remoteScreenStream }}
+                    onSession={setHostData}
+                  />
+                )}
+              </aside>
+            ) : (
+              <aside aria-label="Informacion për call-in" className="flex min-h-0 flex-col gap-4 overflow-y-auto border-t border-stage-line bg-stage-rail p-4 lg:border-l lg:border-t-0">
+                <section className="rounded-xl border border-stage-line bg-stage-raised p-4">
+                  <h2 className="flex items-center gap-2 text-sm font-semibold"><ShieldCheck size={16} className="text-stage-accent" aria-hidden="true" /> Çfarë regjistrohet</h2>
+                  <p className="mt-2 text-xs leading-5 text-stage-muted">Browser-i raporton sinjale si dalja nga faqja, humbja e fokusit, copy/paste ose ndërprerja e lidhjes. Video dhe zëri nuk regjistrohen. Sinjalet i shqyrton një njeri; asnjë vendim nuk merret automatikisht.</p>
+                  {lastSignal && <p role="status" className="mt-3 rounded-lg bg-amber-300/10 p-2 text-xs leading-5 text-amber-100">Një sinjal u regjistrua për shqyrtim. Mund të vazhdosh normalisht.</p>}
+                </section>
+                {session.test && <CandidateTestPanel token={token} test={session.test} />}
+              </aside>
+            )}
+          </div>
         </div>
       )}
-      <header className="flex flex-wrap items-center justify-between gap-4 border-b border-white/10 px-5 py-4">
-        <div className="flex items-center gap-3 font-bold">
-          <ShieldCheck className="text-shell-500" /> <Wordmark tone="light" />
-          <span className="hidden text-sm font-normal text-slate-400 sm:inline">· {session.title}</span>
-        </div>
-        <div className="flex items-center gap-4">
-          {active && role === "candidate" && (
-            <InterviewMonitor token={token} videoRef={localVideoRef} active={active} cameraStream={localStream} screenStream={screenStream} onSignal={setLastSignal} />
-          )}
-          <span className={`rounded-full px-3 py-1 text-xs font-semibold ${peerPresent || remoteCameraStream ? "bg-emerald-500/20 text-emerald-300" : "bg-white/10 text-slate-300"}`}>
-            {peerPresent || remoteCameraStream ? "Personi tjetër u lidh" : "Po pritet personi tjetër"}
-          </span>
-        </div>
-      </header>
-
-      <main id="main" className="mx-auto grid max-w-7xl gap-5 p-5 lg:grid-cols-[1fr_320px]">
-        <audio ref={remoteAudioRef} autoPlay playsInline className="hidden" />
-        <section className="grid gap-4 md:grid-cols-2">
-          <VideoPanel label={role === "hr" ? "Ti (host)" : session.candidate_name} videoRef={localVideoRef} active={!!localStream && cameraEnabled} speaking={localSpeaking} muted />
-          <VideoPanel label={role === "hr" ? session.candidate_name : "Host"} videoRef={remoteVideoRef} active={!!remoteCameraStream} present={peerPresent} speaking={remoteSpeaking} />
-          {(screenStream || remoteScreenStream) && (
-            <>
-              <VideoPanel label="Ekrani yt" videoRef={localScreenRef} active={!!screenStream} muted />
-              <VideoPanel label={role === "hr" ? "Ekrani i pjesëmarrësit" : "Ekrani i host-it"} videoRef={remoteScreenRef} active={!!remoteScreenStream} />
-            </>
-          )}
-        </section>
-
-        <aside className="space-y-4">
-          {!active && (
-            <section className="rounded-2xl border border-white/10 bg-white/5 p-5 text-center">
-              <Eye className="mx-auto text-shell-500" size={34} />
-              <h1 className="mt-4 text-xl font-bold">{role === "hr" ? "Hyr si host" : "Hyr në call"}</h1>
-              <p className="mt-2 text-sm leading-6 text-slate-400">Kamera dhe mikrofoni janë opsionale. NemoGuardHR kap sinjale si tab tjetër, minimize/focus loss, resize dhe copy/paste.</p>
-              {mediaBlockedByBrowser && (
-                <p className="mt-3 rounded-xl border border-amber-300/30 bg-amber-300/10 p-3 text-left text-xs leading-5 text-amber-100">
-                  {mediaBlockedMessage}
-                </p>
-              )}
-              <div className="mt-4 space-y-3 text-left">
-                <DeviceSelect label="Kamera" kind="videoinput" devices={devices} value={cameraDeviceId} onChange={setCameraDeviceId} />
-                <DeviceSelect label="Mikrofoni" kind="audioinput" devices={devices} value={micDeviceId} onChange={setMicDeviceId} />
-              </div>
-              <button onClick={start} className="btn-primary mt-5 w-full"><Eye size={18} /> {"Hyr në call"}</button>
-              {error && <p className="mt-3 text-sm text-red-300">{error}</p>}
-            </section>
-          )}
-
-          {active && (
-            <section className="rounded-2xl border border-white/10 bg-white/5 p-5">
-              <h2 className="font-semibold">Kontrollet</h2>
-              {mediaBlockedByBrowser && (
-                <p className="mt-3 rounded-xl border border-amber-300/30 bg-amber-300/10 p-3 text-xs leading-5 text-amber-100">
-                  {mediaBlockedMessage}
-                </p>
-              )}
-              <div className="mt-4 grid gap-2">
-                <ToggleButton active={!!localStream && cameraEnabled} onClick={toggleCamera} activeIcon={<Camera />} inactiveIcon={<CameraOff />} label={!localStream ? "Aktivizo kameren" : cameraEnabled ? "Kamera on" : "Kamera off"} />
-                <ToggleButton active={!!localStream && micEnabled} onClick={toggleMic} activeIcon={<Mic />} inactiveIcon={<MicOff />} label={!localStream ? "Aktivizo mikrofonin" : micEnabled ? "Mikrofoni on" : "Mikrofoni off"} />
-                <ToggleButton active={!!screenStream} onClick={screenStream ? stopScreenShare : startScreenShare} activeIcon={<MonitorUp />} inactiveIcon={<MonitorUp />} label={screenStream ? "Ndalo screen sharing" : "Nis screen sharing"} />
-              </div>
-              {!document.fullscreenElement && (
-                <button onClick={() => roomRef.current?.requestFullscreen()} className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl border border-white/20 px-3 py-2 text-sm">
-                  <Maximize size={16} /> Fullscreen
-                </button>
-              )}
-            </section>
-          )}
-
-          <section className="rounded-2xl border border-white/10 bg-white/5 p-5">
-            <h2 className="font-semibold">Status</h2>
-            <p className="mt-2 text-xs leading-5 text-slate-400">Kamera/screen share janë opsionale. Sinjalet regjistrohen kur pjesëmarrësi hap tab/app tjetër, minimizon, humb fullscreen, përdor copy/paste, ose humb lidhjen.</p>
-            {lastSignal && <p className="mt-3 rounded-lg bg-amber-400/10 p-2 text-xs text-amber-200">Sinjali i fundit u regjistrua per shqyrtim.</p>}
-            {error && <p className="mt-3 rounded-lg bg-red-400/10 p-2 text-xs text-red-200">{error}</p>}
-          </section>
-
-          {role === "hr" && active && (
-            <section className="rounded-2xl border border-white/10 bg-white/5 p-5">
-              <div className="flex items-center justify-between gap-3">
-                <h2 className="font-semibold">Live alerts për host</h2>
-                <span className="rounded-full bg-amber-300/10 px-2 py-1 text-xs font-semibold text-amber-200">{liveEvents.length}</span>
-              </div>
-              <p className="mt-2 text-xs leading-5 text-slate-400">Këtu të del direkt kur pjesëmarrësi hap tab/app tjetër, minimizon/humb focus, del nga fullscreen, përdor copy/paste, resize dritaren, ose ndalet kamera.</p>
-              {liveEvents.length === 0 ? (
-                <div className="mt-4 rounded-xl border border-dashed border-white/10 p-4 text-center text-xs text-slate-400">
-                  Ende nuk ka sinjale live.
-                </div>
-              ) : (
-                <ol className="mt-4 max-h-72 space-y-3 overflow-auto pr-1">
-                  {liveEvents.map((event) => (
-                    <li key={event.id} className="rounded-xl border border-amber-300/20 bg-amber-300/10 p-3">
-                      <p className="text-sm font-semibold text-amber-100">{hrLiveEventTitle(event)}</p>
-                      <p className="mt-1 text-xs leading-5 text-slate-300">{hrLiveEventDetails(event)}</p>
-                    </li>
-                  ))}
-                </ol>
-              )}
-            </section>
-          )}
-
-          {role === "candidate" && active && session.test && (
-            <CandidateTestPanel token={token} test={session.test} />
-          )}
-
-          {active && <button onClick={finish} className="flex w-full items-center justify-center gap-2 rounded-xl bg-red-500 px-4 py-3 text-sm font-semibold"><PhoneOff size={17} /> Dil nga call</button>}
-        </aside>
-      </main>
     </div>
   );
 }
 
-function VideoPanel({ label, videoRef, active, present = false, speaking = false, muted = false }: { label: string; videoRef: React.RefObject<HTMLVideoElement | null>; active: boolean; present?: boolean; speaking?: boolean; muted?: boolean }) {
+function Tile({ label, videoRef, hasVideo, offText, speaking, muted, screen, mirror, visible, thumb, thumbIndex, onFocus }: {
+  label: string;
+  videoRef: React.RefObject<HTMLVideoElement | null>;
+  hasVideo: boolean;
+  offText: string;
+  speaking: boolean;
+  muted: boolean;
+  screen: boolean;
+  mirror: boolean;
+  visible: boolean;
+  thumb: boolean;
+  thumbIndex: number;
+  onFocus: () => void;
+}) {
+  // The <video> stays mounted (hidden) so its stream survives a layout change; only the wrapper's classes move.
+  const placement = !visible ? "hidden" : thumb ? "absolute right-3 z-10 aspect-video w-32 sm:w-44" : "absolute inset-0";
+  const style = thumb ? ({ top: "calc(0.75rem + var(--i) * (var(--th) + 0.5rem))", ["--i" as string]: thumbIndex } as React.CSSProperties) : undefined;
   return (
-    <div className={`relative flex min-h-[300px] items-center justify-center overflow-hidden rounded-2xl bg-black shadow-2xl transition ${speaking ? "ring-4 ring-emerald-400/80 ring-offset-2 ring-offset-[#0c1f1a]" : "ring-1 ring-white/5"}`}>
-      <video ref={videoRef} autoPlay muted={muted} playsInline controls={false} className={`h-full max-h-[62vh] w-full object-cover ${active ? "block" : "hidden"}`} />
-      {!active && <div className="p-6 text-center text-slate-400"><Users className="mx-auto mb-3" />{present ? "Connected · camera off" : "Waiting..."}</div>}
-      <div className="absolute bottom-4 left-4 rounded-lg bg-black/60 px-3 py-2 text-xs">{label}</div>
-      {speaking && <div className="absolute right-4 top-4 rounded-full bg-emerald-400 px-3 py-1 text-xs font-semibold text-emerald-950">Speaking</div>}
+    <div className={placement} style={style}>
+      <div className={`relative h-full w-full overflow-hidden bg-black ${thumb ? "rounded-xl border border-stage-line shadow-lg" : ""} ${speaking ? "ring-2 ring-inset ring-stage-accent" : ""}`}>
+        <video ref={videoRef} autoPlay muted={muted} playsInline controls={false} className={`h-full w-full ${screen ? "object-contain" : "object-cover"} ${mirror ? "[transform:scaleX(-1)]" : ""} ${hasVideo ? "block" : "hidden"}`} />
+        {!hasVideo && (
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-stage-raised p-3 text-center text-stage-muted">
+            <Users size={thumb ? 18 : 30} aria-hidden="true" />
+            {!thumb && <p className="text-sm">{offText}</p>}
+          </div>
+        )}
+        <span className="absolute bottom-2 left-2 max-w-[85%] truncate rounded-md bg-black/65 px-2 py-1 text-[11px] font-medium text-[#eaf3e7]">{label}{speaking ? " · flet" : ""}</span>
+        {thumb && <button type="button" onClick={onFocus} className="absolute inset-0 z-10 rounded-xl" aria-label={`Zgjero: ${label}`} />}
+      </div>
     </div>
+  );
+}
+
+function ControlButton({ on, pressed, highlight = false, onClick, icon, label }: { on: boolean; pressed?: boolean; highlight?: boolean; onClick: () => void; icon: React.ReactNode; label: string }) {
+  const style = highlight && on ? "bg-stage-accent text-[#0b1713]" : on ? "bg-white/10 text-stage-ink hover:bg-white/15" : "bg-white/5 text-stage-muted hover:bg-white/10 hover:text-stage-ink";
+  return (
+    <button type="button" onClick={onClick} aria-pressed={pressed} className={`inline-flex min-h-11 items-center gap-2 rounded-xl px-3.5 text-sm font-semibold transition ${style}`}>
+      <span aria-hidden="true">{icon}</span>
+      <span className="hidden sm:inline">{label}</span>
+      <span className="sr-only sm:hidden">{label}</span>
+    </button>
   );
 }
 
@@ -626,33 +716,3 @@ function useSpeaking(stream: MediaStream | null, enabled: boolean) {
   return speaking;
 }
 
-function DeviceSelect({ label, kind, devices, value, onChange }: { label: string; kind: MediaDeviceKind; devices: MediaDeviceInfo[]; value: string; onChange: (value: string) => void }) {
-  const rows = devices.filter((device) => device.kind === kind);
-  return (
-    <label className="block text-xs font-semibold text-slate-300">
-      {label}
-      <select value={value} onChange={(event) => onChange(event.target.value)} className="mt-1 min-h-11 w-full rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-sm text-white">
-        <option value="">Default</option>
-        {rows.map((device, index) => (
-          <option key={device.deviceId} value={device.deviceId}>
-            {device.label || `${label} ${index + 1}`}
-          </option>
-        ))}
-      </select>
-    </label>
-  );
-}
-
-function ToggleButton({ active, onClick, activeIcon, inactiveIcon, label }: { active: boolean; onClick?: () => void; activeIcon: React.ReactNode; inactiveIcon: React.ReactNode; label: string }) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      disabled={!onClick && active}
-      className={`flex w-full items-center justify-between rounded-xl px-3 py-3 text-sm transition ${active ? "bg-emerald-400/10 text-emerald-200" : "bg-black/20 text-slate-300 hover:bg-white/10"} disabled:cursor-default`}
-    >
-      <span className="flex items-center gap-2">{active ? activeIcon : inactiveIcon}{label}</span>
-      <span className={`h-2 w-2 rounded-full ${active ? "bg-emerald-400" : "bg-slate-600"}`} />
-    </button>
-  );
-}

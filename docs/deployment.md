@@ -59,6 +59,14 @@ The credential is visible to anyone who opens a call link, so use short-lived TU
 
 Migration `0004` adds `integrity_events.severity` (backfilled from the event type) and the heartbeat columns on `interview_sessions`; it is additive and downgradable, existing review statuses are not recomputed, and calls that began earlier report coverage as unknown rather than as a failure (see `docs/signals.md`). Migration `0003` only adds an index on `audit_logs(session_id, action, created_at)` and can be downgraded. Dependency pins moved (FastAPI 0.165 / Starlette 1.x, PyJWT 2.15, python-multipart 0.0.31, pypdf 6.21, Next.js 15.5.29); rebuild both images rather than reusing cached layers. Calls abandoned before the upgrade are closed by the first purge after the API starts.
 
+Migration `0005` adds the optional email-code columns on `interview_sessions` (`verify_candidate_email` defaults to false, so existing calls start exactly as before); it is additive and downgradable. Calls created with the option need a working SMTP relay, because the candidate cannot start without the emailed code (see `docs/candidate-checks.md`).
+
+Migration `0006` adds one nullable column, `interview_sessions.host_notes`, for the host's private working notes; it is additive and downgradable (downgrading discards the notes). The notes are only returned on the call detail endpoint to the call's owner, never to the candidate, and, like reviews, they are kept until the host deletes the call: the retention purge does not touch them, so say so in your own privacy notice if hosts will write about candidates.
+
+The invitation email is now written in Albanian with a short English line, names the host, shows the deadline in Kosovo time (`Europe/Belgrade`; it falls back to UTC on images without tzdata) and mentions screen sharing, the test and the email code only when that call uses them. The subject changed from `NemoGuardHR invite: …` to `Ftesë për call: …`, so adjust any mail filters that match the old subject.
+
+The interface has a light and a dark theme (a toggle in every header; the choice is kept in the browser's local storage). Nothing server-side changed for this, and no new environment variable is needed.
+
 ## Known limits (deliberate)
 
 - **One backend worker.** WebSocket rooms and rate-limit counters live in process memory, and the Dockerfile pins `--workers 1`. Running several workers or replicas needs Redis pub/sub for signaling and shared rate-limit counters, or sticky routing by room token.

@@ -9,7 +9,7 @@ from ..email import deliver_invite
 from ..enums import ReviewStatus
 from ..models import AuditLog, Candidate, IntegrityEvent, InterviewSession, SessionReview, Test, TestQuestion, User
 from ..retention import delete_session
-from ..schemas import ReviewCreate, ReviewOut, SessionCreate, SessionOut
+from ..schemas import NotesOut, NotesUpdate, ReviewCreate, ReviewOut, SessionCreate, SessionOut
 from ..security import get_current_user
 from ..services import audit, parse_uuid, request_ip, session_to_out
 
@@ -63,7 +63,7 @@ def create_session(payload: SessionCreate, request: Request, background: Backgro
         db.flush()
     else:
         candidate.full_name = payload.candidate_name
-    session = InterviewSession(created_by=user.id, candidate_id=candidate.id, test_id=assigned_test.id if assigned_test else None, title=payload.title, expires_at=expires_at, require_screen_share=payload.require_screen_share)
+    session = InterviewSession(created_by=user.id, candidate_id=candidate.id, test_id=assigned_test.id if assigned_test else None, title=payload.title, expires_at=expires_at, require_screen_share=payload.require_screen_share, verify_candidate_email=payload.verify_candidate_email)
     db.add(session)
     db.flush()
     audit(db, user, request, "session.created", "interview_session", session.id, session.id, {"candidate_id": candidate.id})
@@ -110,3 +110,14 @@ def save_review(session_id: str, payload: ReviewCreate, request: Request, db: Se
     db.commit()
     db.refresh(review)
     return review
+
+
+@router.put("/{session_id}/notes", response_model=NotesOut)
+def save_notes(session_id: str, payload: NotesUpdate, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    """Autosaved private notes. Not audited per save (it would flood the log); they stay until the call is deleted, like reviews."""
+    session = owned_session(db, session_id, user)
+    session.host_notes = payload.notes or None
+    saved_at = datetime.now(timezone.utc)
+    session.updated_at = saved_at
+    db.commit()
+    return NotesOut(saved_at=saved_at)

@@ -50,7 +50,7 @@ def test_fresh_database_reaches_head(scratch_engine):
     with scratch_engine.connect() as connection:
         tables = {row[0] for row in connection.execute(text("SELECT table_name FROM information_schema.tables WHERE table_schema = 'public'"))}
         assert {"users", "candidates", "interview_sessions", "tests", "test_submissions", "alembic_version"} <= tables
-        assert connection.execute(text("SELECT version_num FROM alembic_version")).scalar() == "0004"
+        assert connection.execute(text("SELECT version_num FROM alembic_version")).scalar() == "0006"
     upgrade(scratch_engine)  # running again is a no-op
 
 
@@ -113,3 +113,59 @@ def test_signal_migration_downgrades_cleanly(scratch_engine):
         columns = {row[0] for row in connection.execute(text("SELECT column_name FROM information_schema.columns WHERE table_name IN ('integrity_events', 'interview_sessions')"))}
         assert not {"severity", "last_seen_at", "monitored_seconds", "face_seconds", "monitor_gaps"} & columns
     upgrade(scratch_engine)  # and it can be applied again
+
+
+def test_existing_calls_do_not_suddenly_require_email_verification(scratch_engine):
+    upgrade(scratch_engine, "0004")
+    with scratch_engine.begin() as connection:
+        connection.execute(text("INSERT INTO users (id, email, password_hash, full_name) VALUES ('00000000-0000-0000-0000-000000000001', 'u@x.com', 'h', 'U')"))
+        connection.execute(text("INSERT INTO candidates (id, email, full_name, created_by) VALUES ('00000000-0000-0000-0000-000000000002', 'c@x.com', 'C', '00000000-0000-0000-0000-000000000001')"))
+        connection.execute(
+            text(
+                "INSERT INTO interview_sessions (id, created_by, candidate_id, title, status, expires_at) "
+                "VALUES ('00000000-0000-0000-0000-000000000003', '00000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000002', 'S', 'scheduled', NOW() + INTERVAL '1 day')"
+            )
+        )
+    upgrade(scratch_engine)
+    with scratch_engine.connect() as connection:
+        row = connection.execute(text("SELECT verify_candidate_email, verification_code_hash, verified_at, verification_sends, verification_attempts FROM interview_sessions")).one()
+        assert row == (False, None, None, 0, 0)
+
+
+def test_verification_migration_downgrades_cleanly(scratch_engine):
+    upgrade(scratch_engine)
+    config = Config(str(BACKEND_DIR / "alembic.ini"))
+    config.set_main_option("script_location", str(BACKEND_DIR / "alembic"))
+    with scratch_engine.begin() as connection:
+        config.attributes["connection"] = connection
+        command.downgrade(config, "0004")
+    with scratch_engine.connect() as connection:
+        columns = {row[0] for row in connection.execute(text("SELECT column_name FROM information_schema.columns WHERE table_name = 'interview_sessions'"))}
+        assert not {"verify_candidate_email", "verification_code_hash", "verification_sent_at", "verification_sends", "verification_attempts", "verified_at"} & columns
+        assert "monitored_seconds" in columns  # 0004 is untouched
+    upgrade(scratch_engine)
+
+
+def test_existing_calls_start_without_notes_and_the_notes_migration_downgrades_cleanly(scratch_engine):
+    upgrade(scratch_engine, "0005")
+    with scratch_engine.begin() as connection:
+        connection.execute(text("INSERT INTO users (id, email, password_hash, full_name) VALUES ('00000000-0000-0000-0000-000000000001', 'u@x.com', 'h', 'U')"))
+        connection.execute(text("INSERT INTO candidates (id, email, full_name, created_by) VALUES ('00000000-0000-0000-0000-000000000002', 'c@x.com', 'C', '00000000-0000-0000-0000-000000000001')"))
+        connection.execute(
+            text(
+                "INSERT INTO interview_sessions (id, created_by, candidate_id, title, status, expires_at) "
+                "VALUES ('00000000-0000-0000-0000-000000000003', '00000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000002', 'S', 'scheduled', NOW() + INTERVAL '1 day')"
+            )
+        )
+    upgrade(scratch_engine)
+    with scratch_engine.connect() as connection:
+        assert connection.execute(text("SELECT host_notes FROM interview_sessions")).scalar() is None
+    config = Config(str(BACKEND_DIR / "alembic.ini"))
+    config.set_main_option("script_location", str(BACKEND_DIR / "alembic"))
+    with scratch_engine.begin() as connection:
+        config.attributes["connection"] = connection
+        command.downgrade(config, "0005")
+    with scratch_engine.connect() as connection:
+        columns = {row[0] for row in connection.execute(text("SELECT column_name FROM information_schema.columns WHERE table_name = 'interview_sessions'"))}
+        assert "host_notes" not in columns and "verified_at" in columns  # 0005 is untouched
+    upgrade(scratch_engine)

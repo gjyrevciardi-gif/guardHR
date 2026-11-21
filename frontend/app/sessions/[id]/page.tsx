@@ -3,14 +3,24 @@
 import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
-import { AlertTriangle, ArrowLeft, Clipboard, ExternalLink, FileCheck2, Trash2, Video, X } from "lucide-react";
+import { AlertTriangle, ArrowLeft, Check, Clipboard, ClipboardList, ExternalLink, FileCheck2, Loader2, Trash2, Video, X } from "lucide-react";
 import { AppShell } from "@/components/AppShell";
-import { StatusBadge } from "@/components/StatusBadge";
-import { OfflineBanner } from "@/components/OfflineBanner";
-import { ApiError, api } from "@/lib/api";
+import { CallStrip } from "@/components/CallStrip";
+import { HostNotes } from "@/components/HostNotes";
 import { MonitoringCard } from "@/components/MonitoringCard";
-import { dateTime, eventLabels, severityLabels, severityStyles } from "@/lib/format";
-import { InterviewSession } from "@/lib/types";
+import { OfflineBanner } from "@/components/OfflineBanner";
+import { SeverityMark } from "@/components/SeverityMark";
+import { SignalCard } from "@/components/SignalCard";
+import { SignalSeal } from "@/components/SignalSeal";
+import { StatusBadge } from "@/components/StatusBadge";
+import { ApiError, api } from "@/lib/api";
+import { dateTime, eventLabels, formatDuration, parseApiDate, sessionStatusLabels, severityLabels } from "@/lib/format";
+import { InterviewSession, Severity } from "@/lib/types";
+
+const outcomes = [
+  { value: "Review completed", label: "Shqyrtimi u përfundua" },
+  { value: "Insufficient evidence", label: "Prova të pamjaftueshme" },
+];
 
 export default function SessionDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -19,6 +29,8 @@ export default function SessionDetailPage() {
   const [notes, setNotes] = useState("");
   const [outcome, setOutcome] = useState("Review completed");
   const [message, setMessage] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [copied, setCopied] = useState(false);
   const [offline, setOffline] = useState(false);
   const [alerts, setAlerts] = useState<Array<{ id: string; title: string; message: string }>>([]);
   const knownEventIds = useRef<Set<string>>(new Set());
@@ -44,7 +56,7 @@ export default function SessionDetailPage() {
             pushAlert({
               id: event.id,
               title: label,
-              message: `${label} - ${event.duration_seconds != null ? `${event.duration_seconds.toFixed(1)}s` : "pa kohezgjatje"} - ${dateTime(event.started_at)}`,
+              message: `${label} · ${event.duration_seconds != null ? `${event.duration_seconds.toFixed(1)} s` : "pa kohëzgjatje"} · ${dateTime(event.started_at)}`,
             });
           });
       }
@@ -86,177 +98,234 @@ export default function SessionDetailPage() {
 
   async function review(event: FormEvent) {
     event.preventDefault();
-    await api(`/sessions/${id}/reviews`, { method: "POST", body: JSON.stringify({ notes, outcome }) });
-    setMessage("Review u ruajt ne audit log.");
-    await load();
+    setSaving(true);
+    setMessage("");
+    try {
+      await api(`/sessions/${id}/reviews`, { method: "POST", body: JSON.stringify({ notes, outcome }) });
+      setMessage("Shqyrtimi u ruajt dhe u regjistrua.");
+      await load();
+    } catch (err) {
+      pushAlert({ id: `review-error-${Date.now()}`, title: "Shqyrtimi nuk u ruajt", message: err instanceof Error ? err.message : "Provo përsëri." });
+    } finally {
+      setSaving(false);
+    }
   }
 
-  if (!session) return <AppShell>{offline && <OfflineBanner />}<p>Duke ngarkuar...</p></AppShell>;
+  async function copyLink(link: string) {
+    try {
+      await navigator.clipboard.writeText(link);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 2000);
+    } catch {
+      pushAlert({ id: `copy-${Date.now()}`, title: "Linku nuk u kopjua", message: "Zgjidhe tekstin dhe kopjoje me dorë." });
+    }
+  }
+
+  if (!session) return <AppShell>{offline && <OfflineBanner />}<div className="mt-16 flex items-center justify-center gap-3 text-muted" role="status"><Loader2 className="animate-spin motion-reduce:animate-none" aria-hidden="true" /> Duke ngarkuar…</div></AppShell>;
 
   const candidateLink = `${window.location.origin}/join/${session.public_token}`;
   const severityCounts = session.events.reduce<Record<string, number>>((counts, event) => ({ ...counts, [event.severity]: (counts[event.severity] || 0) + 1 }), {});
   const monitoringIsWeak = session.monitoring.quality === "none" || session.monitoring.quality === "partial";
+  const live = session.status === "in_progress";
+  const durationSeconds = session.started_at ? ((session.ended_at ? parseApiDate(session.ended_at).getTime() : Date.now()) - parseApiDate(session.started_at).getTime()) / 1000 : null;
+  const initials = session.candidate.full_name.split(/\s+/).map((part) => part[0]).slice(0, 2).join("").toUpperCase();
+  const reviewed = session.review_status === "Review completed" || session.review_status === "Insufficient evidence";
 
   return (
     <AppShell>
       {offline && <OfflineBanner />}
       {/* Always mounted: a live region is only announced if it exists before its content changes. */}
-      <div role="status" aria-live="polite" className="fixed right-5 top-5 z-50 w-[min(360px,calc(100vw-2.5rem))] space-y-3">
-          {alerts.map((alert) => (
-            <div key={alert.id} className="rounded-2xl border border-amber-200 bg-white p-4 shadow-2xl">
-              <div className="flex items-start gap-3">
-                <span className="rounded-xl bg-amber-100 p-2 text-amber-700"><AlertTriangle size={18} /></span>
-                <div className="min-w-0 flex-1">
-                  <p className="font-semibold text-slate-900">{alert.title}</p>
-                  <p className="mt-1 text-sm leading-5 text-slate-600">{alert.message}</p>
-                </div>
-                <button onClick={() => setAlerts((current) => current.filter((item) => item.id !== alert.id))} className="-mr-2 -mt-2 flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-muted hover:bg-slate-100 hover:text-slate-700" aria-label="Mbyll njoftimin">
-                  <X size={16} />
-                </button>
+      <div role="status" aria-live="polite" className="fixed right-5 top-20 z-50 w-[min(360px,calc(100vw-2.5rem))] space-y-3">
+        {alerts.map((alert) => (
+          <div key={alert.id} className="rounded-2xl border border-amber-200 bg-white p-4 shadow-lift">
+            <div className="flex items-start gap-3">
+              <span className="rounded-xl bg-amber-100 p-2 text-amber-700"><AlertTriangle size={18} /></span>
+              <div className="min-w-0 flex-1">
+                <p className="font-semibold text-navy">{alert.title}</p>
+                <p className="mt-1 text-sm leading-5 text-slate-600">{alert.message}</p>
               </div>
+              <button onClick={() => setAlerts((current) => current.filter((item) => item.id !== alert.id))} className="-mr-2 -mt-2 flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-muted hover:bg-shell-100 hover:text-slate-700" aria-label="Mbyll njoftimin">
+                <X size={16} />
+              </button>
             </div>
-          ))}
+          </div>
+        ))}
       </div>
 
-      <Link href="/dashboard" className="mb-6 inline-flex items-center gap-2 text-sm font-semibold text-slate-600 hover:text-teal min-h-11">
-        <ArrowLeft size={17} /> Dashboard
+      <Link href="/dashboard" className="mb-4 inline-flex min-h-11 items-center gap-2 text-sm font-semibold text-slate-600 hover:text-teal">
+        <ArrowLeft size={17} aria-hidden="true" /> Paneli
       </Link>
 
-      <div className="flex flex-col gap-5 sm:flex-row sm:items-start sm:justify-between">
-        <div>
-          <div className="flex flex-wrap items-center gap-3">
-            <h1 className="text-3xl font-black">{session.candidate.full_name}</h1>
-            <StatusBadge status={session.review_status} signalLevel={session.signal_level} monitoring={session.monitoring} />
+      <header className="flex flex-col gap-5 sm:flex-row sm:items-start sm:justify-between animate-rise">
+        <div className="flex items-start gap-4">
+          <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-shell-200 text-lg font-bold text-teal" aria-hidden="true">{initials}</span>
+          <div>
+            <div className="flex flex-wrap items-center gap-3">
+              <h1 className="text-3xl font-bold tracking-tight">{session.candidate.full_name}</h1>
+              <StatusBadge status={session.review_status} signalLevel={session.signal_level} monitoring={session.monitoring} />
+            </div>
+            <p className="mt-1.5 text-muted">{session.title} · {session.candidate.email || "Pa email"}</p>
+            <p className="mt-1 text-xs text-muted">{sessionStatusLabels[session.status] ?? session.status} · krijuar {dateTime(session.created_at)}</p>
           </div>
-          <p className="mt-2 text-muted">{session.title} - {session.candidate.email || "Pa email"}</p>
         </div>
-        <div className="flex flex-col gap-3 sm:items-end">
-          <div className="text-sm text-muted">Krijuar {dateTime(session.created_at)}</div>
+        <div className="flex flex-wrap gap-2 sm:justify-end">
           <Link href={`/sessions/${session.id}/room`} className="btn-primary">
-            <Video size={18} /> Hyr ne call si host
+            <Video size={17} aria-hidden="true" /> {live ? "Hyr në call si host" : "Hap dhomën"}
           </Link>
           <button type="button" onClick={() => void removeSession()} className="btn-secondary text-red-700">
-            <Trash2 size={16} /> Fshi call-in
+            <Trash2 size={16} aria-hidden="true" /> Fshi
           </button>
         </div>
-      </div>
+      </header>
 
-      <div className="mt-8 grid gap-6 lg:grid-cols-[1.6fr_1fr]">
-        <section className="card p-6">
-          <div className="flex items-center justify-between gap-4">
-            <div>
-              <h2 className="text-lg font-black">Live activity timeline</h2>
-              <p className="text-sm text-muted">Rifreskohet automatikisht. Sinjale per host-in, jo akuza automatike.</p>
+      {session.invite_status === "failed" && (
+        <p role="alert" className="mt-5 rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900">Emaili i ftesës nuk u dërgua. Kopjo linkun më poshtë dhe dërgoja pjesëmarrësit manualisht.</p>
+      )}
+
+      <section aria-label="Përmbledhje" className="mt-6 grid grid-cols-2 gap-3 lg:grid-cols-4 animate-rise">
+        <Fact label="Kohëzgjatja" value={durationSeconds !== null ? formatDuration(durationSeconds) : "Ende pa filluar"} hint={live ? "ende në vazhdim" : undefined} />
+        <Fact label="Sinjale të vëzhguara" value={String(session.event_count)}>
+          {session.signal_level !== "none" && <SeverityMark severity={session.signal_level} />}
+        </Fact>
+        <Fact label="Monitori aktiv" value={session.monitoring.coverage_percent !== null ? `${session.monitoring.coverage_percent}%` : "Nuk matet"} hint={monitoringIsWeak ? "jo i plotë" : undefined} />
+        <Fact
+          label="Testi"
+          value={session.test_submission ? `${session.test_submission.score}/${session.test_submission.total}` : session.test ? "Pa dorëzuar" : "Pa test"}
+          hint={session.test_submission ? dateTime(session.test_submission.submitted_at) : session.test?.title}
+        />
+      </section>
+
+      <div className="mt-6 grid grid-cols-1 items-start gap-6 lg:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
+        <div className="space-y-6">
+          <section className="card p-6 animate-rise" aria-labelledby="strip-title">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <h2 id="strip-title" className="section-title">Rrjedha e call-it</h2>
+              <SignalSeal />
             </div>
-            <span className="rounded-lg bg-slate-100 px-3 py-2 text-sm font-semibold">{session.events.length} evente</span>
-          </div>
-          {session.events.length > 0 && (
-            <p className="mt-3 flex flex-wrap gap-2 text-xs" aria-label="Përmbledhje sipas rëndësisë">
-              {(["high", "medium", "low", "info"] as const).filter((level) => severityCounts[level]).map((level) => (
-                <span key={level} className={`rounded-full px-2.5 py-1 font-semibold ring-1 ring-inset ${severityStyles[level]}`}>{severityLabels[level]}: {severityCounts[level]}</span>
-              ))}
-            </p>
-          )}
+            {session.started_at ? (
+              <div className="mt-5"><CallStrip events={session.events} startedAt={session.started_at} endedAt={session.ended_at} monitoring={session.monitoring} /></div>
+            ) : (
+              <p className="mt-5 rounded-xl border border-dashed border-line-strong p-5 text-sm text-muted">Call-i ende nuk ka filluar. Kur kandidati të hyjë, këtu shfaqet rrjedha e tij në kohë.</p>
+            )}
+          </section>
 
-          {session.events.length === 0 ? (
-            <div className="mt-8 rounded-xl border border-dashed border-slate-300 p-10 text-center">
-              {monitoringIsWeak ? (
-                <>
-                  <p className="font-semibold text-amber-800">Asnjë sinjal i regjistruar, por monitorimi nuk ishte i plotë</p>
-                  <p className="mt-1 text-sm text-slate-600">Kjo nuk do të thotë se nuk ndodhi asgjë. Shih «Besueshmëria e monitorimit».</p>
-                </>
-              ) : (
-                <>
-                  <p className="font-semibold text-emerald-700">No events detected</p>
-                  <p className="mt-1 text-sm text-muted">Nuk ka activity signals te regjistruara ne kete call.</p>
-                </>
+          <section className="card p-6 animate-rise" aria-labelledby="signals-title">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <h2 id="signals-title" className="section-title">Sinjalet e vëzhguara</h2>
+                <p className="mt-1.5 pl-[1.15rem] text-sm text-muted">Rifreskohet vetë. Çdo sinjal tregon çfarë raportoi browser-i dhe çfarë nuk provon.</p>
+              </div>
+              {session.events.length > 0 && (
+                <p className="flex flex-wrap gap-2 text-xs" aria-label="Përmbledhje sipas rëndësisë">
+                  {(["high", "medium", "low", "info"] as Severity[]).filter((level) => severityCounts[level]).map((level) => (
+                    <span key={level} className="inline-flex items-center gap-1"><SeverityMark severity={level} /><span className="sr-only">{severityLabels[level]}: </span><span className="font-mono font-semibold tabular-nums">{severityCounts[level]}</span></span>
+                  ))}
+                </p>
               )}
             </div>
-          ) : (
-            <ol className="relative mt-8 border-l border-slate-200">
-              {session.events.map((item) => (
-                <li key={item.id} className="mb-7 ml-6">
-                  <span className="absolute -left-2 mt-1.5 h-4 w-4 rounded-full border-4 border-white bg-teal" />
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <h3 className="flex flex-wrap items-center gap-2 font-semibold">
-                      {eventLabels[item.event_type] || item.event_type}
-                      <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ring-1 ring-inset ${severityStyles[item.severity]}`}>{severityLabels[item.severity]}</span>
-                    </h3>
-                    <time className="text-xs text-muted">{dateTime(item.started_at)}</time>
-                  </div>
-                  <div className="mt-2 flex gap-4 text-xs text-muted">
-                    <span>Kohezgjatja: {item.duration_seconds != null ? `${item.duration_seconds.toFixed(1)}s` : "-"}</span>
-                    <span>Confidence: {item.confidence_score != null ? `${Math.round(item.confidence_score * 100)}%` : "-"}</span>
-                  </div>
-                </li>
-              ))}
-            </ol>
-          )}
-        </section>
+
+            {session.events.length === 0 ? (
+              <div className="mt-6 rounded-xl border border-dashed border-line-strong p-10 text-center">
+                {monitoringIsWeak ? (
+                  <>
+                    <p className="font-semibold text-amber-900">Asnjë sinjal i regjistruar, por monitorimi nuk ishte i plotë</p>
+                    <p className="mx-auto mt-1 max-w-md text-sm text-slate-600">Kjo nuk do të thotë se nuk ndodhi asgjë. Shih «Besueshmëria e monitorimit».</p>
+                  </>
+                ) : (
+                  <>
+                    <p className="font-semibold text-emerald-700">Asnjë sinjal i vëzhguar</p>
+                    <p className="mx-auto mt-1 max-w-md text-sm text-muted">Monitori raportoi dhe nuk pa asgjë të veçantë. Edhe kjo mbetet vetëm një indikacion.</p>
+                  </>
+                )}
+              </div>
+            ) : (
+              <ol className="mt-5 space-y-3">
+                {[...session.events].reverse().map((item) => <li key={item.id}><SignalCard event={item} /></li>)}
+              </ol>
+            )}
+          </section>
+        </div>
 
         <div className="space-y-6">
           <MonitoringCard monitoring={session.monitoring} status={session.status} />
-          <section className="card p-6">
-            <h2 className="font-black">Detajet e call-it</h2>
+
+          <section className="card p-6 animate-rise" aria-labelledby="notes-title">
+            <h2 id="notes-title" className="section-title">Shënimet e tua</h2>
+            <div className="mt-4"><HostNotes sessionId={session.id} initial={session.host_notes} /></div>
+          </section>
+
+          <form onSubmit={review} className="card p-6 animate-rise" aria-labelledby="review-title">
+            <div className="flex items-center justify-between gap-3">
+              <h2 id="review-title" className="section-title">Përfundimi i shqyrtimit</h2>
+              {reviewed && <span className="chip bg-shell-200 text-teal ring-teal/20"><Check size={12} aria-hidden="true" /> E ruajtur</span>}
+            </div>
+            <p className="mt-3 text-xs leading-5 text-muted">Sistemi nuk akuzon dhe nuk vendos. Këtu shkruan ti çfarë konkludove dhe pse; regjistrohet kush e shqyrtoi dhe kur.</p>
+            <label htmlFor="review-outcome" className="label mt-5">Rezultati</label>
+            <select id="review-outcome" className="input" value={outcome} onChange={(e) => setOutcome(e.target.value)}>
+              {outcomes.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
+            </select>
+            <label htmlFor="review-notes" className="label mt-4">Arsyetimi</label>
+            <textarea id="review-notes" className="input min-h-32 resize-y" value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Konteksti dhe arsyetimi i shqyrtimit…" required minLength={3} />
+            {session.host_notes && !notes && (
+              <button type="button" onClick={() => setNotes(session.host_notes ?? "")} className="mt-2 inline-flex min-h-11 items-center gap-2 text-sm font-semibold text-teal hover:underline"><ClipboardList size={15} aria-hidden="true" /> Përdor shënimet e punës</button>
+            )}
+            {message && <p role="status" className="mt-3 text-sm font-semibold text-emerald-700">{message}</p>}
+            <button className="btn-primary mt-4 w-full" disabled={saving}>
+              {saving ? <Loader2 size={16} className="animate-spin motion-reduce:animate-none" aria-hidden="true" /> : <FileCheck2 size={16} aria-hidden="true" />} Ruaj shqyrtimin
+            </button>
+          </form>
+
+          <section className="card p-6 animate-rise" aria-labelledby="details-title">
+            <h2 id="details-title" className="section-title">Detajet e call-it</h2>
             <dl className="mt-4 space-y-3 text-sm">
-              <Row label="Status" value={session.status.replace("_", " ")} />
+              <Row label="Statusi" value={sessionStatusLabels[session.status] ?? session.status} />
               <Row label="Filluar" value={dateTime(session.started_at)} />
-              <Row label="Perfunduar" value={dateTime(session.ended_at)} />
-              <Row label="Screen sharing" value={session.require_screen_share ? "Kerkohet" : "Opsional"} />
+              <Row label="Përfunduar" value={dateTime(session.ended_at)} />
+              <Row label="Pranoi kushtet" value={dateTime(session.consented_at)} />
+              <Row label="Ndarja e ekranit" value={session.require_screen_share ? "E kërkuar" : "Opsionale"} />
+              <Row label="Email-i i verifikuar" value={session.verified_at ? dateTime(session.verified_at) : session.verify_candidate_email ? "Ende jo" : "Nuk kërkohej"} />
+              <Row label="Linku skadon" value={dateTime(session.expires_at)} />
             </dl>
-            {session.invite_status === "failed" && <p role="alert" className="mt-4 rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">Emaili i ftesës nuk u dërgua. Kopjo linkun më poshtë dhe dërgoja pjesëmarrësit manualisht.</p>}
-            <div className="mt-5 flex items-center gap-2 rounded-xl bg-slate-100 p-3">
-              <code className="min-w-0 flex-1 truncate text-xs">{candidateLink}</code>
-              <button onClick={() => navigator.clipboard.writeText(candidateLink)} aria-label="Kopjo linkun" className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full hover:bg-white"><Clipboard size={17} /></button>
-              <a href={candidateLink} target="_blank" rel="noopener noreferrer" aria-label="Hap linkun në skedë të re" className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full hover:bg-white"><ExternalLink size={17} /></a>
+            <div className="mt-5 flex items-center gap-1 rounded-xl border border-line bg-shell-100 p-2 pl-3">
+              <code className="min-w-0 flex-1 truncate font-mono text-xs">{candidateLink}</code>
+              <button onClick={() => void copyLink(candidateLink)} aria-label={copied ? "Linku u kopjua" : "Kopjo linkun"} className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg hover:bg-white">{copied ? <Check size={17} className="text-moss" /> : <Clipboard size={17} />}</button>
+              <a href={candidateLink} target="_blank" rel="noopener noreferrer" aria-label="Hap linkun në skedë të re" className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg hover:bg-white"><ExternalLink size={17} /></a>
             </div>
           </section>
 
           {session.test && (
-            <section className="card p-6">
+            <section className="card p-6 animate-rise" aria-labelledby="test-title">
               <div className="flex items-start justify-between gap-3">
                 <div>
-                  <h2 className="font-black">Testi me zgjedhje</h2>
-                  <p className="mt-2 text-sm text-slate-600">{session.test.title}</p>
-                  <p className="mt-1 text-xs text-muted">{session.test.question_count} pyetje</p>
+                  <h2 id="test-title" className="section-title">Testi</h2>
+                  <p className="mt-3 text-sm font-semibold">{session.test.title}</p>
+                  <p className="mt-0.5 text-xs text-muted">{session.test.question_count} pyetje</p>
                 </div>
-                <Link href={`/tests/${session.test.id}`} className="btn-secondary">
-                  Review/Edit <ExternalLink size={16} />
-                </Link>
+                <Link href={`/tests/${session.test.id}`} className="btn-secondary">Hap <ExternalLink size={15} aria-hidden="true" /></Link>
               </div>
-
               {session.test_submission ? (
-                <div className="mt-4 rounded-xl bg-emerald-50 p-4 text-sm text-emerald-800">
-                  Pjesemarresi e dorezoi testin: <strong>{session.test_submission.score}/{session.test_submission.total}</strong>
-                  <div className="mt-1 text-xs">Dorezuar: {dateTime(session.test_submission.submitted_at)}</div>
-                </div>
+                <p className="mt-4 rounded-xl bg-emerald-50 p-4 text-sm text-emerald-800">Pjesëmarrësi e dorëzoi testin: <strong className="font-mono">{session.test_submission.score}/{session.test_submission.total}</strong><span className="mt-1 block text-xs">Dorëzuar: {dateTime(session.test_submission.submitted_at)}</span></p>
               ) : (
-                <div className="mt-4 rounded-xl bg-amber-50 p-4 text-sm text-amber-800">
-                  Pjesemarresi ende nuk e ka dorezuar testin.
-                </div>
+                <p className="mt-4 rounded-xl bg-amber-50 p-4 text-sm text-amber-900">Pjesëmarrësi ende nuk e ka dorëzuar testin.</p>
               )}
             </section>
           )}
-
-          <form onSubmit={review} className="card p-6">
-            <div className="flex items-center gap-2"><FileCheck2 className="text-teal" /><h2 className="font-black">Host notes</h2></div>
-            <p className="mt-2 text-xs leading-5 text-muted">Sistemi nuk akuzon automatikisht. Sheno kontekstin e call/test signals per evidence.</p>
-            <label htmlFor="review-outcome" className="label mt-5">Rezultati</label>
-            <select id="review-outcome" className="input" value={outcome} onChange={(e) => setOutcome(e.target.value)}>
-              <option>Review completed</option>
-              <option>Insufficient evidence</option>
-            </select>
-            <label htmlFor="review-notes" className="label mt-4">Shenime</label>
-            <textarea id="review-notes" className="input min-h-32 resize-y" value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Konteksti dhe arsyetimi i shqyrtimit..." required minLength={3} />
-            {message && <p role="status" className="mt-3 text-sm text-emerald-700">{message}</p>}
-            <button className="btn-primary mt-4 w-full">Ruaj shenimet</button>
-          </form>
         </div>
       </div>
     </AppShell>
   );
 }
 
+function Fact({ label, value, hint, children }: { label: string; value: string; hint?: string; children?: React.ReactNode }) {
+  return (
+    <div className="card p-4">
+      <p className="text-xs font-semibold text-muted">{label}</p>
+      <p className="mt-1.5 flex flex-wrap items-center gap-2 font-mono text-xl font-bold tabular-nums">{value}{children}</p>
+      {hint && <p className="mt-0.5 truncate text-xs text-muted">{hint}</p>}
+    </div>
+  );
+}
+
 function Row({ label, value }: { label: string; value: string }) {
-  return <div className="flex justify-between gap-4"><dt className="text-muted">{label}</dt><dd className="text-right font-medium capitalize">{value}</dd></div>;
+  return <div className="flex justify-between gap-4"><dt className="text-muted">{label}</dt><dd className="text-right font-medium">{value}</dd></div>;
 }
