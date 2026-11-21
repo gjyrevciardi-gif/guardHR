@@ -5,6 +5,7 @@ from typing import Any, Literal
 from pydantic import AliasChoices, BaseModel, ConfigDict, EmailStr, Field, field_validator
 
 from .enums import EventType, QuestionType, ReviewOutcome, ReviewStatus, UserRole
+from .signals import Severity
 
 MAX_EVENT_METADATA_BYTES = 4096
 MAX_ANSWERS = 200
@@ -226,6 +227,25 @@ class EventCreate(BaseModel):
         return value
 
 
+class EventFinish(BaseModel):
+    """Closes an open episode (for example the candidate returned to the tab)."""
+
+    ended_at: datetime
+    duration_seconds: float = Field(ge=0, le=86400)
+
+
+class HeartbeatIn(BaseModel):
+    face_detection: bool = False  # whether face detection was running in the browser at this moment
+
+
+class MonitoringOut(BaseModel):
+    quality: Literal["unknown", "none", "partial", "good"]
+    coverage_percent: int | None
+    face_percent: int | None
+    gaps: int
+    last_seen_at: datetime | None
+
+
 class EventOut(BaseModel):
     model_config = ConfigDict(from_attributes=True, populate_by_name=True)
     id: str
@@ -234,8 +254,14 @@ class EventOut(BaseModel):
     ended_at: datetime | None
     duration_seconds: float | None
     confidence_score: float | None
+    severity: Literal["info", "low", "medium", "high"]
     # The ORM attribute is `event_metadata` because `metadata` is reserved on declarative models.
     metadata: dict[str, Any] = Field(default_factory=dict, validation_alias=AliasChoices("event_metadata", "metadata"))
+
+    @field_validator("severity", mode="before")
+    @classmethod
+    def severity_name(cls, value: Any) -> Any:
+        return Severity(value).name if isinstance(value, int) else value
 
 
 class ReviewCreate(BaseModel):
@@ -260,6 +286,8 @@ class SessionOut(BaseModel):
     review_status: ReviewStatus
     invite_email_queued: bool = False
     invite_status: Literal["sent", "failed"] | None = None
+    signal_level: Literal["none", "info", "low", "medium", "high"] = "none"
+    monitoring: MonitoringOut | None = None
     require_screen_share: bool
     test: TestOut | None = None
     test_submission: TestSubmissionOut | None = None

@@ -70,7 +70,7 @@ export default function DashboardPage() {
       <div className="divide-y divide-slate-100">{filtered.map(session => <Link key={session.id} href={`/sessions/${session.id}`} className="grid items-center gap-4 p-5 transition hover:bg-slate-50 sm:grid-cols-[1.5fr_1fr_auto_auto]">
         <div><p className="font-semibold">{session.candidate.full_name}</p><p className="mt-1 text-sm text-slate-500">{session.title} · {session.candidate.email || "Pa email"}</p></div>
         <div className="text-sm"><p className="font-medium capitalize">{session.status.replace("_", " ")}</p><p className="text-slate-500">{dateTime(session.created_at)}</p></div>
-        <div className="flex items-center gap-3"><StatusBadge status={session.review_status}/><span className="text-xs text-slate-400">{session.event_count} evente</span></div>
+        <div className="flex items-center gap-3"><StatusBadge status={session.review_status} signalLevel={session.signal_level} monitoring={session.monitoring}/><span className="text-xs text-slate-400">{session.event_count} evente</span></div>
         <ChevronRight className="text-slate-400" size={18}/>
       </Link>)}</div>}
     </section>

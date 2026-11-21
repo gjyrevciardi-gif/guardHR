@@ -118,7 +118,8 @@ def test_abandoned_call_is_closed_and_then_purged(client, hr, new_session):
     abandoned = start_without_finishing(client, hr, new_session, "gone@example.com")
     running = start_without_finishing(client, hr, new_session, "live@example.com")
     with SessionLocal() as db:
-        db.get(InterviewSession, abandoned["id"]).started_at = OLD
+        gone = db.get(InterviewSession, abandoned["id"])
+        gone.started_at = gone.last_seen_at = OLD  # no heartbeat since
         for event in db.query(IntegrityEvent).filter(IntegrityEvent.session_id == abandoned["id"]):
             event.created_at = OLD
         for entry in db.query(AuditLog).filter(AuditLog.session_id == abandoned["id"]):

@@ -31,16 +31,17 @@ def owned_session(db: Session, session_id: str, user: User) -> InterviewSession:
 def list_sessions(limit: int = Query(100, ge=1, le=500), offset: int = Query(0, ge=0), db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     # Counts come from correlated subqueries so the list never loads every event and question.
     event_count = select(func.count(IntegrityEvent.id)).where(IntegrityEvent.session_id == InterviewSession.id).correlate(InterviewSession).scalar_subquery()
+    max_severity = select(func.max(IntegrityEvent.severity)).where(IntegrityEvent.session_id == InterviewSession.id).correlate(InterviewSession).scalar_subquery()
     question_count = select(func.count(TestQuestion.id)).where(TestQuestion.test_id == InterviewSession.test_id).correlate(InterviewSession).scalar_subquery()
     stmt = (
-        select(InterviewSession, event_count, question_count)
+        select(InterviewSession, event_count, question_count, max_severity)
         .options(selectinload(InterviewSession.candidate), selectinload(InterviewSession.test))
         .where(InterviewSession.created_by == user.id)
         .order_by(InterviewSession.created_at.desc(), InterviewSession.id)
         .limit(limit)
         .offset(offset)
     )
-    return [session_to_out(item, event_count=events, question_count=questions) for item, events, questions in db.execute(stmt).all()]
+    return [session_to_out(item, event_count=events, question_count=questions, max_severity=severity) for item, events, questions, severity in db.execute(stmt).all()]
 
 
 @router.post("", response_model=SessionOut, status_code=201)

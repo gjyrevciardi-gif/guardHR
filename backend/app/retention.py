@@ -12,26 +12,23 @@ from .database import SessionLocal
 from .enums import SessionStatus
 from .models import AuditLog, Candidate, IntegrityEvent, InterviewSession, Test, TestSubmission, User
 from .services import record_audit
+from .signals import as_utc
 
 logger = logging.getLogger("nemoguard.retention")
-
-
-def _aware(value: datetime) -> datetime:
-    return value if value.tzinfo else value.replace(tzinfo=timezone.utc)  # SQLite returns naive datetimes
 
 
 def close_abandoned_sessions(db: Session, user: User, now: datetime) -> int:
     """Close calls the candidate left without /finish, so they can age out like any finished call.
 
-    `ended_at` is the last sign of life (latest event, else the start time): we never claim the call ran
+    `ended_at` is the last sign of life (latest heartbeat or event, else the start time): we never claim the call ran
     longer than we saw. Each closure is audited.
     """
     stale_before = now - timedelta(hours=get_settings().abandoned_session_hours)
-    stale = db.scalars(select(InterviewSession).where(InterviewSession.created_by == user.id, InterviewSession.status == SessionStatus.in_progress, InterviewSession.started_at < stale_before)).all()
+    stale = db.scalars(select(InterviewSession).where(InterviewSession.created_by == user.id, InterviewSession.status == SessionStatus.in_progress, func.coalesce(InterviewSession.last_seen_at, InterviewSession.started_at) < stale_before)).all()
     for session in stale:
         # created_at is server-side; the client-supplied started_at could be forged into the future.
         last_event = db.scalar(select(func.max(IntegrityEvent.created_at)).where(IntegrityEvent.session_id == session.id))
-        session.ended_at = _aware(max(filter(None, (session.started_at, last_event)), key=_aware))
+        session.ended_at = as_utc(max(filter(None, (session.started_at, session.last_seen_at, last_event)), key=as_utc))
         session.status = SessionStatus.completed
         record_audit(db, user_id=user.id, ip=None, action="session.auto_closed", entity_type="interview_session", entity_id=session.id, session_id=session.id, details={"reason": "no finish signal", "after_hours": get_settings().abandoned_session_hours})
     db.flush()  # the app's sessions use autoflush=False; the purge queries below must see the new ended_at

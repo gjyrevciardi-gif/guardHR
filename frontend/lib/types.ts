@@ -3,7 +3,10 @@ export type EventType = "tab_hidden" | "fullscreen_exit" | "camera_disabled" | "
 
 export interface User { id: string; email: string; full_name: string; role: string; retention_days: number }
 export interface Candidate { id: string; email: string | null; full_name: string }
-export interface IntegrityEvent { id: string; event_type: EventType; started_at: string; ended_at: string | null; duration_seconds: number | null; confidence_score: number | null; metadata: Record<string, unknown> }
+export type Severity = "info" | "low" | "medium" | "high";
+export type SignalLevel = "none" | Severity;
+export interface Monitoring { quality: "unknown" | "none" | "partial" | "good"; coverage_percent: number | null; face_percent: number | null; gaps: number; last_seen_at: string | null }
+export interface IntegrityEvent { id: string; event_type: EventType; severity: Severity; started_at: string; ended_at: string | null; duration_seconds: number | null; confidence_score: number | null; metadata: Record<string, unknown> }
 export interface Review { id: string; outcome: string; notes: string; created_at: string; updated_at: string }
 export type QuestionType = "multiple_choice" | "short_text";
 export type TestAnswer = number | string;
@@ -38,6 +41,7 @@ export interface PublicTest { id: string; title: string; description: string | n
 export interface InterviewSession {
   id: string; title: string; public_token: string; status: string; review_status: ReviewStatus;
   invite_email_queued: boolean; invite_status: "sent" | "failed" | null;
+  signal_level: SignalLevel; monitoring: Monitoring;
   test: Test | null; test_submission: TestSubmission | null;
   require_screen_share: boolean; candidate: Candidate; expires_at: string; consented_at: string | null;
   started_at: string | null; ended_at: string | null; created_at: string; event_count: number;

@@ -10,8 +10,9 @@ from ..database import get_db
 from ..enums import ReviewStatus, SessionStatus
 from ..models import IntegrityEvent, InterviewSession, Test, TestQuestion, TestSubmission
 from ..ratelimit import rate_limit
-from ..schemas import ConsentRequest, EventCreate, EventOut, PublicSessionOut, PublicTestOut, TestSubmissionOut, TestSubmit
+from ..schemas import ConsentRequest, EventCreate, EventFinish, EventOut, HeartbeatIn, PublicSessionOut, PublicTestOut, TestSubmissionOut, TestSubmit
 from ..services import audit, parse_uuid, request_ip
+from ..signals import needs_review, record_heartbeat, severity_for
 from ..vision import detect_objects
 from .signaling import broadcast_to_role
 from .tests import grade_answers
@@ -119,8 +120,21 @@ def start(token: str, request: Request, db: Session = Depends(get_db)):
         raise HTTPException(status_code=403, detail="Consent is required before starting")
     session.started_at = session.started_at or datetime.now(timezone.utc)
     session.status = SessionStatus.in_progress
+    if session.monitored_seconds is None:  # from now on this call has a coverage figure
+        session.monitored_seconds = session.face_seconds = 0.0
+        session.last_seen_at = datetime.now(timezone.utc)
     audit(db, None, request, "candidate.session.started", "interview_session", session.id, session.id)
     db.commit()
+
+
+def flag_for_review_if_needed(db: Session, session: InterviewSession) -> None:
+    """Move a call to "Requires review" once its signals cross the rule in app/signals.py. Never moves it back."""
+    if session.review_status != ReviewStatus.no_events:
+        return
+    db.flush()  # sessions use autoflush=False: the event just added must be counted
+    counts = dict(db.execute(select(IntegrityEvent.severity, func.count()).where(IntegrityEvent.session_id == session.id).group_by(IntegrityEvent.severity)).all())
+    if needs_review(counts):
+        session.review_status = ReviewStatus.requires_review
 
 
 def record_event(db: Session, token: str, payload: EventCreate) -> tuple[InterviewSession, EventOut]:
@@ -128,10 +142,9 @@ def record_event(db: Session, token: str, payload: EventCreate) -> tuple[Intervi
     require_in_progress(session)
     if db.scalar(select(func.count(IntegrityEvent.id)).where(IntegrityEvent.session_id == session.id)) >= MAX_EVENTS_PER_SESSION:
         raise HTTPException(status_code=429, detail="Event limit reached for this session")
-    event = IntegrityEvent(session_id=session.id, event_type=payload.event_type, started_at=payload.started_at, ended_at=payload.ended_at, duration_seconds=payload.duration_seconds, confidence_score=payload.confidence_score, event_metadata=payload.metadata)
+    event = IntegrityEvent(session_id=session.id, event_type=payload.event_type, started_at=payload.started_at, ended_at=payload.ended_at, duration_seconds=payload.duration_seconds, confidence_score=payload.confidence_score, event_metadata=payload.metadata, severity=severity_for(payload.event_type, payload.duration_seconds, payload.metadata))
     db.add(event)
-    if session.review_status == ReviewStatus.no_events:
-        session.review_status = ReviewStatus.requires_review
+    flag_for_review_if_needed(db, session)
     db.commit()
     db.refresh(event)
     return session, EventOut.model_validate(event)
@@ -143,6 +156,40 @@ async def create_event(token: str, payload: EventCreate, db: Session = Depends(g
     session, output = await run_in_threadpool(record_event, db, token, payload)
     await broadcast_to_role(session.public_token, "hr", {"type": "integrity-event", "event": output.model_dump(mode="json")})
     return output
+
+
+def finish_event(db: Session, token: str, event_id: str, payload: EventFinish) -> tuple[InterviewSession, EventOut]:
+    session = public_session(db, token)
+    require_in_progress(session)
+    event = db.scalar(select(IntegrityEvent).where(IntegrityEvent.id == parse_uuid(event_id, "Event not found"), IntegrityEvent.session_id == session.id))
+    if not event:
+        raise HTTPException(status_code=404, detail="Event not found")
+    if event.ended_at is not None or event.duration_seconds is not None:
+        raise HTTPException(status_code=409, detail="Event is already closed")
+    event.ended_at = payload.ended_at
+    event.duration_seconds = payload.duration_seconds
+    event.severity = severity_for(event.event_type, payload.duration_seconds, event.event_metadata)  # a long absence is worse than a short one
+    flag_for_review_if_needed(db, session)
+    db.commit()
+    db.refresh(event)
+    return session, EventOut.model_validate(event)
+
+
+@router.patch("/{token}/events/{event_id}", response_model=EventOut, dependencies=[Depends(rate_limit("events", 120, 60, "token"))])
+async def close_event(token: str, event_id: str, payload: EventFinish, db: Session = Depends(get_db)):
+    """One tab switch is one event: the browser posts it when it starts and closes it here when it ends."""
+    session, output = await run_in_threadpool(finish_event, db, token, event_id, payload)
+    await broadcast_to_role(session.public_token, "hr", {"type": "integrity-event-closed", "event": output.model_dump(mode="json")})
+    return output
+
+
+@router.post("/{token}/heartbeat", status_code=204, dependencies=[Depends(rate_limit("heartbeat", 30, 60, "token"))])
+def heartbeat(token: str, payload: HeartbeatIn, db: Session = Depends(get_db)):
+    """The browser monitor calls this every 10 s; the gaps between calls are what coverage is computed from."""
+    session = public_session(db, token)
+    require_in_progress(session)
+    record_heartbeat(session, payload.face_detection, datetime.now(timezone.utc))
+    db.commit()
 
 
 @router.post("/{token}/analyze-frame", dependencies=[Depends(rate_limit("frames", 30, 60, "token"))])
