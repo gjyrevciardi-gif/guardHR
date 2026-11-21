@@ -1,4 +1,5 @@
 import asyncio
+import time
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
@@ -15,7 +16,7 @@ from ..schemas import ConsentRequest, EventCreate, EventFinish, EventOut, Heartb
 from ..services import audit, parse_uuid, request_ip
 from ..signals import needs_review, record_heartbeat, severity_for
 from ..verification import CODE_TTL_SECONDS, MAX_ATTEMPTS, RESEND_COOLDOWN_SECONDS, check_code, issue_code, mask_email
-from ..vision import detect_objects
+from ..vision import detect_objects, frame_stats
 from .signaling import broadcast_to_role
 from .tests import grade_answers
 
@@ -256,9 +257,14 @@ async def analyze_frame(token: str, frame: UploadFile = File(...), db: Session =
     try:
         await asyncio.wait_for(_inference_slot.acquire(), FRAME_QUEUE_SECONDS)
     except TimeoutError:
+        frame_stats.dropped += 1
         raise HTTPException(status_code=503, detail="Detector busy", headers={"Retry-After": "5"}) from None
     try:
-        return await run_in_threadpool(detect_objects, content)
+        started = time.perf_counter()
+        result = await run_in_threadpool(detect_objects, content)
+        if result["vision_available"]:  # without the CV libraries nothing was analysed, so it must not count as inference
+            frame_stats.record(time.perf_counter() - started)
+        return result
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     finally:

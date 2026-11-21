@@ -226,6 +226,46 @@ def test_analyze_frame_drops_frames_when_detector_is_busy(client, started_sessio
     assert response.status_code == 503 and response.headers["retry-after"] == "5"
 
 
+def test_health_counts_analysed_and_dropped_frames(client, started_session, monkeypatch):
+    import asyncio
+    import time
+
+    from app.vision import frame_stats
+
+    for field in ("analyzed", "dropped", "seconds_total", "seconds_max"):  # the counters live for the whole process: start this test from zero
+        monkeypatch.setattr(frame_stats, field, 0)
+
+    def counts():
+        frames = client.get("/api/health").json()["frames"]
+        return frames["analyzed"], frames["dropped"]
+
+    url = f"/api/public/sessions/{started_session['public_token']}/analyze-frame"
+    frame = {"frame": ("f.jpg", b"1", "image/jpeg")}
+    assert client.get("/api/health").json()["frames"] == {"analyzed": 0, "dropped": 0, "inference_ms_avg": None, "inference_ms_max": None}
+    analyzed, dropped = counts()
+
+    def slow(content):
+        time.sleep(0.02)
+        return {"vision_available": True}
+
+    monkeypatch.setattr(public, "detect_objects", slow)
+    assert [client.post(url, files=frame).status_code for _ in range(2)] == [200, 200]
+    assert counts() == (analyzed + 2, dropped)
+    frames = client.get("/api/health").json()["frames"]
+    assert 20 <= frames["inference_ms_avg"] <= frames["inference_ms_max"]  # real elapsed time, not a placeholder
+
+    monkeypatch.setattr(public, "detect_objects", lambda content: {"vision_available": False})  # CV libraries missing: nothing was analysed
+    assert client.post(url, files=frame).status_code == 200
+    monkeypatch.setattr(public, "detect_objects", lambda content: (_ for _ in ()).throw(ValueError("Invalid image")))
+    assert client.post(url, files=frame).status_code == 422
+    assert counts() == (analyzed + 2, dropped)
+
+    monkeypatch.setattr(public, "_inference_slot", asyncio.Semaphore(0))
+    monkeypatch.setattr(public, "FRAME_QUEUE_SECONDS", 0.05)
+    assert [client.post(url, files=frame).status_code for _ in range(2)] == [503, 503]
+    assert counts() == (analyzed + 2, dropped + 2)
+
+
 def test_analyze_frame_releases_slot_after_invalid_image(client, started_session, monkeypatch):
     def bad(content):
         raise ValueError("Invalid image")
