@@ -33,7 +33,7 @@ export default function RegisterPage() {
   }
 
   return (
-    <main className="grid min-h-screen lg:grid-cols-2">
+    <main id="main" className="grid min-h-screen lg:grid-cols-2">
       <section className="shell-field relative hidden overflow-hidden p-16 text-navy lg:flex lg:flex-col lg:justify-between">
         <Link href="/" className="relative z-10 flex items-center gap-3 text-xl font-black">
           <span className="flex h-12 w-12 items-center justify-center rounded-full bg-white/75 shadow-sm">
@@ -66,18 +66,18 @@ export default function RegisterPage() {
         <form onSubmit={submit} className="card w-full max-w-md p-8 sm:p-10">
           <span className="mb-6 inline-flex rounded-2xl bg-teal/10 p-3 text-teal"><UserPlus /></span>
           <h2 className="text-3xl font-black text-ink">Register per host</h2>
-          <p className="mb-8 mt-2 text-sm leading-6 text-slate-500">
+          <p className="mb-8 mt-2 text-sm leading-6 text-muted">
             Ky account perdoret per krijim call, teste dhe monitorim te sinjaleve live.
           </p>
 
           <label className="label" htmlFor="name">Emri</label>
-          <input id="name" className="input mb-5" value={form.full_name} onChange={(e) => setForm({ ...form, full_name: e.target.value })} required minLength={2} />
+          <input id="name" autoComplete="name" className="input mb-5" value={form.full_name} onChange={(e) => setForm({ ...form, full_name: e.target.value })} required minLength={2} />
 
           <label className="label" htmlFor="email">Email</label>
-          <input id="email" className="input mb-5" type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} required />
+          <input id="email" autoComplete="email" className="input mb-5" type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} required />
 
           <label className="label" htmlFor="password">Fjalekalimi</label>
-          <input id="password" className="input" type="password" minLength={8} value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} required />
+          <input id="password" autoComplete="new-password" className="input" type="password" minLength={8} value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} required />
 
           {error && <p role="alert" className="mt-4 rounded-xl bg-red-50 p-3 text-sm text-red-700">{error}</p>}
 
@@ -85,7 +85,7 @@ export default function RegisterPage() {
             {loading ? "Duke krijuar..." : "Krijo account"}
           </button>
 
-          <p className="mt-5 text-center text-sm text-slate-500">
+          <p className="mt-5 text-center text-sm text-muted">
             Ke account? <Link href="/login" className="font-semibold text-teal">Hyr ketu</Link>
           </p>
         </form>

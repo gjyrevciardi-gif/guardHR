@@ -16,12 +16,15 @@ const plexMono = IBM_Plex_Mono({
   display: "swap",
 });
 
-export const metadata: Metadata = { title: "NemoGuardHR", description: "Calls, tests, and live activity signals for host review" };
+export const metadata: Metadata = { title: { default: "NemoGuardHR", template: "%s · NemoGuardHR" }, description: "Calls, tests, and live activity signals for host review" };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="sq" className={`${sora.variable} ${plexMono.variable}`}>
-      <body>{children}</body>
+      <body>
+        <a href="#main" className="skip-link">Kalo te përmbajtja</a>
+        {children}
+      </body>
     </html>
   );
 }

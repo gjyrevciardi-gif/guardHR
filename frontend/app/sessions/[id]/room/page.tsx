@@ -25,7 +25,7 @@ export default function HrMeetingRoom() {
     load();
   }, [load]);
 
-  if (!session) return <main className="flex min-h-screen items-center justify-center bg-mist p-6">Duke ngarkuar...</main>;
+  if (!session) return <main id="main" className="flex min-h-screen items-center justify-center bg-mist p-6">Duke ngarkuar...</main>;
 
   const publicSession: RoomSession = {
     title: session.title,
@@ -39,11 +39,11 @@ export default function HrMeetingRoom() {
 
   return (
     <div>
-      <div className="bg-[#0b1520] px-5 py-3">
-        <Link href={`/sessions/${session.id}`} className="inline-flex items-center gap-2 text-sm font-semibold text-slate-300">
+      <nav aria-label="Kthehu" className="dark-ui bg-[#0b1520] px-5 py-1">
+        <Link href={`/sessions/${session.id}`} className="inline-flex min-h-11 items-center gap-2 text-sm font-semibold text-slate-300">
           <ArrowLeft size={16} /> Kthehu te call-i
         </Link>
-      </div>
+      </nav>
       <MeetingRoom token={session.public_token} role="hr" session={publicSession} />
     </div>
   );

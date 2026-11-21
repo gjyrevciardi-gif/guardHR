@@ -167,7 +167,7 @@ export default function TestDetailPage() {
 
   return (
     <AppShell>
-      <Link href="/tests" className="mb-6 inline-flex items-center gap-2 text-sm font-semibold text-slate-600 hover:text-teal">
+      <Link href="/tests" className="mb-6 inline-flex items-center gap-2 text-sm font-semibold text-slate-600 hover:text-teal min-h-11">
         <ArrowLeft size={17} /> Testet & formularet
       </Link>
 
@@ -175,12 +175,12 @@ export default function TestDetailPage() {
         <div>
           <p className="text-sm font-bold uppercase tracking-[0.24em] text-teal">{test.form_mode ? "Qendra e review për formularin" : "Qendra e review për testin"}</p>
           <h1 className="mt-2 text-3xl font-black text-navy">{test.title}</h1>
-          <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-500">{test.description || "Pa pershkrim"}</p>
+          <p className="mt-2 max-w-3xl text-sm leading-6 text-muted">{test.description || "Pa pershkrim"}</p>
         </div>
         <div className="flex rounded-full border border-slate-200 bg-white p-1 shadow-sm">
-          <button onClick={() => setMode("review")} className={`rounded-full px-4 py-2 text-sm font-bold transition ${mode === "review" ? "bg-shell-200 text-teal" : "text-slate-500 hover:text-navy"}`}>Review</button>
-          <button onClick={() => setMode("edit")} className={`rounded-full px-4 py-2 text-sm font-bold transition ${mode === "edit" ? "bg-shell-200 text-teal" : "text-slate-500 hover:text-navy"}`}>Edit</button>
-          <button onClick={() => void removeTest()} className="rounded-full px-4 py-2 text-sm font-bold text-red-700 transition hover:bg-red-50" aria-label="Fshi testin">Fshi</button>
+          <button onClick={() => setMode("review")} className={`min-h-11 rounded-full px-4 text-sm font-bold transition ${mode === "review" ? "bg-shell-200 text-teal" : "text-muted hover:text-navy"}`}>Review</button>
+          <button onClick={() => setMode("edit")} className={`min-h-11 rounded-full px-4 text-sm font-bold transition ${mode === "edit" ? "bg-shell-200 text-teal" : "text-muted hover:text-navy"}`}>Edit</button>
+          <button onClick={() => void removeTest()} className="min-h-11 rounded-full px-4 text-sm font-bold text-red-700 transition hover:bg-red-50" aria-label="Fshi testin">Fshi</button>
         </div>
       </div>
 
@@ -188,7 +188,7 @@ export default function TestDetailPage() {
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div>
             <h2 className="font-black">Linku publik</h2>
-            <p className="mt-1 text-sm text-slate-500">
+            <p className="mt-1 text-sm text-muted">
               Njerzit hyjne pa account dhe plotesojne vetem kete {test.form_mode ? "formular" : "test"}.
             </p>
           </div>
@@ -208,7 +208,7 @@ export default function TestDetailPage() {
         <Metric label="Mesatarja" value={averageScore == null ? "-" : `${averageScore}%`} />
       </div>
 
-      {message && <p className="mt-5 rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm font-semibold text-emerald-800">{message}</p>}
+      {message && <p role="status" className="mt-5 rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm font-semibold text-emerald-800">{message}</p>}
       {error && mode === "review" && <p role="alert" className="mt-5 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm font-semibold text-red-700">{error}</p>}
 
       {mode === "review" ? (
@@ -219,7 +219,7 @@ export default function TestDetailPage() {
             <span className="rounded-2xl bg-shell-200 p-3 text-teal"><Edit3 /></span>
             <div>
               <h2 className="text-xl font-black">Edito {formMode ? "formularin" : "testin"}</h2>
-              <p className="mt-1 text-sm text-slate-500">Ndrysho titullin, pyetjet, opsionet dhe share settings.</p>
+              <p className="mt-1 text-sm text-muted">Ndrysho titullin, pyetjet, opsionet dhe share settings.</p>
             </div>
           </div>
 
@@ -234,27 +234,27 @@ export default function TestDetailPage() {
             <label className="rounded-3xl border border-slate-200 bg-white p-4">
               <input type="checkbox" checked={formMode} onChange={(event) => changeFormMode(event.target.checked)} className="mr-2 accent-teal" />
               <span className="font-bold">Formular mode</span>
-              <p className="mt-2 text-xs leading-5 text-slate-500">Pyetje te lira ose MCQ pa score te detyrueshem.</p>
+              <p className="mt-2 text-xs leading-5 text-muted">Pyetje te lira ose MCQ pa score te detyrueshem.</p>
             </label>
             <label className="rounded-3xl border border-slate-200 bg-white p-4">
               <input type="checkbox" checked={isPublic} onChange={(event) => setIsPublic(event.target.checked)} className="mr-2 accent-teal" />
               <span className="font-bold">Public link active</span>
-              <p className="mt-2 text-xs leading-5 text-slate-500">Lejo plotesim nga linku publik.</p>
+              <p className="mt-2 text-xs leading-5 text-muted">Lejo plotesim nga linku publik.</p>
             </label>
             <div className="rounded-3xl border border-slate-200 bg-white p-4">
               <p className="font-bold">Mode</p>
-              <p className="mt-2 text-sm text-slate-500">{formMode ? "Formular / survey" : "Test me score"}</p>
+              <p className="mt-2 text-sm text-muted">{formMode ? "Formular / survey" : "Test me score"}</p>
             </div>
           </div>
 
           <div>
-            <label className="label">Titulli</label>
-            <input className="input" value={title} onChange={(event) => setTitle(event.target.value)} required minLength={2} />
+            <label htmlFor="test-title" className="label">Titulli</label>
+            <input id="test-title" className="input" value={title} onChange={(event) => setTitle(event.target.value)} required minLength={2} />
           </div>
 
           <div>
-            <label className="label">Pershkrimi / instruksionet</label>
-            <textarea className="input min-h-24" value={description} onChange={(event) => setDescription(event.target.value)} />
+            <label htmlFor="test-description" className="label">Pershkrimi / instruksionet</label>
+            <textarea id="test-description" className="input min-h-24" value={description} onChange={(event) => setDescription(event.target.value)} />
           </div>
 
           <div className="space-y-4">
@@ -263,34 +263,34 @@ export default function TestDetailPage() {
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <h3 className="font-black">Pyetja {questionIndex + 1}</h3>
                   <div className="flex items-center gap-2">
-                    <select className="input py-2" value={question.question_type} onChange={(event) => changeQuestionType(questionIndex, event.target.value as QuestionType)}>
+                    <select aria-label={`Lloji i pyetjes ${questionIndex + 1}`} className="input min-h-11 py-2" value={question.question_type} onChange={(event) => changeQuestionType(questionIndex, event.target.value as QuestionType)}>
                       <option value="multiple_choice">Multiple choice</option>
                       <option value="short_text">Short text</option>
                     </select>
                     {questions.length > 1 && (
-                      <button type="button" onClick={() => setQuestions((current) => current.filter((_, i) => i !== questionIndex))} className="rounded-full p-2 text-red-500 hover:bg-red-50" aria-label="Fshij pyetjen">
+                      <button type="button" onClick={() => setQuestions((current) => current.filter((_, i) => i !== questionIndex))} className="flex h-11 w-11 items-center justify-center rounded-full text-red-500 hover:bg-red-50" aria-label={`Fshij pyetjen ${questionIndex + 1}`}>
                         <Trash2 size={17} />
                       </button>
                     )}
                   </div>
                 </div>
 
-                <label className="label mt-4">Teksti i pyetjes</label>
-                <textarea className="input min-h-20" value={question.prompt} onChange={(event) => updateQuestion(questionIndex, { prompt: event.target.value })} required />
+                <label htmlFor={`question-${questionIndex}-prompt`} className="label mt-4">Teksti i pyetjes</label>
+                <textarea id={`question-${questionIndex}-prompt`} className="input min-h-20" value={question.prompt} onChange={(event) => updateQuestion(questionIndex, { prompt: event.target.value })} required />
 
                 {question.question_type === "multiple_choice" ? (
                   <>
                     <div className="mt-4 space-y-2">
                       {question.options.map((option, optionIndex) => (
-                        <label key={optionIndex} className="flex items-center gap-3">
+                        <div key={optionIndex} className="flex items-center gap-3">
                           {!formMode && (
-                            <input type="radio" name={`correct-${questionIndex}`} checked={question.correct_option_index === optionIndex} onChange={() => updateQuestion(questionIndex, { correct_option_index: optionIndex })} className="accent-teal" />
+                            <label className="flex h-11 w-11 shrink-0 cursor-pointer items-center justify-center"><input type="radio" aria-label={`Opsioni ${optionIndex + 1} është përgjigjja e saktë`} name={`correct-${questionIndex}`} checked={question.correct_option_index === optionIndex} onChange={() => updateQuestion(questionIndex, { correct_option_index: optionIndex })} className="h-6 w-6 accent-teal" /></label>
                           )}
-                          <input className="input" placeholder={`Opsioni ${optionIndex + 1}`} value={option} onChange={(event) => updateOption(questionIndex, optionIndex, event.target.value)} required />
-                          <button type="button" onClick={() => removeOption(questionIndex, optionIndex)} className="rounded-full p-2 text-slate-400 hover:bg-red-50 hover:text-red-500" aria-label="Fshij opsionin">
+                          <input className="input" aria-label={`Opsioni ${optionIndex + 1}`} placeholder={`Opsioni ${optionIndex + 1}`} value={option} onChange={(event) => updateOption(questionIndex, optionIndex, event.target.value)} required />
+                          <button type="button" onClick={() => removeOption(questionIndex, optionIndex)} className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-muted hover:bg-red-50 hover:text-red-500" aria-label={`Fshij opsionin ${optionIndex + 1}`}>
                             <Trash2 size={16} />
                           </button>
-                        </label>
+                        </div>
                       ))}
                     </div>
                     <button type="button" onClick={() => updateQuestion(questionIndex, { options: [...question.options, ""], correct_option_index: question.correct_option_index ?? (formMode ? null : 0) })} className="btn-secondary mt-3" disabled={question.options.length >= 8}>
@@ -298,7 +298,7 @@ export default function TestDetailPage() {
                     </button>
                   </>
                 ) : (
-                  <p className="mt-4 rounded-2xl bg-white p-3 text-sm text-slate-500">Pjesemarresi do shkruaje pergjigje te lire.</p>
+                  <p className="mt-4 rounded-2xl bg-white p-3 text-sm text-muted">Pjesemarresi do shkruaje pergjigje te lire.</p>
                 )}
               </section>
             ))}
@@ -327,7 +327,7 @@ function ReviewPanel({ test }: { test: TestDetail }) {
           <span className="rounded-2xl bg-shell-200 p-3 text-teal"><ClipboardList /></span>
           <div>
             <h2 className="text-xl font-black">{test.form_mode ? "Form questions" : "Answer key"}</h2>
-            <p className="mt-1 text-sm text-slate-500">Kjo shihet vetem nga host/admin.</p>
+            <p className="mt-1 text-sm text-muted">Kjo shihet vetem nga host/admin.</p>
           </div>
         </div>
         <div className="mt-5 space-y-4">
@@ -354,7 +354,7 @@ function ReviewPanel({ test }: { test: TestDetail }) {
           <div className="card p-8 text-center">
             <ClipboardList className="mx-auto text-teal" size={34} />
             <h3 className="mt-4 text-lg font-black">Ende nuk ka public submissions</h3>
-            <p className="mt-2 text-sm text-slate-500">Shperndaje linkun publik per me mbledh pergjigje pa call.</p>
+            <p className="mt-2 text-sm text-muted">Shperndaje linkun publik per me mbledh pergjigje pa call.</p>
           </div>
         ) : (
           test.standalone_submissions.map((submission) => (
@@ -362,7 +362,7 @@ function ReviewPanel({ test }: { test: TestDetail }) {
               <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                 <div>
                   <h3 className="text-lg font-black">{submission.participant_name || "Anonim"}</h3>
-                  <p className="text-sm text-slate-500">{submission.participant_email || "pa email"} - {dateTime(submission.submitted_at)}</p>
+                  <p className="text-sm text-muted">{submission.participant_email || "pa email"} - {dateTime(submission.submitted_at)}</p>
                 </div>
                 <span className="rounded-full bg-shell-100 px-3 py-1 text-sm font-bold text-teal">
                   {submission.total > 0 ? `${submission.score}/${submission.total}` : "Form"}
@@ -378,7 +378,7 @@ function ReviewPanel({ test }: { test: TestDetail }) {
           <div className="card p-8 text-center">
             <ClipboardList className="mx-auto text-teal" size={34} />
             <h3 className="mt-4 text-lg font-black">Ende nuk eshte perdorur ne call</h3>
-            <p className="mt-2 text-sm text-slate-500">Krijo nje call dhe zgjidhe kete test per te pare submissions ketu.</p>
+            <p className="mt-2 text-sm text-muted">Krijo nje call dhe zgjidhe kete test per te pare submissions ketu.</p>
             <Link href="/sessions/new" className="btn-primary mt-5">Krijo call</Link>
           </div>
         ) : (
@@ -390,7 +390,7 @@ function ReviewPanel({ test }: { test: TestDetail }) {
                     <h3 className="text-lg font-black text-navy">{session.candidate_name}</h3>
                     <StatusBadge status={session.review_status} />
                   </div>
-                  <p className="mt-1 text-sm text-slate-500">{session.session_title} - {session.candidate_email || "pa email"}</p>
+                  <p className="mt-1 text-sm text-muted">{session.session_title} - {session.candidate_email || "pa email"}</p>
                 </div>
                 <Link href={`/sessions/${session.session_id}`} className="btn-secondary">
                   Timeline <ExternalLink size={16} />
@@ -444,12 +444,12 @@ function AnswersList({ test, answers }: { test: TestDetail; answers: Record<stri
             <p className="font-semibold">{question.position}. {question.prompt}</p>
             <div className="mt-3 grid gap-2 text-sm sm:grid-cols-2">
               <p>
-                <span className="font-bold text-slate-500">Pergjigja:</span>{" "}
+                <span className="font-bold text-muted">Pergjigja:</span>{" "}
                 {formatAnswer(question, answer)}
               </p>
               {question.question_type === "multiple_choice" && question.correct_option_index != null && (
                 <p>
-                  <span className="font-bold text-slate-500">Sakte:</span>{" "}
+                  <span className="font-bold text-muted">Sakte:</span>{" "}
                   {question.options[question.correct_option_index]}
                 </p>
               )}
@@ -472,7 +472,7 @@ function Metric({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-3xl border border-white/80 bg-white/75 p-4 shadow-sm backdrop-blur-xl">
       <p className="text-2xl font-black text-navy capitalize">{value}</p>
-      <p className="mt-1 text-xs font-semibold text-slate-500">{label}</p>
+      <p className="mt-1 text-xs font-semibold text-muted">{label}</p>
     </div>
   );
 }
