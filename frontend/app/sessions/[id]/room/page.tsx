@@ -6,7 +6,7 @@ import { ArrowLeft } from "lucide-react";
 import { useParams, useRouter } from "next/navigation";
 import { MeetingRoom } from "@/components/MeetingRoom";
 import { api } from "@/lib/api";
-import { InterviewSession, PublicSession } from "@/lib/types";
+import { InterviewSession, RoomSession } from "@/lib/types";
 
 export default function HrMeetingRoom() {
   const { id } = useParams<{ id: string }>();
@@ -27,7 +27,7 @@ export default function HrMeetingRoom() {
 
   if (!session) return <main className="flex min-h-screen items-center justify-center bg-mist p-6">Duke ngarkuar...</main>;
 
-  const publicSession: PublicSession = {
+  const publicSession: RoomSession = {
     title: session.title,
     candidate_name: session.candidate.full_name,
     status: session.status,

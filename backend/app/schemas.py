@@ -1,6 +1,6 @@
 import json
 from datetime import datetime
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import AliasChoices, BaseModel, ConfigDict, EmailStr, Field, field_validator
 
@@ -259,6 +259,7 @@ class SessionOut(BaseModel):
     status: str
     review_status: ReviewStatus
     invite_email_queued: bool = False
+    invite_status: Literal["sent", "failed"] | None = None
     require_screen_share: bool
     test: TestOut | None = None
     test_submission: TestSubmissionOut | None = None
@@ -276,6 +277,8 @@ class SessionOut(BaseModel):
 class PublicSessionOut(BaseModel):
     title: str
     candidate_name: str
+    host_name: str  # who is responsible for the data: shown on the consent page
+    retention_days: int  # how long after the call ends the monitoring data is kept
     status: str
     require_screen_share: bool
     expires_at: datetime
