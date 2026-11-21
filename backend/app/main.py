@@ -9,7 +9,7 @@ from .api import auth, public, sessions, settings, signaling, tests
 from .config import get_settings
 from .database import Base, engine
 from .retention import retention_loop
-from .vision import vision_installed
+from .vision import frame_stats, vision_installed
 
 logger = logging.getLogger("nemoguard")
 
@@ -40,4 +40,4 @@ app.include_router(tests.public_router, prefix="/api")
 
 @app.get("/api/health")
 def health():
-    return {"status": "ok", "service": "NemoGuardHR API", "vision": vision_installed()}
+    return {"status": "ok", "service": "NemoGuardHR API", "vision": vision_installed(), "frames": frame_stats.snapshot()}
