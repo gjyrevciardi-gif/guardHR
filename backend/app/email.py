@@ -10,6 +10,7 @@ from sqlalchemy.orm import selectinload
 from .config import get_settings
 from .database import SessionLocal
 from .models import InterviewSession
+from .security import PASSWORD_RESET_TTL_MINUTES
 from .services import record_audit
 from .signals import as_utc
 from .verification import CODE_TTL_SECONDS
@@ -120,6 +121,49 @@ def send_verification_code(session: InterviewSession, code: str) -> None:
         )
     )
     deliver(message)
+
+
+def build_password_reset(email: str, full_name: str, token: str) -> EmailMessage:
+    """Albanian message with a short English line. The link is the only secret in it and works once."""
+    link = f"{get_settings().public_app_url.rstrip('/')}/reset-password?token={token}"
+    message = EmailMessage()
+    message["Subject"] = "Ndrysho fjalëkalimin e NemoGuardHR"
+    message["From"] = get_settings().smtp_from_email
+    message["To"] = email
+    message.set_content(
+        "\n".join(
+            [
+                f"Përshëndetje {full_name},",
+                "",
+                "Kërkove të ndryshosh fjalëkalimin. Hap linkun për të vendosur një të ri:",
+                "",
+                link,
+                "",
+                f"Linku vlen {PASSWORD_RESET_TTL_MINUTES} minuta dhe përdoret vetëm një herë. Pasi ta ndryshosh, do të dalësh nga të gjitha pajisjet.",
+                "Nëse nuk e ke kërkuar ti, injoroje këtë email: fjalëkalimi yt nuk ndryshon.",
+                "",
+                f"English: you asked to change your password. Open the link above to choose a new one; it works once and expires in {PASSWORD_RESET_TTL_MINUTES} minutes. Ignore this email if it was not you.",
+            ]
+        )
+    )
+    return message
+
+
+def send_password_reset(email: str, full_name: str, token: str) -> None:
+    deliver(build_password_reset(email, full_name, token))
+
+
+def deliver_password_reset(user_id: str, email: str, full_name: str, token: str, ip: str | None) -> None:
+    """Background task: send the reset link and audit the outcome. The SMTP error stays in the server log only."""
+    try:
+        send_password_reset(email, full_name, token)
+        action = "auth.password_reset_email_sent"
+    except Exception:
+        logger.exception("Password reset email for user %s could not be delivered", user_id)
+        action = "auth.password_reset_email_failed"
+    with SessionLocal() as db:
+        record_audit(db, user_id=user_id, ip=ip, action=action, entity_type="user", entity_id=user_id)
+        db.commit()
 
 
 def deliver_invite(session_id: str, user_id: str, ip: str | None) -> None:

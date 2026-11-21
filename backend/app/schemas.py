@@ -2,8 +2,9 @@ import json
 from datetime import datetime
 from typing import Any, Literal
 
-from pydantic import AliasChoices, BaseModel, ConfigDict, EmailStr, Field, field_validator
+from pydantic import AliasChoices, BaseModel, ConfigDict, EmailStr, Field, computed_field, field_validator
 
+from .config import get_settings
 from .enums import EventType, QuestionType, ReviewOutcome, ReviewStatus, UserRole
 from .signals import Severity
 
@@ -14,6 +15,40 @@ MAX_ANSWERS = 200
 class LoginRequest(BaseModel):
     email: EmailStr
     password: str = Field(max_length=128)
+    code: str | None = Field(default=None, max_length=32)  # authenticator or recovery code, only for users with two-step verification
+
+
+class PasswordChange(BaseModel):
+    current_password: str = Field(max_length=128)
+    new_password: str = Field(min_length=8, max_length=128)
+
+
+class PasswordResetRequest(BaseModel):
+    email: EmailStr
+
+
+class PasswordResetConfirm(BaseModel):
+    token: str = Field(min_length=20, max_length=128)
+    new_password: str = Field(min_length=8, max_length=128)
+
+
+class MfaCode(BaseModel):
+    code: str = Field(min_length=1, max_length=32)
+
+
+class MfaDisable(MfaCode):
+    password: str = Field(max_length=128)
+
+
+class MfaSetupOut(BaseModel):
+    secret: str
+    otpauth_uri: str
+
+
+class MfaEnabledOut(BaseModel):
+    """Shown once: only hashes of the recovery codes are kept."""
+
+    recovery_codes: list[str]
 
 
 class RegisterRequest(BaseModel):
@@ -33,6 +68,13 @@ class UserOut(BaseModel):
     full_name: str
     role: str
     retention_days: int
+    mfa_enabled: bool
+
+    @computed_field
+    @property
+    def mfa_setup_required(self) -> bool:
+        """An administrator who must enrol before administrator features work (REQUIRE_ADMIN_MFA)."""
+        return self.role == UserRole.admin and not self.mfa_enabled and get_settings().admin_mfa_required
 
 
 class TokenResponse(BaseModel):

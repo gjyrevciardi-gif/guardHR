@@ -50,7 +50,7 @@ def test_fresh_database_reaches_head(scratch_engine):
     with scratch_engine.connect() as connection:
         tables = {row[0] for row in connection.execute(text("SELECT table_name FROM information_schema.tables WHERE table_schema = 'public'"))}
         assert {"users", "candidates", "interview_sessions", "tests", "test_submissions", "alembic_version"} <= tables
-        assert connection.execute(text("SELECT version_num FROM alembic_version")).scalar() == "0006"
+        assert connection.execute(text("SELECT version_num FROM alembic_version")).scalar() == "0007"
     upgrade(scratch_engine)  # running again is a no-op
 
 
@@ -168,4 +168,24 @@ def test_existing_calls_start_without_notes_and_the_notes_migration_downgrades_c
     with scratch_engine.connect() as connection:
         columns = {row[0] for row in connection.execute(text("SELECT column_name FROM information_schema.columns WHERE table_name = 'interview_sessions'"))}
         assert "host_notes" not in columns and "verified_at" in columns  # 0005 is untouched
+    upgrade(scratch_engine)
+
+
+def test_existing_users_keep_their_sessions_and_start_without_a_second_step_and_the_account_migration_downgrades_cleanly(scratch_engine):
+    upgrade(scratch_engine, "0006")
+    with scratch_engine.begin() as connection:
+        connection.execute(text("INSERT INTO users (id, email, password_hash, full_name) VALUES ('00000000-0000-0000-0000-000000000001', 'u@x.com', 'h', 'U')"))
+    upgrade(scratch_engine)
+    columns = "token_version, mfa_enabled, mfa_secret, mfa_last_step, mfa_recovery_hashes, password_reset_hash, password_reset_expires_at"
+    with scratch_engine.connect() as connection:
+        assert connection.execute(text(f"SELECT {columns} FROM users")).one() == (0, False, None, None, None, None, None)
+    config = Config(str(BACKEND_DIR / "alembic.ini"))
+    config.set_main_option("script_location", str(BACKEND_DIR / "alembic"))
+    with scratch_engine.begin() as connection:
+        config.attributes["connection"] = connection
+        command.downgrade(config, "0006")
+    with scratch_engine.connect() as connection:
+        names = {row[0] for row in connection.execute(text("SELECT column_name FROM information_schema.columns WHERE table_name = 'users'"))}
+        assert not set(columns.split(", ")) & names and "password_hash" in names
+        assert connection.execute(text("SELECT count(*) FROM users")).scalar() == 1  # the account itself survives
     upgrade(scratch_engine)

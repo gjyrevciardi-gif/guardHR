@@ -1,3 +1,5 @@
+import hashlib
+import hmac
 from datetime import datetime, timedelta, timezone
 
 import jwt
@@ -15,6 +17,7 @@ from .models import User
 password_hash = PasswordHash.recommended()
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login", auto_error=False)
 SAFE_METHODS = {"GET", "HEAD", "OPTIONS"}
+PASSWORD_RESET_TTL_MINUTES = 60
 # Verified against when the email is unknown so login time does not reveal which emails exist.
 DUMMY_PASSWORD_HASH = password_hash.hash("not-a-real-password")
 
@@ -27,10 +30,18 @@ def verify_password(password: str, hashed: str) -> bool:
     return password_hash.verify(password, hashed)
 
 
-def create_access_token(user_id: str) -> str:
+def keyed_hash(purpose: str, value: str) -> str:
+    """HMAC of a secret the user holds (reset token, recovery code), so a leaked database does not hand out usable ones.
+
+    Changing JWT_SECRET invalidates every outstanding reset link and recovery code, as it does every session.
+    """
+    return hmac.new(get_settings().jwt_secret.encode(), f"{purpose}:{value}".encode(), hashlib.sha256).hexdigest()
+
+
+def create_access_token(user_id: str, token_version: int = 0) -> str:
     settings = get_settings()
     expires = datetime.now(timezone.utc) + timedelta(minutes=settings.jwt_expire_minutes)
-    return jwt.encode({"sub": user_id, "exp": expires}, settings.jwt_secret, algorithm=settings.jwt_algorithm)
+    return jwt.encode({"sub": user_id, "tv": token_version, "exp": expires}, settings.jwt_secret, algorithm=settings.jwt_algorithm)
 
 
 def set_session_cookie(response: Response, token: str) -> None:
@@ -62,7 +73,10 @@ def user_from_token(db: Session, token: str | None) -> User | None:
         return None
     user_id = payload.get("sub")
     user = db.get(User, user_id) if user_id else None
-    return user if user and user.is_active else None
+    if not user or not user.is_active:
+        return None
+    # Tokens issued before versions existed have no claim and count as 0, the starting version.
+    return user if payload.get("tv", 0) == user.token_version else None
 
 
 def get_current_user(request: Request, bearer: str | None = Depends(oauth2_scheme), db: Session = Depends(get_db)) -> User:
@@ -80,4 +94,6 @@ def get_current_user(request: Request, bearer: str | None = Depends(oauth2_schem
 def require_admin(user: User = Depends(get_current_user)) -> User:
     if user.role != UserRole.admin:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Administrator access required")
+    if get_settings().admin_mfa_required and not user.mfa_enabled:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Enable two-step verification in Settings before using administrator features")
     return user

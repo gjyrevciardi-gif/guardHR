@@ -84,8 +84,13 @@ Skema nuk krijohet më nga `database/schema.sql` por nga Alembic. Një databazë
 
 | Method | Endpoint | Qëllimi |
 |---|---|---|
-| POST | `/api/auth/login` | Login HR; vendos cookie `HttpOnly` (kthen edhe `access_token` për klientë API) |
+| POST | `/api/auth/login` | Login HR; vendos cookie `HttpOnly` (kthen edhe `access_token` për klientë API). Me verifikim në dy hapa përgjigjja është `401 mfa_required` derisa dërgohet edhe `code` |
 | POST | `/api/auth/logout` | Fshin cookie-n e sesionit |
+| POST | `/api/auth/logout-everywhere` | Ç'vlefëson çdo sesion të përdoruesit (kjo pajisje dhe të tjerat) |
+| POST | `/api/auth/password` | Ndryshon fjalëkalimin (kërkon fjalëkalimin aktual); pajisjet e tjera dalin, kjo merr sesion të ri |
+| POST | `/api/auth/password-reset/request` | Dërgon link rivendosjeje me email; përgjigjja është gjithmonë e njëjtë (nuk zbulon cilat email ekzistojnë) |
+| POST | `/api/auth/password-reset/confirm` | Vendos fjalëkalim të ri me linkun (një herë, 60 minuta); të gjitha pajisjet dalin |
+| POST | `/api/auth/mfa/setup` · `/enable` · `/disable` | Verifikimi në dy hapa (TOTP): çelës, aktivizim me kod (kthen 8 kodet e rikuperimit një herë), çaktivizim me fjalëkalim dhe kod |
 | POST | `/api/auth/register` | Regjistrim HR (i mbyllur në prodhim) |
 | POST | `/api/auth/users` | Krijim përdoruesi nga admin |
 | GET | `/api/auth/me` | Profili dhe retention policy |
@@ -123,6 +128,7 @@ Skema nuk krijohet më nga `database/schema.sql` por nga Alembic. Një databazë
 - Rëndësia e sinjaleve, rregulli i rishikimit dhe mbulimi i monitorimit: [docs/signals.md](docs/signals.md).
 - Qasshmëria (WCAG 2.2 AA), konventat e UI dhe kufijtë e njohur: [docs/accessibility.md](docs/accessibility.md).
 - Testi i pajisjes dhe verifikimi i email-it para hyrjes (çfarë provon dhe çfarë jo): [docs/candidate-checks.md](docs/candidate-checks.md).
+- Rivendosja e fjalëkalimit, dalja nga të gjitha pajisjet dhe verifikimi në dy hapa (çfarë bëjnë dhe kufijtë e tyre): [docs/account-security.md](docs/account-security.md).
 - Etiketat e vetme (vlerat e ruajtura dhe të API-t) janë: `No events detected`, `Requires review`, `Review completed`, `Insufficient evidence`. UI i shfaq shqip: "Pa sinjale", "Kërkon shqyrtim", "Shqyrtuar", "Prova të pamjaftueshme" (`reviewStatusLabels` në `frontend/lib/format.ts`).
 - Nuk ka emotion recognition, lie detection, personality analysis ose refuzim automatik.
 
@@ -130,6 +136,7 @@ Skema nuk krijohet më nga `database/schema.sql` por nga Alembic. Një databazë
 
 - Sesioni HR është cookie `HttpOnly`, `SameSite=Lax` (`Secure` mbi HTTPS); kërkesat që ndryshojnë të dhëna me cookie kërkojnë `Origin` të lejuar.
 - Login: kufizim për IP dhe për llogari; përpjekjet e dështuara regjistrohen në audit log.
+- Llogaria: rivendosje fjalëkalimi me link një-përdorimësh, "Dil nga të gjitha pajisjet" dhe verifikim në dy hapa (TOTP) për çdo përdorues; në prodhim administratorët duhet ta aktivizojnë para se të përdorin funksionet e administratorit (`REQUIRE_ADMIN_MFA`). Detaje dhe kufij: [docs/account-security.md](docs/account-security.md).
 - Rooms e thirrjes: roli `hr` kërkon cookie të vlefshme të pronarit të sesionit; kandidati hyn vetëm pasi ka dhënë consent dhe ka nisur; klientët mund të përcjellin vetëm mesazhe WebRTC (`offer`, `answer`, `ice`, `screen-*`).
 - Në `APP_ENV=production` backend-i refuzon të niset me `JWT_SECRET` të dobët/placeholder, fjalëkalim admin default ose `PUBLIC_APP_URL` pa HTTPS.
 - Kufijtë dhe ceilings të njohura (një worker, limitet në memorie) janë në [docs/deployment.md](docs/deployment.md).

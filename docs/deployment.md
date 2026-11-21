@@ -30,7 +30,7 @@ The development stack (`docker-compose.yml`) is not meant for the internet: it p
    ```
 
    The overlay removes every published port except Nginx (80 redirects to 443), serves the API under `/api` on the same origin as the UI, and enables `TRUST_PROXY_HEADERS` (Nginx *overwrites* `X-Forwarded-For`, so the value the backend sees is trustworthy).
-5. **First login** with the initial admin, then create HR accounts with `POST /api/auth/users` (`role: "hr"`). Public registration is closed in production unless you set `REGISTRATION_ENABLED=true`.
+5. **First login** with the initial admin, **turn on two-step verification** in Settings (in production the API refuses administrator features until you do; see `docs/account-security.md`), then create HR accounts with `POST /api/auth/users` (`role: "hr"`). Public registration is closed in production unless you set `REGISTRATION_ENABLED=true`.
 
 With `APP_ENV=production` the backend **refuses to start** when `JWT_SECRET` is shorter than 32 characters or still a placeholder, when `INITIAL_ADMIN_PASSWORD` is the default, or when `PUBLIC_APP_URL` is not https.
 
@@ -64,6 +64,13 @@ Migration `0005` adds the optional email-code columns on `interview_sessions` (`
 Migration `0006` adds one nullable column, `interview_sessions.host_notes`, for the host's private working notes; it is additive and downgradable (downgrading discards the notes). The notes are only returned on the call detail endpoint to the call's owner, never to the candidate, and, like reviews, they are kept until the host deletes the call: the retention purge does not touch them, so say so in your own privacy notice if hosts will write about candidates.
 
 The invitation email is now written in Albanian with a short English line, names the host, shows the deadline in Kosovo time (`Europe/Belgrade`; it falls back to UTC on images without tzdata) and mentions screen sharing, the test and the email code only when that call uses them. The subject changed from `NemoGuardHR invite: …` to `Ftesë për call: …`, so adjust any mail filters that match the old subject.
+
+Migration `0007` adds seven columns to `users` for account security (`token_version`, the reset-link hash and expiry, and the two-step verification secret, flag, last used step and recovery-code hashes); it is additive and downgradable (downgrading discards secrets and recovery codes, so users enrol again). Nobody is signed out by the upgrade: sessions issued before it count as version 0, every user's starting version. What changes for operators:
+
+- **Administrators must enrol before using administrator features in production** (`REQUIRE_ADMIN_MFA` blank = on in production, off in development; `true`/`false` overrides). In practice the only administrator-only route today is `POST /api/auth/users`. An administrator can still sign in and reach Settings to enrol, so this cannot lock anyone out. HR users are never forced.
+- **Password reset emails** go through the same SMTP relay as invitations. Without a working relay the reset page says "sent" (it must not reveal which emails exist) but nothing arrives; the failure is an audit entry (`auth.password_reset_email_failed`) and a line in the server log. Links use `PUBLIC_APP_URL`.
+- **Changing `JWT_SECRET`** already signed everyone out; it now also invalidates outstanding reset links and every recovery code (they are keyed hashes). Authenticator codes keep working because the TOTP secret is stored as is.
+- **Rate limits are per API process** (reset requests 5 per hour per address and 3 per hour per email; code guesses 5 per 5 minutes per account), like the existing login limits.
 
 The interface has a light and a dark theme (a toggle in every header; the choice is kept in the browser's local storage). Nothing server-side changed for this, and no new environment variable is needed.
 
