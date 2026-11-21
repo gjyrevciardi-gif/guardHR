@@ -2,6 +2,9 @@ import { fallbackMessages, translateMessage } from "@/lib/messages";
 
 export const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8100/api";
 
+/** The API's answer to a correct password for an account with two-step verification. Deliberately left untranslated in messages.ts. */
+export const MFA_REQUIRED = "mfa_required";
+
 export class ApiError extends Error {
   constructor(public status: number, message: string) {
     super(message);

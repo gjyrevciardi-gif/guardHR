@@ -1,7 +1,15 @@
 // The API answers in English; the interface is Albanian. Unknown messages fall through unchanged.
+// "mfa_required" (see MFA_REQUIRED in api.ts) is a signal for the login page, not text, so it is left out on purpose.
 const exact: Record<string, string> = {
   "Invalid authentication credentials": "Sesioni ka skaduar. Kyçu përsëri.",
   "Email or password is incorrect": "Email-i ose fjalëkalimi nuk është i saktë.",
+  "Current password is incorrect": "Fjalëkalimi aktual nuk është i saktë.",
+  "Verification code is incorrect": "Kodi i verifikimit nuk është i saktë.",
+  "This reset link is invalid or has expired": "Linku nuk është i vlefshëm ose ka skaduar. Kërko një të ri.",
+  "Two-step verification is already on": "Verifikimi në dy hapa është aktiv tashmë.",
+  "Two-step verification is not on": "Verifikimi në dy hapa nuk është aktiv.",
+  "Start the setup first": "Nise fillimisht konfigurimin.",
+  "Enable two-step verification in Settings before using administrator features": "Aktivizo verifikimin në dy hapa te Cilësimet para se të përdorësh funksionet e administratorit.",
   "Registration is disabled. Ask an administrator for an account.": "Regjistrimi është i mbyllur. Kërkoji administratorit një llogari.",
   "Administrator access required": "Duhen të drejta administratori.",
   "Cross-origin request blocked": "Kërkesa u bllokua për arsye sigurie.",

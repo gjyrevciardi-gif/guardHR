@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { History, Loader2, ShieldCheck, Trash2 } from "lucide-react";
 import { AppShell } from "@/components/AppShell";
 import { OfflineBanner } from "@/components/OfflineBanner";
+import { SecuritySettings } from "@/components/SecuritySettings";
 import { ApiError, api } from "@/lib/api";
 import { auditLabel, dateTime } from "@/lib/format";
 import { AuditLog, User } from "@/lib/types";
@@ -87,6 +88,8 @@ export default function SettingsPage() {
         {failure && <p role="alert" className="mt-4 text-sm font-semibold text-red-700">{failure}</p>}
         <p className="mt-4 flex items-start gap-2 text-xs leading-5 text-muted"><ShieldCheck size={14} aria-hidden="true" className="mt-0.5 shrink-0 text-teal" />Afati vlen për llogarinë tënde. Një call që fshihet me dorë hiqet menjëherë me gjithçka që ka brenda.</p>
       </section>
+
+      {user && <SecuritySettings user={user} onChanged={() => void load()} />}
 
       <section className="card mt-6 p-6 animate-rise" aria-labelledby="audit-title">
         <h2 id="audit-title" className="section-title">Regjistri i veprimeve</h2>

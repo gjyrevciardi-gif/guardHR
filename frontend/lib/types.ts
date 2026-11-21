@@ -1,7 +1,7 @@
 export type ReviewStatus = "No events detected" | "Requires review" | "Review completed" | "Insufficient evidence";
 export type EventType = "tab_hidden" | "fullscreen_exit" | "camera_disabled" | "face_not_visible" | "multiple_people" | "phone_detected" | "screen_share_stopped" | "copy_paste" | "connection_interruption" | "window_resized" | "multiple_monitors";
 
-export interface User { id: string; email: string; full_name: string; role: string; retention_days: number }
+export interface User { id: string; email: string; full_name: string; role: string; retention_days: number; mfa_enabled: boolean; mfa_setup_required: boolean }
 export interface Candidate { id: string; email: string | null; full_name: string }
 export type Severity = "info" | "low" | "medium" | "high";
 export type SignalLevel = "none" | Severity;
