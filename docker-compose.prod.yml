@@ -17,6 +17,7 @@ services:
       CORS_ORIGINS: ${PUBLIC_APP_URL}
       TRUST_PROXY_HEADERS: "true" # safe only because nginx overwrites X-Forwarded-For
       REGISTRATION_ENABLED: ${REGISTRATION_ENABLED:-false}
+      REQUIRE_ADMIN_MFA: ${REQUIRE_ADMIN_MFA:-}
     restart: unless-stopped
 
   # Development-only mail catcher: configure a real SMTP_HOST instead.

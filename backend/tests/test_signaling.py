@@ -40,6 +40,15 @@ def test_connections_are_rejected_unless_verified(client, hr, other_hr, new_sess
         assert ws.receive_json() == {"type": "peers", "roles": []}
 
 
+def test_signing_out_everywhere_also_closes_the_door_to_the_room(client, hr, new_session):
+    token = new_session(hr)["public_token"]
+    owner = cookie_for(client, hr)
+    with client.websocket_connect(room_url(token, "hr"), headers=owner | {"origin": "http://localhost:3100"}) as ws:
+        assert ws.receive_json() == {"type": "peers", "roles": []}
+    assert client.post("/api/auth/logout-everywhere", headers=hr).status_code == 204
+    assert_rejected(client, room_url(token, "hr"), signaling.UNAUTHORIZED, headers=owner | {"origin": "http://localhost:3100"})
+
+
 def test_candidate_cannot_claim_the_host_role(client, started_session):
     assert_rejected(client, room_url(started_session["public_token"], "hr"), signaling.UNAUTHORIZED)
 

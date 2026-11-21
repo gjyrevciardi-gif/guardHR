@@ -69,6 +69,14 @@ def sent_invites(monkeypatch):
     return sent
 
 
+@pytest.fixture(autouse=True)
+def sent_resets(monkeypatch):
+    """Capture password reset emails as (address, token) instead of talking to SMTP."""
+    sent: list[tuple[str, str]] = []
+    monkeypatch.setattr("app.email.send_password_reset", lambda email, full_name, token: sent.append((email, token)))
+    return sent
+
+
 @pytest.fixture
 def settings():
     return get_settings()

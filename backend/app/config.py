@@ -22,6 +22,8 @@ class Settings(BaseSettings):
     initial_admin_password: str = DEFAULT_ADMIN_PASSWORD
     # None = open registration in development, closed in production.
     registration_enabled: bool | None = None
+    # None = administrators must use two-step verification in production, optional in development.
+    require_admin_mfa: bool | None = None
     # Only enable behind a reverse proxy that overwrites X-Forwarded-For.
     trust_proxy_headers: bool = False
     rate_limit_enabled: bool = True
@@ -41,7 +43,7 @@ class Settings(BaseSettings):
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
-    @field_validator("registration_enabled", "ice_servers", mode="before")
+    @field_validator("registration_enabled", "require_admin_mfa", "ice_servers", mode="before")
     @classmethod
     def blank_means_default(cls, value, info):
         """docker compose passes unset variables as empty strings; treat them as 'not configured'."""
@@ -56,6 +58,10 @@ class Settings(BaseSettings):
     @property
     def registration_allowed(self) -> bool:
         return self.registration_enabled if self.registration_enabled is not None else not self.is_production
+
+    @property
+    def admin_mfa_required(self) -> bool:
+        return self.require_admin_mfa if self.require_admin_mfa is not None else self.is_production
 
     @property
     def cookie_secure(self) -> bool:

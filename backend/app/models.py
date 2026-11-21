@@ -29,6 +29,16 @@ class User(Base):
     role: Mapped[str] = mapped_column(String(30), default=UserRole.hr)
     retention_days: Mapped[int] = mapped_column(Integer, default=30)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    # Session tokens carry the version they were issued under; bumping it signs the user out everywhere.
+    token_version: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    # Only the keyed hash of the emailed reset token is stored (app/security.py keyed_hash).
+    password_reset_hash: Mapped[str | None] = mapped_column(String(64), unique=True)
+    password_reset_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # Two-step verification (app/mfa.py). mfa_secret is set at setup and only counts once mfa_enabled is true.
+    mfa_secret: Mapped[str | None] = mapped_column(String(64))
+    mfa_enabled: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
+    mfa_last_step: Mapped[int | None] = mapped_column(Integer)
+    mfa_recovery_hashes: Mapped[list[str] | None] = mapped_column(JSON)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
 
