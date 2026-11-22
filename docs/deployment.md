@@ -36,13 +36,16 @@ With `APP_ENV=production` the backend **refuses to start** when `JWT_SECRET` is 
 
 ## TURN (candidates behind strict NATs)
 
-The room uses WebRTC. STUN alone fails for symmetric NATs and many corporate networks. Run a TURN relay (for example coturn) and list it in `ICE_SERVERS` (JSON, read by the backend at runtime and served from `/api/rtc-config`, so no frontend rebuild is needed):
+The room uses WebRTC. STUN alone fails for symmetric NATs and many corporate networks, so production needs a TURN relay. Two ways:
 
-```env
-ICE_SERVERS=[{"urls":"stun:stun.l.google.com:19302"},{"urls":"turn:turn.example.com:3478","username":"user","credential":"secret"}]
-```
+- **Your own coturn (bundled).** `docker-compose.prod.yml` has a `turn` service behind the `turn` profile and `deploy/turnserver.conf` configures it. Set `TURN_URLS` (comma-separated `turn:`/`turns:` URLs) and `TURN_SECRET` (random, at least 32 characters in production; the backend refuses to start with only one of the two) and start with `--profile turn`. The backend then adds a TURN entry to `/api/rtc-config` with a credential that expires after 8 hours, derived from the secret with HMAC-SHA1 (coturn's `use-auth-secret` scheme), so no password is ever published. The full procedure, ports and checks are in [staging.md](staging.md).
+- **An external relay.** List it in `ICE_SERVERS` (JSON, read by the backend at runtime and served from `/api/rtc-config`, so no frontend rebuild is needed):
 
-The credential is visible to anyone who opens a call link, so use short-lived TURN credentials (REST API / `use-auth-secret`) rather than a shared password.
+  ```env
+  ICE_SERVERS=[{"urls":"stun:stun.l.google.com:19302"},{"urls":"turn:turn.example.com:3478","username":"user","credential":"secret"}]
+  ```
+
+  Whatever is written there is visible to anyone who opens a call link, so use a provider's short-lived credentials rather than a shared password.
 
 ## Operations
 
@@ -89,7 +92,7 @@ The interface has a light and a dark theme (a toggle in every header; the choice
 
 `/privacy` describes what the software does. The consent page shows the host's name and the retention period from the database. Before real candidates use a deployment, the operator should add their own legal entity, contact address and legal basis to `frontend/app/privacy/page.tsx`: the page does not name an operator because the software cannot know it, and nothing in it is legal advice.
 
-The face-detection model and its WASM runtime are served from the app itself (`frontend/public/mediapipe/`, see the README there), so the candidate's browser makes no CDN request. Candidate pages load no third-party scripts; the only third party a candidate's IP reaches is the STUN/TURN server in `ICE_SERVERS` (Google STUN by default).
+The face-detection model and its WASM runtime are served from the app itself (`frontend/public/mediapipe/`, see the README there), so the candidate's browser makes no CDN request. Candidate pages load no third-party scripts; the only third party a candidate's IP reaches is the STUN/TURN server in `ICE_SERVERS` (Google STUN by default; point it at your own relay, as in [staging.md](staging.md), to remove even that).
 
 ## Upgrading from the pre-Alembic version
 

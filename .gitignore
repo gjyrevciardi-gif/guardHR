@@ -17,3 +17,5 @@ backend/.env
 deploy/certs/
 
 frontend/public/mediapipe/wasm/
+deploy/letsencrypt/
+deploy/renew.log

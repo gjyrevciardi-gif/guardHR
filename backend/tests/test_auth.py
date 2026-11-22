@@ -128,6 +128,35 @@ def test_rtc_config_is_public_and_configurable(client, settings, monkeypatch):
     assert client.get("/api/rtc-config").json() == {"iceServers": [{"urls": "turn:t.example:3478"}]}
 
 
+def test_rtc_config_hands_out_short_lived_turn_credentials(client, settings, monkeypatch):
+    import base64
+    import hashlib
+    import hmac
+
+    monkeypatch.setattr(settings, "turn_urls", "turn:t.example:3478?transport=udp, turns:t.example:5349?transport=tcp")
+    monkeypatch.setattr(settings, "turn_secret", "s" * 40)
+    monkeypatch.setattr("app.api.settings.time.time", lambda: 1_000_000)
+    stun, turn = client.get("/api/rtc-config").json()["iceServers"]
+    assert stun["urls"].startswith("stun:") and "credential" not in stun  # the configured STUN entry is kept as is
+    assert turn["urls"] == ["turn:t.example:3478?transport=udp", "turns:t.example:5349?transport=tcp"]
+    assert turn["username"] == "1028800:nemoguard"  # expires 8 h from now; the number before the colon is what coturn checks
+    assert turn["credential"] == base64.b64encode(hmac.new(b"s" * 40, b"1028800:nemoguard", hashlib.sha1).digest()).decode()
+    assert "s" * 40 not in str(turn)  # the secret itself is never sent
+    monkeypatch.setattr("app.api.settings.time.time", lambda: 1_000_060)
+    assert client.get("/api/rtc-config").json()["iceServers"][1]["credential"] != turn["credential"]  # a new one every time
+
+
+def test_turn_urls_and_secret_must_come_together():
+    for only in ({"turn_urls": "turn:t.example:3478"}, {"turn_secret": "s" * 40}):
+        with pytest.raises(ValidationError):
+            Settings(_env_file=None, **only)
+    assert Settings(_env_file=None, turn_urls="turn:t.example:3478", turn_secret="s" * 40).turn_url_list == ["turn:t.example:3478"]
+    assert Settings(_env_file=None).turn_url_list == []
+    with pytest.raises(ValidationError):  # production: a guessable secret would let anyone mint relay credentials
+        Settings(_env_file=None, **(PRODUCTION | {"turn_urls": "turn:t.example:3478", "turn_secret": "short"}))
+    Settings(_env_file=None, **(PRODUCTION | {"turn_urls": "turn:t.example:3478", "turn_secret": "s" * 32}))
+
+
 def test_blank_environment_values_fall_back_to_defaults(monkeypatch):
     monkeypatch.setenv("REGISTRATION_ENABLED", "")
     monkeypatch.setenv("ICE_SERVERS", "")

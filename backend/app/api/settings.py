@@ -1,3 +1,8 @@
+import base64
+import hashlib
+import hmac
+import time
+
 from fastapi import APIRouter, Depends, Query, Request
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -12,6 +17,9 @@ from ..security import get_current_user
 from ..services import audit
 
 router = APIRouter(tags=["settings and audit"])
+
+# Longer than any call: coturn checks the expiry again whenever a client refreshes its allocation.
+TURN_CREDENTIAL_SECONDS = 8 * 3600
 
 
 @router.put("/settings/retention", response_model=UserOut)
@@ -40,4 +48,10 @@ def list_audit_logs(limit: int = Query(200, ge=1, le=500), offset: int = Query(0
 @router.get("/rtc-config", dependencies=[Depends(rate_limit("rtc-config", 60, 60))])
 def rtc_config():
     """ICE servers for WebRTC, configured at runtime so a TURN relay can be added without rebuilding the frontend."""
-    return {"iceServers": get_settings().ice_server_list}
+    settings = get_settings()
+    servers = settings.ice_server_list
+    if settings.turn_url_list:  # coturn "REST API" credentials: username = expiry:label, password = base64(HMAC-SHA1(secret, username))
+        username = f"{int(time.time()) + TURN_CREDENTIAL_SECONDS}:nemoguard"
+        digest = hmac.new(settings.turn_secret.encode(), username.encode(), hashlib.sha1).digest()
+        servers = [*servers, {"urls": settings.turn_url_list, "username": username, "credential": base64.b64encode(digest).decode()}]
+    return {"iceServers": servers}
