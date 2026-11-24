@@ -10,6 +10,8 @@ from .signals import Severity
 
 MAX_EVENT_METADATA_BYTES = 4096
 MAX_ANSWERS = 200
+MAX_EXAM_EVENTS = 300
+EXAM_EVENT_TYPES = frozenset({EventType.tab_hidden, EventType.copy_paste})
 
 
 class LoginRequest(BaseModel):
@@ -189,9 +191,52 @@ class TestSubmit(BaseModel):
     answers: dict[str, Any] = Field(max_length=MAX_ANSWERS)
 
 
+class EventCreate(BaseModel):
+    event_type: EventType
+    started_at: datetime
+    ended_at: datetime | None = None
+    duration_seconds: float | None = Field(default=None, ge=0, le=86400)
+    confidence_score: float | None = Field(default=None, ge=0, le=1)
+    metadata: dict[str, Any] = Field(default_factory=dict, max_length=30)
+
+    @field_validator("metadata")
+    @classmethod
+    def metadata_must_be_small(cls, value: dict[str, Any]) -> dict[str, Any]:
+        if len(json.dumps(value, default=str)) > MAX_EVENT_METADATA_BYTES:
+            raise ValueError(f"metadata must be at most {MAX_EVENT_METADATA_BYTES} bytes")
+        return value
+
+
+class ExamEventCreate(EventCreate):
+    """What a browser can report while a public exam is open: leaving the page, and clipboard / print attempts."""
+
+    @field_validator("event_type")
+    @classmethod
+    def only_page_signals(cls, value: EventType) -> EventType:
+        if value not in EXAM_EVENT_TYPES:
+            raise ValueError(f"an exam page can only report {', '.join(sorted(EXAM_EVENT_TYPES))}")
+        return value
+
+
 class PublicTestSubmit(TestSubmit):
     participant_name: str | None = Field(default=None, max_length=160)
     participant_email: EmailStr | None = None
+    events: list[ExamEventCreate] = Field(default_factory=list, max_length=MAX_EXAM_EVENTS)
+
+
+class ExamEventOut(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+    event_type: str
+    started_at: datetime
+    ended_at: datetime | None = None
+    duration_seconds: float | None = None
+    severity: Literal["info", "low", "medium", "high"]
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+    @field_validator("severity", mode="before")
+    @classmethod
+    def severity_name(cls, value: Any) -> Any:
+        return Severity(value).name if isinstance(value, int) else value
 
 
 class TestSubmissionOut(BaseModel):
@@ -223,13 +268,14 @@ class TestReviewSessionOut(BaseModel):
 
 
 class TestStandaloneSubmissionOut(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
+    model_config = ConfigDict(from_attributes=True, populate_by_name=True)
     id: str
     participant_name: str | None = None
     participant_email: EmailStr | None = None
     score: int
     total: int
     answers: dict[str, Any]
+    events: list[ExamEventOut] = Field(default_factory=list, validation_alias=AliasChoices("integrity_events", "events"))
     submitted_at: datetime
 
 
@@ -252,22 +298,6 @@ class CandidateOut(BaseModel):
     id: str
     email: EmailStr | None
     full_name: str
-
-
-class EventCreate(BaseModel):
-    event_type: EventType
-    started_at: datetime
-    ended_at: datetime | None = None
-    duration_seconds: float | None = Field(default=None, ge=0, le=86400)
-    confidence_score: float | None = Field(default=None, ge=0, le=1)
-    metadata: dict[str, Any] = Field(default_factory=dict, max_length=30)
-
-    @field_validator("metadata")
-    @classmethod
-    def metadata_must_be_small(cls, value: dict[str, Any]) -> dict[str, Any]:
-        if len(json.dumps(value, default=str)) > MAX_EVENT_METADATA_BYTES:
-            raise ValueError(f"metadata must be at most {MAX_EVENT_METADATA_BYTES} bytes")
-        return value
 
 
 class EventFinish(BaseModel):

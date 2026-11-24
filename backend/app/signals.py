@@ -44,7 +44,8 @@ def severity_for(event_type: str, duration_seconds: float | None = None, metadat
     if event_type == EventType.tab_hidden:
         return Severity.medium if (duration_seconds or 0) >= LONG_ABSENCE_SECONDS else Severity.low
     if event_type == EventType.copy_paste:
-        return Severity.medium if (metadata or {}).get("operation") == "paste" else Severity.low
+        # Bringing text in, printing the page and pressing Print Screen are deliberate; a blocked copy is only an attempt.
+        return Severity.medium if (metadata or {}).get("operation") in ("paste", "print", "screenshot_key") else Severity.low
     if event_type in (EventType.fullscreen_exit, EventType.multiple_monitors):
         return Severity.low  # multiple_monitors is false-positive prone (docks, mirrored displays)
     return Severity.info  # connection_interruption, window_resized

@@ -50,7 +50,7 @@ def test_fresh_database_reaches_head(scratch_engine):
     with scratch_engine.connect() as connection:
         tables = {row[0] for row in connection.execute(text("SELECT table_name FROM information_schema.tables WHERE table_schema = 'public'"))}
         assert {"users", "candidates", "interview_sessions", "tests", "test_submissions", "alembic_version"} <= tables
-        assert connection.execute(text("SELECT version_num FROM alembic_version")).scalar() == "0007"
+        assert connection.execute(text("SELECT version_num FROM alembic_version")).scalar() == "0008"
     upgrade(scratch_engine)  # running again is a no-op
 
 
@@ -188,4 +188,25 @@ def test_existing_users_keep_their_sessions_and_start_without_a_second_step_and_
         names = {row[0] for row in connection.execute(text("SELECT column_name FROM information_schema.columns WHERE table_name = 'users'"))}
         assert not set(columns.split(", ")) & names and "password_hash" in names
         assert connection.execute(text("SELECT count(*) FROM users")).scalar() == 1  # the account itself survives
+    upgrade(scratch_engine)
+
+
+def test_existing_submissions_start_without_signals_and_the_exam_migration_downgrades_cleanly(scratch_engine):
+    upgrade(scratch_engine, "0007")
+    with scratch_engine.begin() as connection:
+        connection.execute(text("INSERT INTO users (id, email, password_hash, full_name) VALUES ('00000000-0000-0000-0000-000000000001', 'u@x.com', 'h', 'U')"))
+        connection.execute(text("INSERT INTO tests (id, created_by, public_token, title) VALUES ('00000000-0000-0000-0000-000000000004', '00000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000005', 'T')"))
+        connection.execute(text("INSERT INTO test_submissions (id, test_id, answers) VALUES ('00000000-0000-0000-0000-000000000006', '00000000-0000-0000-0000-000000000004', '{}')"))
+    upgrade(scratch_engine)
+    with scratch_engine.connect() as connection:
+        assert connection.execute(text("SELECT integrity_events::text FROM test_submissions")).scalar() == "[]"
+    config = Config(str(BACKEND_DIR / "alembic.ini"))
+    config.set_main_option("script_location", str(BACKEND_DIR / "alembic"))
+    with scratch_engine.begin() as connection:
+        config.attributes["connection"] = connection
+        command.downgrade(config, "0007")
+    with scratch_engine.connect() as connection:
+        columns = {row[0] for row in connection.execute(text("SELECT column_name FROM information_schema.columns WHERE table_name = 'test_submissions'"))}
+        assert "integrity_events" not in columns and "answers" in columns
+        assert connection.execute(text("SELECT count(*) FROM test_submissions")).scalar() == 1  # the answers survive
     upgrade(scratch_engine)

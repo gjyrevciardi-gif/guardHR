@@ -8,6 +8,7 @@ from ..models import IntegrityEvent, InterviewSession, Test, TestQuestion, TestS
 from ..ratelimit import rate_limit
 from ..retention import delete_test
 from ..schemas import (
+    ExamEventCreate,
     PublicTestSubmit,
     TestCreate,
     TestDetailOut,
@@ -20,6 +21,7 @@ from ..schemas import (
 )
 from ..security import get_current_user
 from ..services import audit, parse_uuid, request_ip
+from ..signals import severity_for
 from ..test_generator import extract_text_from_upload, generate_questions, infer_title
 
 router = APIRouter(prefix="/tests", tags=["tests"])
@@ -94,6 +96,18 @@ def grade_answers(questions: list[TestQuestion], answers: dict) -> tuple[dict, i
             if answer_index == question.correct_option_index:
                 score += 1
     return checked_answers, score, total
+
+
+def stored_exam_event(event: ExamEventCreate) -> dict:
+    """JSON-safe form of a page signal, with its severity decided here (never trusted from the browser)."""
+    return {
+        "event_type": event.event_type.value,
+        "started_at": event.started_at.isoformat(),
+        "ended_at": event.ended_at.isoformat() if event.ended_at else None,
+        "duration_seconds": event.duration_seconds,
+        "severity": int(severity_for(event.event_type, event.duration_seconds, event.metadata)),
+        "metadata": event.metadata,
+    }
 
 
 def test_to_detail(test: Test, db: Session, user: User) -> TestDetailOut:
@@ -324,6 +338,8 @@ def submit_public_test(token: str, payload: PublicTestSubmit, request: Request, 
         answers=checked_answers,
         score=score,
         total=total,
+        # Plain forms are not monitored: anything a client sends for one is dropped, not stored.
+        integrity_events=[] if test.form_mode else [stored_exam_event(event) for event in payload.events],
     )
     db.add(submission)
     audit(db, None, request, "public_test.submitted", "test_submission", submission.id, None, {"test_id": test.id, "score": score, "total": total, "form_mode": test.form_mode})

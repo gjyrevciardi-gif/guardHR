@@ -33,6 +33,25 @@ services:
     ports: !reset []
     restart: unless-stopped
 
+  # Your own TURN relay (docs/staging.md): add `--profile turn` when starting. Host networking because a relay needs a
+  # range of UDP ports; open the ports listed in deploy/turnserver.conf in the firewall.
+  turn:
+    profiles: ["turn"]
+    image: coturn/coturn:4.19.2
+    network_mode: host
+    environment:
+      TURN_SECRET: ${TURN_SECRET:-}
+    # An empty secret would let anyone mint valid credentials, so refuse to start without one (checked here, not with
+    # ${VAR:?}, because that would also break `docker compose config` for everyone who does not use this profile).
+    entrypoint:
+      - sh
+      - -c
+      - 'test -n "$$TURN_SECRET" || { echo "TURN_SECRET is not set" >&2; exit 1; }; exec turnserver -c /etc/coturn/turnserver.conf --log-file=stdout --static-auth-secret="$$TURN_SECRET"'
+    volumes:
+      - ./deploy/turnserver.conf:/etc/coturn/turnserver.conf:ro
+      - ${TLS_CERT_DIR:-./deploy/certs}:/certs:ro # same certificate as the proxy, for turns:
+    restart: unless-stopped
+
   proxy:
     image: nginx:1.27-alpine
     ports:

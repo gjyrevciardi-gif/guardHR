@@ -139,6 +139,10 @@ class TestSubmission(Base):
     answers: Mapped[dict] = mapped_column(JSON, default=dict)
     score: Mapped[int] = mapped_column(Integer, default=0)
     total: Mapped[int] = mapped_column(Integer, default=0)
+    # Page signals (left the page, paste, print) the browser reported while a public exam was open. Only public
+    # exams fill it; a call's signals are IntegrityEvent rows. Part of the row, so every purge or delete that removes
+    # the submission removes these too.
+    integrity_events: Mapped[list] = mapped_column(JSON, default=list, server_default="[]")
     submitted_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
 

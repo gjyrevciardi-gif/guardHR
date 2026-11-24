@@ -63,3 +63,6 @@ jobs:
           docker compose -f docker-compose.yml config -q
           POSTGRES_PASSWORD=x JWT_SECRET=$(openssl rand -hex 32) INITIAL_ADMIN_PASSWORD=x PUBLIC_APP_URL=https://hr.example.com \
             docker compose -f docker-compose.yml -f docker-compose.prod.yml config -q
+          TURN_SECRET=x POSTGRES_PASSWORD=x JWT_SECRET=$(openssl rand -hex 32) INITIAL_ADMIN_PASSWORD=x PUBLIC_APP_URL=https://hr.example.com \
+            docker compose -f docker-compose.yml -f docker-compose.prod.yml --profile turn config -q
+          for script in deploy/*.sh; do sh -n "$script"; done

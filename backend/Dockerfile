@@ -11,6 +11,9 @@ RUN if [ "$INSTALL_CV" = "true" ]; then \
     else \
       pip install --no-cache-dir -r requirements.txt; \
     fi
+# Fetch the weights now instead of on the first candidate frame, which would otherwise wait for a download from GitHub
+# (and be dropped as "detector busy"). It lands in /app/yolo11n.pt, where YOLO_MODEL_PATH's default finds it.
+RUN if [ "$INSTALL_CV" = "true" ]; then python -c "from ultralytics import YOLO; YOLO('yolo11n.pt')"; fi
 COPY . .
 RUN useradd --system --create-home --uid 10001 app && chown -R app /app
 USER app

@@ -32,6 +32,12 @@ class Settings(BaseSettings):
     # A call still `in_progress` this long after it started is treated as abandoned (tab closed, no /finish) and closed.
     abandoned_session_hours: int = 12
     ice_servers: str = '[{"urls": "stun:stun.l.google.com:19302"}]'
+    # A TURN relay of your own (deploy/turnserver.conf): comma-separated URLs and the shared secret of coturn's
+    # `use-auth-secret`. /api/rtc-config derives a short-lived credential from it, so no password is ever published.
+    turn_urls: str = ""
+    turn_secret: str = ""
+    # Blank = no error reporting. Otherwise errors go to that Sentry project, scrubbed (app/monitoring.py).
+    sentry_dsn: str = ""
     yolo_model_path: str = "yolo11n.pt"
     public_app_url: str = "http://localhost:3100"
     smtp_host: str = "mailpit"
@@ -83,6 +89,10 @@ class Settings(BaseSettings):
     def ice_server_list(self) -> list[dict]:
         return json.loads(self.ice_servers)
 
+    @property
+    def turn_url_list(self) -> list[str]:
+        return [item.strip() for item in self.turn_urls.split(",") if item.strip()]
+
     @model_validator(mode="after")
     def validate_settings(self) -> "Settings":
         try:
@@ -92,8 +102,12 @@ class Settings(BaseSettings):
         if not isinstance(servers, list) or not all(isinstance(item, dict) and "urls" in item for item in servers):
             raise ValueError('ICE_SERVERS must be a JSON list of objects like {"urls": "stun:host:3478"}')
 
+        if bool(self.turn_url_list) != bool(self.turn_secret):
+            raise ValueError("TURN_URLS and TURN_SECRET must be set together")
         if self.is_production:
             problems = []
+            if self.turn_secret and len(self.turn_secret) < 32:
+                problems.append("TURN_SECRET must be a random value of at least 32 characters")
             if len(self.jwt_secret) < 32 or self.jwt_secret.startswith(PLACEHOLDER_SECRET_PREFIXES):
                 problems.append("JWT_SECRET must be a random value of at least 32 characters")
             if self.initial_admin_password == DEFAULT_ADMIN_PASSWORD:

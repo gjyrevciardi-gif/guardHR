@@ -27,6 +27,15 @@ export interface TestReviewSession {
   total: number | null;
   answers: Record<string, TestAnswer> | null;
 }
+/** What a public exam page reports (the API stores it with the submission and decides the severity). */
+export interface ExamEventDraft {
+  event_type: "tab_hidden" | "copy_paste";
+  started_at: string;
+  ended_at: string | null;
+  duration_seconds: number | null;
+  metadata: Record<string, unknown>;
+}
+export interface ExamEvent extends ExamEventDraft { severity: Severity }
 export interface TestStandaloneSubmission {
   id: string;
   participant_name: string | null;
@@ -34,6 +43,7 @@ export interface TestStandaloneSubmission {
   score: number;
   total: number;
   answers: Record<string, TestAnswer>;
+  events: ExamEvent[];
   submitted_at: string;
 }
 export interface TestDetail extends Test { sessions: TestReviewSession[]; standalone_submissions: TestStandaloneSubmission[]; questions: Required<TestQuestion>[] }

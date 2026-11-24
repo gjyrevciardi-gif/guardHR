@@ -23,6 +23,7 @@ cheatHR/
 ├── docker-compose.yml        # zhvillim
 ├── docker-compose.prod.yml   # overlay për prodhim (vetëm Nginx publik)
 ├── docs/deployment.md        # prodhimi, TURN, scheduling, kufizimet
+├── docs/staging.md           # staging me TLS, TURN dhe zbulim telefoni: hapat, kontrollet, çfarë nuk është verifikuar
 ├── docs/signals.md           # rëndësia e sinjaleve, rregulli i rishikimit, mbulimi
 ├── docs/accessibility.md     # WCAG 2.2 AA: rregullat, si u verifikua, kufijtë
 ├── docs/candidate-checks.md  # testi i pajisjes dhe kodi me email para hyrjes
@@ -111,7 +112,7 @@ Skema nuk krijohet më nga `database/schema.sql` por nga Alembic. Një databazë
 | POST | `/api/public/sessions/{token}/finish` | Përfundon sesionin |
 | GET | `/api/public/tests/{token}` | Test/formular publik |
 | POST | `/api/public/tests/{token}/submissions` | Dorëzim publik (një për email) |
-| GET | `/api/rtc-config` | Serverat ICE (STUN/TURN) për WebRTC |
+| GET | `/api/rtc-config` | Serverat ICE (STUN/TURN) për WebRTC; me `TURN_URLS`+`TURN_SECRET` shton një kredencial TURN 8-orëshe |
 | WS | `/api/ws/rooms/{token}?role=hr\|candidate` | Signaling; roli verifikohet në server |
 | PUT | `/api/settings/retention` | Ndryshon ditët e ruajtjes |
 | POST | `/api/settings/retention/purge` | Pastron të dhënat përtej afatit |
@@ -125,6 +126,7 @@ Skema nuk krijohet më nga `database/schema.sql` por nga Alembic. Një databazë
 - Video/audio nuk regjistrohen në MVP.
 - **Retention:** në nisje të API-t dhe çdo ditë (`RETENTION_PURGE_INTERVAL_HOURS`) dhe me kërkesë (`/settings/retention/purge`) fshihen `integrity_events`, përgjigjet e testeve, `consent_ip` dhe IP-të në audit log për call-et e përfunduara përtej afatit. Call-et që mbeten `in_progress` më shumë se `ABANDONED_SESSION_HOURS` (12 orë) mbyllen si të braktisura dhe ndjekin të njëjtin afat; linket e skaduara që s'u përdorën kurrë humbin vetëm IP-në e pranimit. Sesioni, review-t, shënimet private të host-it dhe emri i kandidatit mbeten derisa HR të fshijë call-in (`DELETE /api/sessions/{id}`), që heq gjithçka, përfshirë kandidatin nëse nuk ka call tjetër. Mund ta ekzekutosh edhe nga cron: `python -m app.retention`.
 - IP-ja e kandidatit (consent, audit) merret nga lidhja TCP. `X-Forwarded-For` besohet vetëm kur `TRUST_PROXY_HEADERS=true` (Nginx i përfshirë e mbishkruan).
+- Staging me certifikatë reale, TURN të vetin dhe zbulim telefoni (hapat, kontrollet dhe çfarë mbetet pa verifikuar): [docs/staging.md](docs/staging.md).
 - Rëndësia e sinjaleve, rregulli i rishikimit dhe mbulimi i monitorimit: [docs/signals.md](docs/signals.md).
 - Qasshmëria (WCAG 2.2 AA), konventat e UI dhe kufijtë e njohur: [docs/accessibility.md](docs/accessibility.md).
 - Testi i pajisjes dhe verifikimi i email-it para hyrjes (çfarë provon dhe çfarë jo): [docs/candidate-checks.md](docs/candidate-checks.md).
@@ -156,6 +158,11 @@ cd frontend
 npm run lint
 npm run typecheck
 npm run build
+
+# Një test smoke me Playwright (kandidati bën një provim, hosti sheh pikët dhe sinjalet). Duhen ndezur API-ja në :8100
+# dhe frontend-i në :3100 (p.sh. `node .next/standalone/server.js` me PORT=3100 pas `npm run build`).
+npx playwright install chromium             # ose vendos PW_CHANNEL=chrome për Chrome-in që ke
+npm run e2e                                 # E2E_EMAIL / E2E_PASSWORD nëse admini nuk është hr@example.com
 ```
 
-CI (`.github/workflows/ci.yml`) ekzekuton të njëjtat kontrolle, përfshirë PostgreSQL.
+CI (`.github/workflows/ci.yml`) ekzekuton të njëjtat kontrolle, përfshirë PostgreSQL. Dy workflow të tjerë: `e2e.yml` ndez API-n dhe frontend-in dhe ekzekuton testin smoke; `security.yml` ekzekuton `pip-audit` dhe `npm audit` për çdo PR dhe çdo të hënë (një dobësi e re te një varësi e pandryshuar del kështu pa PR). Dependabot (`.github/dependabot.yml`) hap PR javore për varësitë, imazhet Docker dhe actions.
