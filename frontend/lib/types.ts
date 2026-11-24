@@ -12,6 +12,8 @@ export type QuestionType = "multiple_choice" | "short_text";
 export type TestAnswer = number | string;
 export interface TestQuestion { id: string; position: number; question_type: QuestionType; prompt: string; options: string[]; correct_option_index?: number | null }
 export interface Test { id: string; public_token: string; title: string; description: string | null; is_public: boolean; form_mode: boolean; created_at: string; question_count: number; questions: TestQuestion[] }
+/** What starting a public exam returns: the questions (the link alone does not carry them) and the attempt to submit with. */
+export interface ExamStarted { attempt: string; started_at: string; questions: TestQuestion[] }
 export interface TestSubmission { id: string; test_id: string; session_id: string | null; participant_name: string | null; participant_email: string | null; score: number; total: number; answers: Record<string, TestAnswer>; submitted_at: string }
 export interface TestReviewSession {
   session_id: string;

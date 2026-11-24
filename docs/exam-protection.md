@@ -4,10 +4,10 @@ A **test** shared as a public link (`/forms/<link>`, `form_mode` off) is an exam
 
 ## What the candidate goes through
 
-1. A notice says what is recorded and blocked, with a link to `/privacy`. The questions are **not** in the page yet.
-2. They give their name and email (both required) and tick that they have read it. Only then does **Fillo testin** work.
-3. The questions appear, with their name, email and the start time tiled faintly over them as a watermark.
-4. On submit the answers and the collected signals go to the server in one request.
+1. A notice says what is recorded and blocked, with a link to `/privacy`. The questions are **not** in the page, and not in the response that loaded it.
+2. They give their name and email (both required) and tick that they have read it. **Fillo testin** sends them to `POST /api/public/tests/<link>/start`. An email that already submitted is refused here (409), before the exam rather than after it.
+3. The server answers with the questions and an **attempt**: a signed token that says "this person started this test". The questions appear, with their name, email and the start time tiled faintly over them as a watermark.
+4. On submit the answers, the attempt and the collected signals go to the server in one request. An exam submission without a valid attempt for that test is refused (400), and it is recorded for the name and email in the attempt, whatever the request body says.
 
 ## What is recorded, blocked, and not possible
 
@@ -24,7 +24,8 @@ Severity is decided by the server, never by the browser: pasting, printing and P
 
 - **Signals come from the candidate's browser.** Their absence does not prove nothing happened.
 - **A candidate who never submits leaves nothing.** Signals travel with the submission, because there is no session to post them to. Closing the tab mid-exam records no attempt.
-- **The questions reach the browser when the link loads** (`GET /api/public/tests/<link>`). The page hides them until the candidate starts, which stops a casual look, not someone reading the network response. For a stricter exam, run it inside a call.
+- **The link alone reveals nothing, but starting is open.** `GET /api/public/tests/<link>` carries the title and the number of questions; the questions come from `/start`, which needs a name and a well-formed email, nothing more. Someone willing to give a made-up name and email can read the questions (from the network response) without taking the exam, and the watermark then carries that made-up name. Rate limit: 20 starts an hour per IP and test. For a stricter exam, run it inside a call.
+- The attempt is stateless (valid six hours, `security.EXAM_ATTEMPT_HOURS`), so the server keeps nothing at the start. A candidate can start again, which gives them the questions again and a fresh attempt; there is no per-attempt time limit; two attempts started before either is submitted give one submission (the second is refused as a duplicate).
 - Anyone with the link can take it once per email; the email is self-declared and not verified.
 - Mobile browsers have no Print Screen key and mostly no print dialog; there the notice, the watermark and the focus signals are what remain.
 
@@ -34,4 +35,8 @@ Signals are stored in `test_submissions.integrity_events` (JSON, migration `0008
 
 ## Possible next steps (not built)
 
-Per-candidate shuffling of question and option order (makes sharing "question 3 is B" useless), a time limit, and sending the questions only after the start (a per-attempt token) so the link alone reveals nothing.
+Per-candidate shuffling of question and option order (makes sharing "question 3 is B" useless), and a time limit. Both want an attempts table (one row per start, with its start time) instead of the stateless token: that would also record a candidate who starts and never submits, and stop restarts.
+
+## Upgrading
+
+An exam page opened before the upgrade cannot submit afterwards (it has no attempt): the candidate gets "Start the test before submitting it" and has to reload. Deploy between exams, not during one. Plain forms are unaffected.

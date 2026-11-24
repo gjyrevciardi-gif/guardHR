@@ -29,6 +29,9 @@ test("a candidate sits an exam and the host sees the score and the signals", asy
   const exam = await created.json();
 
   try {
+    const link = await request.get(`${API}/public/tests/${exam.public_token}`);
+    expect((await link.json()).questions).toEqual([]); // the link alone carries no questions, only the server's start step does
+
     await page.goto(`/forms/${exam.public_token}`);
     await expect(page.getByRole("heading", { name: "Para se të nisësh" })).toBeVisible();
     await expect(page.getByText("What is 2 + 2?")).toHaveCount(0); // not in the page until the candidate starts

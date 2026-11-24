@@ -1,11 +1,11 @@
 "use client";
 
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { CheckCircle2, ClipboardList, Loader2 } from "lucide-react";
 import { api } from "@/lib/api";
-import { Test, TestAnswer, TestSubmission } from "@/lib/types";
+import { ExamStarted, Test, TestAnswer, TestQuestion, TestSubmission } from "@/lib/types";
 import { useExamGuard } from "@/lib/useExamGuard";
 import { ExamWatermark } from "@/components/ExamWatermark";
 import { ShellMark } from "@/components/ShellMark";
@@ -23,9 +23,12 @@ export default function PublicFormPage() {
   const [loading, setLoading] = useState(false);
   const [accepted, setAccepted] = useState(false);
   const [started, setStarted] = useState<Date | null>(null);
+  const [attempt, setAttempt] = useState("");
+  const [examQuestions, setExamQuestions] = useState<TestQuestion[]>([]);
   // A test (not a plain form) is an exam: it needs to know who is sitting it, tells them what is recorded, and only
-  // then shows the questions.
+  // then does the server send the questions (the link alone does not carry them).
   const exam = test ? !test.form_mode : false;
+  const questions = exam ? examQuestions : test?.questions ?? [];
   const guard = useExamGuard(exam && !!started && !submission);
   const canStart = accepted && participantName.trim().length >= 2 && /^\S+@\S+\.\S+$/.test(participantEmail.trim());
 
@@ -35,11 +38,31 @@ export default function PublicFormPage() {
       .catch((err) => setError(err instanceof Error ? err.message : "Linku nuk është i vlefshëm"));
   }, [token]);
 
-  const allAnswered = useMemo(() => test?.questions.every((question) => {
+  const allAnswered = questions.length > 0 && questions.every((question) => {
     const answer = answers[question.id];
     if (question.question_type === "short_text") return typeof answer === "string" && answer.trim().length > 0;
     return typeof answer === "number";
-  }) ?? false, [answers, test]);
+  });
+
+  async function start(event: FormEvent) {
+    event.preventDefault();
+    if (!canStart) return;
+    setLoading(true);
+    setError("");
+    try {
+      const result = await api<ExamStarted>(`/public/tests/${token}/start`, {
+        method: "POST",
+        body: JSON.stringify({ participant_name: participantName.trim(), participant_email: participantEmail.trim() }),
+      }, false);
+      setAttempt(result.attempt);
+      setExamQuestions(result.questions);
+      setStarted(new Date(result.started_at));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Testi nuk u nis");
+    } finally {
+      setLoading(false);
+    }
+  }
 
   async function submit(event: FormEvent) {
     event.preventDefault();
@@ -49,12 +72,10 @@ export default function PublicFormPage() {
     try {
       setSubmission(await api<TestSubmission>(`/public/tests/${token}/submissions`, {
         method: "POST",
-        body: JSON.stringify({
-          participant_name: participantName.trim() || null,
-          participant_email: participantEmail.trim() || null,
-          answers,
-          events: exam ? guard.collect() : [],
-        }),
+        // An exam is recorded for whoever started it (the attempt carries the name and email); a plain form sends them.
+        body: JSON.stringify(exam
+          ? { attempt, answers, events: guard.collect() }
+          : { participant_name: participantName.trim() || null, participant_email: participantEmail.trim() || null, answers }),
       }, false));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Nuk u dërgua");
@@ -93,7 +114,7 @@ export default function PublicFormPage() {
             </p>
           </div>
         ) : exam && !started ? (
-          <form onSubmit={(event) => { event.preventDefault(); if (canStart) setStarted(new Date()); }} className="card p-7 sm:p-9" aria-labelledby="exam-title">
+          <form onSubmit={start} className="card p-7 sm:p-9" aria-labelledby="exam-title">
             <div className="flex items-start gap-3">
               <span className="rounded-xl bg-shell-200 p-3 text-teal"><ClipboardList aria-hidden="true" /></span>
               <div>
@@ -131,7 +152,9 @@ export default function PublicFormPage() {
               <span>E kam lexuar dhe jam dakord që këto sinjale të regjistrohen gjatë testit.</span>
             </label>
 
-            <button className="btn-primary mt-6 w-full" disabled={!canStart}>Fillo testin</button>
+            {error && <p role="alert" className="mt-5 rounded-xl border border-red-200 bg-red-50 p-3 text-sm font-semibold text-red-700">{error}</p>}
+
+            <button className="btn-primary mt-6 w-full" disabled={!canStart || loading}>{loading ? "Duke nisur…" : "Fillo testin"}</button>
           </form>
         ) : (
           <form onSubmit={submit} className="card p-7 sm:p-9 print:hidden">
@@ -163,7 +186,7 @@ export default function PublicFormPage() {
             )}
 
             <div className="mt-8 space-y-5">
-              {test.questions.map((question) => (
+              {questions.map((question) => (
                 <section key={question.id} aria-labelledby={`q-${question.id}`} className="rounded-xl border border-line bg-shell-100 p-5">
                   <p id={`q-${question.id}`} className={exam ? "select-none font-bold" : "font-bold"}>{question.position}. {question.prompt}</p>
                   {question.question_type === "short_text" ? (
