@@ -55,8 +55,44 @@ The room uses WebRTC. STUN alone fails for symmetric NATs and many corporate net
 | Retention | An in-process job purges expired data when the API starts and then every `RETENTION_PURGE_INTERVAL_HOURS` (default 24; `0` disables it). Run `python -m app.retention` from cron instead if you prefer. A call still `in_progress` `ABANDONED_SESSION_HOURS` (default 12) after it started is closed as abandoned (audit entry `session.auto_closed`, `ended_at` = last event or start time) so it ages out like any finished call; links that expired before the retention cutoff without ever running lose their stored consent IP. See the README for what is deleted. |
 | Deleting data | `DELETE /api/sessions/{id}` and `DELETE /api/tests/{id}` hard-delete, including candidate PII left in audit entries. |
 | Invites | Sent in a background task after the response. The outcome is an audit entry (`participant.invite.email_sent` / `email_failed`); SMTP errors are written to the server log only. |
-| Health | `GET /api/health` returns `{"status": "ok", "vision": true|false, "frames": {...}}` (the frame counters are described under *Known limits*). The backend image has a Docker healthcheck. |
-| Backups | Back up the `interviewguard_data` volume (PostgreSQL). Video and audio are never stored. |
+| Health | `GET /api/health` runs `SELECT 1` and returns `{"status": "ok", "database": true, "vision": true|false, "frames": {...}}`; with the database unreachable it answers `503` and `{"status": "degraded", "database": false}` (the driver's error text is only logged). The backend image's Docker healthcheck therefore turns *unhealthy* during a database outage, and an external uptime monitor pointed at this URL sees it too. The frame counters are described under *Known limits*. |
+| Backups | `./deploy/backup.sh`, see [Backups](#backups). Video and audio are never stored. |
+| Error reporting | Optional, `SENTRY_DSN`; see [Error reporting](#error-reporting-sentry). |
+
+## Backups
+
+`deploy/backup.sh` writes a compressed `pg_dump` to `backups/` (override with `BACKUP_DIR`), reads the archive back to prove it is not truncated, and deletes dumps older than `KEEP_DAYS` (default 14). The file is created owner-only and written under a temporary name, so a failed run never leaves something that looks like a backup. It exits non-zero on any failure. Run it from cron on the host:
+
+```cron
+23 2 * * * cd /srv/nemoguard && ./deploy/backup.sh >> backups/backup.log 2>&1
+```
+
+- **A copy on the same server is not a backup.** Copy `backups/` to another machine or storage account (`rclone`, `rsync` over SSH), and alert if the newest file there is older than a day.
+- **A dump is as sensitive as the database.** It holds candidate names, emails, answers and review notes, and the TOTP secrets as stored (see [account-security.md](account-security.md)). Keep the off-host copy encrypted and readable only by the people who may restore it.
+- **Backups outlive the retention purge.** Retention and `DELETE /api/sessions/{id}` act on the live database at once; the same data stays in older dumps until they are pruned, up to `KEEP_DAYS` + 1 days. Say so in your privacy notice, and keep `KEEP_DAYS` no longer than you can justify. To erase one person from backups sooner you must delete those dumps (or restore one, delete the person, and dump again).
+- **Secrets are not in the dump.** Keep `.env` safe separately. Restoring with a different `JWT_SECRET` works, but invalidates sessions, reset links and recovery codes.
+- Video and audio are never stored, so there is nothing else to back up.
+
+**Restore drill.** Do this once before you rely on the backups and then every few months: restore the newest dump into a scratch database and compare it with the live one.
+
+```bash
+C="docker compose -f docker-compose.yml -f docker-compose.prod.yml"
+dump=$(ls -t backups/nemoguard-*.dump | head -1)
+$C exec -T db sh -c 'createdb -U "$POSTGRES_USER" restore_check'
+$C exec -T db sh -c 'pg_restore --no-owner -U "$POSTGRES_USER" -d restore_check' < "$dump"
+$C exec -T db sh -c 'for d in "$POSTGRES_DB" restore_check; do psql -U "$POSTGRES_USER" -d "$d" -tAc "select current_database(), (select count(*) from users), (select version_num from alembic_version)"; done'
+$C exec -T db sh -c 'dropdb -U "$POSTGRES_USER" restore_check'
+```
+
+The counts should match the live database as of the dump (the two rows can differ by whatever changed since). **A real restore** after losing the database: start only `db`, `createdb` the (empty) database, `pg_restore --no-owner -d <db>` the dump as above, then start the rest; the backend runs `alembic upgrade head` on start, so a dump from an older release is migrated.
+
+## Error reporting (Sentry)
+
+Set `SENTRY_DSN` and unhandled errors, and anything logged at error level, are sent to that Sentry project. Blank (the default) sends nothing and the SDK stays idle. What is sent is deliberately narrow, because the app handles candidate data: the stack trace, the exception type and message, the release and the server name. Not sent: the request (URL, headers, cookies, body, so join links and candidate answers stay out), the signed-in user and IP address, breadcrumbs and local variables (`app/monitoring.py`, covered by `tests/test_operations.py`). Anything that looks like an email address in an error message is replaced by `[email]`, because an SMTP failure can quote the recipient.
+
+- **Sentry becomes a processor.** Error text still leaves your server, so list the provider in your privacy notice and pick a region that fits your obligations (EU data residency is an option when you create the Sentry project).
+- Only the **backend** reports. Browser errors are not sent, because a browser SDK would attach the page URL, which contains the candidate's join token.
+- Errors that were caught and answered with a `4xx` are not reported; only crashes (`5xx`) and error-level log lines are. A database outage shows up through `/api/health`, not as a stream of Sentry events.
 
 ## Upgrading from the previous release
 

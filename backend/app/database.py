@@ -9,7 +9,8 @@ class Base(DeclarativeBase):
 
 
 database_url = get_settings().database_url
-connect_args = {"check_same_thread": False} if database_url.startswith("sqlite") else {}
+# connect_timeout: with the database down, /api/health must answer 503 inside the 3 s the Docker healthcheck waits, not hang.
+connect_args = {"check_same_thread": False} if database_url.startswith("sqlite") else {"connect_timeout": 3}
 engine = create_engine(database_url, pool_pre_ping=True, connect_args=connect_args)
 SessionLocal = sessionmaker(bind=engine, autocommit=False, autoflush=False)
 

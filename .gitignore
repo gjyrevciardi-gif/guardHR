@@ -15,6 +15,7 @@ backend/.env
 *.db
 .ruff_cache/
 deploy/certs/
+backups/
 
 frontend/public/mediapipe/wasm/
 deploy/letsencrypt/

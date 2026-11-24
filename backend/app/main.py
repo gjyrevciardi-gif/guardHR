@@ -4,14 +4,19 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+from sqlalchemy import text
+from sqlalchemy.exc import SQLAlchemyError
 
 from .api import auth, public, sessions, settings, signaling, tests
 from .config import get_settings
 from .database import Base, engine
+from .monitoring import init_sentry
 from .retention import retention_loop
 from .vision import frame_stats, vision_installed
 
 logger = logging.getLogger("nemoguard")
+init_sentry(get_settings())  # before the app exists, so Sentry can hook FastAPI
 
 
 @asynccontextmanager
@@ -40,4 +45,12 @@ app.include_router(tests.public_router, prefix="/api")
 
 @app.get("/api/health")
 def health():
-    return {"status": "ok", "service": "NemoGuardHR API", "vision": vision_installed(), "frames": frame_stats.snapshot()}
+    body = {"status": "ok", "service": "NemoGuardHR API", "database": True, "vision": vision_installed(), "frames": frame_stats.snapshot()}
+    try:
+        with engine.connect() as connection:
+            connection.execute(text("SELECT 1"))
+    except SQLAlchemyError as exc:
+        # A warning, not logger.exception: Docker polls this every 15 s and an outage would otherwise flood Sentry.
+        logger.warning("Health check: database unreachable (%s)", type(exc).__name__)
+        return JSONResponse({**body, "status": "degraded", "database": False}, status_code=503)
+    return body

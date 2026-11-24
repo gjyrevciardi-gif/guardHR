@@ -36,6 +36,8 @@ class Settings(BaseSettings):
     # `use-auth-secret`. /api/rtc-config derives a short-lived credential from it, so no password is ever published.
     turn_urls: str = ""
     turn_secret: str = ""
+    # Blank = no error reporting. Otherwise errors go to that Sentry project, scrubbed (app/monitoring.py).
+    sentry_dsn: str = ""
     yolo_model_path: str = "yolo11n.pt"
     public_app_url: str = "http://localhost:3100"
     smtp_host: str = "mailpit"
