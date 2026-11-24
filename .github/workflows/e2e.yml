@@ -51,10 +51,14 @@ jobs:
             curl -fsS -o /dev/null "$url"
           done
 
+      # The Chrome that ships on the runner image: no browser download and no apt packages (that step once took three
+      # minutes on a slow mirror). Playwright talks to whatever stable Chrome the image has.
       - name: Smoke test
         working-directory: frontend
+        env:
+          PW_CHANNEL: chrome
         run: |
-          npx playwright install --with-deps chromium
+          google-chrome --version
           npm run e2e
 
       - name: Keep the evidence when it fails

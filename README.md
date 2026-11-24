@@ -162,8 +162,8 @@ npm run build
 
 # Një test smoke me Playwright (kandidati bën një provim, hosti sheh pikët dhe sinjalet). Duhen ndezur API-ja në :8100
 # dhe frontend-i në :3100 (p.sh. `node .next/standalone/server.js` me PORT=3100 pas `npm run build`).
-npx playwright install chromium             # ose vendos PW_CHANNEL=chrome për Chrome-in që ke
-npm run e2e                                 # E2E_EMAIL / E2E_PASSWORD nëse admini nuk është hr@example.com
+PW_CHANNEL=chrome npm run e2e               # me Chrome-in që ke (ose `npx playwright install chromium` dhe pa PW_CHANNEL)
+                                            # vendos E2E_EMAIL / E2E_PASSWORD nëse admini nuk është hr@example.com
 ```
 
 CI (`.github/workflows/ci.yml`) ekzekuton të njëjtat kontrolle, përfshirë PostgreSQL. Dy workflow të tjerë: `e2e.yml` ndez API-n dhe frontend-in dhe ekzekuton testin smoke; `security.yml` ekzekuton `pip-audit` dhe `npm audit` për çdo PR dhe çdo të hënë (një dobësi e re te një varësi e pandryshuar del kështu pa PR). Dependabot (`.github/dependabot.yml`) hap PR javore për varësitë, imazhet Docker dhe actions.
