@@ -222,6 +222,20 @@ class PublicTestSubmit(TestSubmit):
     participant_name: str | None = Field(default=None, max_length=160)
     participant_email: EmailStr | None = None
     events: list[ExamEventCreate] = Field(default_factory=list, max_length=MAX_EXAM_EVENTS)
+    # From POST .../start. A public exam needs it and takes the name and email from it; a plain form ignores it.
+    attempt: str | None = Field(default=None, max_length=2000)
+
+
+class ExamStart(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True)
+    participant_name: str = Field(min_length=2, max_length=160)
+    participant_email: EmailStr
+
+
+class ExamStarted(BaseModel):
+    attempt: str
+    started_at: datetime
+    questions: list[TestQuestionOut]
 
 
 class ExamEventOut(BaseModel):

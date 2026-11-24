@@ -22,3 +22,10 @@ def make_test(client, headers: dict[str, str], **overrides) -> dict:
     response = client.post("/api/tests", headers=headers, json=payload)
     assert response.status_code == 201, response.text
     return response.json()
+
+
+def start_exam(client, created: dict, name: str = "Ardi", email: str = "ardi@example.com") -> dict:
+    """What a candidate does first on a public exam: give a name and email, and get the questions and an attempt token."""
+    response = client.post(f"/api/public/tests/{created['public_token']}/start", json={"participant_name": name, "participant_email": email})
+    assert response.status_code == 200, response.text
+    return response.json()

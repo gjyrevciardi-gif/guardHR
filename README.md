@@ -110,8 +110,9 @@ Skema nuk krijohet më nga `database/schema.sql` por nga Alembic. Një databazë
 | POST | `/api/public/sessions/{token}/analyze-frame` | YOLO/OpenCV transient |
 | POST | `/api/public/sessions/{token}/test-submission` | Dorëzon testin e call-it |
 | POST | `/api/public/sessions/{token}/finish` | Përfundon sesionin |
-| GET | `/api/public/tests/{token}` | Test/formular publik |
-| POST | `/api/public/tests/{token}/submissions` | Dorëzim publik (një për email) |
+| GET | `/api/public/tests/{token}` | Test/formular publik (një test jep vetëm titullin dhe numrin e pyetjeve, jo pyetjet) |
+| POST | `/api/public/tests/{token}/start` | Fillimi i një testi publik: emri dhe emaili, kthen pyetjet dhe një `attempt` |
+| POST | `/api/public/tests/{token}/submissions` | Dorëzim publik (një për email; testi kërkon `attempt` nga `/start`) |
 | GET | `/api/rtc-config` | Serverat ICE (STUN/TURN) për WebRTC; me `TURN_URLS`+`TURN_SECRET` shton një kredencial TURN 8-orëshe |
 | WS | `/api/ws/rooms/{token}?role=hr\|candidate` | Signaling; roli verifikohet në server |
 | PUT | `/api/settings/retention` | Ndryshon ditët e ruajtjes |

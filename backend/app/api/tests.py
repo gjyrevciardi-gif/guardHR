@@ -1,3 +1,5 @@
+from datetime import datetime, timezone
+
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, UploadFile
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, selectinload
@@ -9,17 +11,20 @@ from ..ratelimit import rate_limit
 from ..retention import delete_test
 from ..schemas import (
     ExamEventCreate,
+    ExamStart,
+    ExamStarted,
     PublicTestSubmit,
     TestCreate,
     TestDetailOut,
     TestOut,
     TestQuestionHostOut,
+    TestQuestionOut,
     TestReviewSessionOut,
     TestStandaloneSubmissionOut,
     TestSubmissionOut,
     TestUpdate,
 )
-from ..security import get_current_user
+from ..security import create_exam_attempt, get_current_user, read_exam_attempt
 from ..services import audit, parse_uuid, request_ip
 from ..signals import severity_for
 from ..test_generator import extract_text_from_upload, generate_questions, infer_title
@@ -311,9 +316,34 @@ def public_test(db: Session, token: str) -> Test:
     return test
 
 
+def already_submitted(db: Session, test_id: str, email: str) -> bool:
+    return db.scalar(select(TestSubmission.id).where(TestSubmission.test_id == test_id, TestSubmission.session_id.is_(None), TestSubmission.participant_email == email)) is not None
+
+
 @public_router.get("/{token}", response_model=TestOut)
 def get_public_test(token: str, db: Session = Depends(get_db)):
-    return TestOut.from_test(public_test(db, token))
+    test = public_test(db, token)
+    # An exam's questions come from POST .../start, so the link alone reveals nothing. A plain form has nothing to protect.
+    return TestOut.from_test(test, include_questions=test.form_mode)
+
+
+@public_router.post(
+    "/{token}/start",
+    response_model=ExamStarted,
+    dependencies=[Depends(rate_limit("public-test-start", 20, 3600, "token"))],
+)
+def start_public_exam(token: str, payload: ExamStart, db: Session = Depends(get_db)):
+    test = public_test(db, token)
+    if test.form_mode:
+        raise HTTPException(status_code=400, detail="A plain form has no start; fill it in and submit it")
+    email = str(payload.participant_email).lower()
+    if already_submitted(db, test.id, email):
+        raise HTTPException(status_code=409, detail="This email has already submitted this test")
+    return ExamStarted(
+        attempt=create_exam_attempt(test.id, payload.participant_name, email),
+        started_at=datetime.now(timezone.utc),
+        questions=[TestQuestionOut.model_validate(question) for question in test.questions],
+    )
 
 
 @public_router.post(
@@ -324,15 +354,19 @@ def get_public_test(token: str, db: Session = Depends(get_db)):
 )
 def submit_public_test(token: str, payload: PublicTestSubmit, request: Request, db: Session = Depends(get_db)):
     test = public_test(db, token)
-    email = str(payload.participant_email).lower() if payload.participant_email else None
-    if email and db.scalar(select(TestSubmission.id).where(TestSubmission.test_id == test.id, TestSubmission.session_id.is_(None), TestSubmission.participant_email == email)):
+    name, email = payload.participant_name, str(payload.participant_email).lower() if payload.participant_email else None
+    if not test.form_mode:
+        # Who sat the exam is who started it, whatever the request body says.
+        claims = read_exam_attempt(payload.attempt, test.id)
+        name, email = claims["name"], claims["email"]
+    if email and already_submitted(db, test.id, email):
         raise HTTPException(status_code=409, detail="This email has already submitted this test")
     questions = db.scalars(select(TestQuestion).where(TestQuestion.test_id == test.id).order_by(TestQuestion.position)).all()
     checked_answers, score, total = grade_answers(list(questions), payload.answers)
     submission = TestSubmission(
         session_id=None,
         test_id=test.id,
-        participant_name=payload.participant_name.strip() if payload.participant_name else None,
+        participant_name=name.strip() if name else None,
         participant_email=email,
         participant_ip=request_ip(request),
         answers=checked_answers,
