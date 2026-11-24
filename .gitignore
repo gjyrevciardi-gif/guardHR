@@ -20,3 +20,5 @@ backups/
 frontend/public/mediapipe/wasm/
 deploy/letsencrypt/
 deploy/renew.log
+frontend/test-results/
+frontend/playwright-report/

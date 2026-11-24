@@ -1,0 +1,39 @@
+name: Security audit
+
+# On every change, and weekly: a vulnerability published against a dependency we already use shows up here
+# without anyone touching the code.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    - cron: "17 5 * * 1"
+
+jobs:
+  python:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install pip-audit==2.10.1
+      - name: Backend dependencies (pinned in requirements.txt, with everything they pull in)
+        run: pip-audit -r backend/requirements.txt --progress-spinner off
+      - name: Computer-vision pin (ultralytics only; its PyTorch tree is too large to resolve here)
+        run: pip-audit -r backend/requirements-cv.txt --no-deps --progress-spinner off
+
+  node:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Anything that ships to production, any severity
+        run: npm audit --omit=dev
+      - name: Build and test tooling, high and critical only
+        run: npm audit --audit-level=high
