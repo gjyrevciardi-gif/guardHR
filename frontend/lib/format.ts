@@ -1,4 +1,4 @@
-import type { EventType, ReviewStatus, Severity } from "@/lib/types";
+import type { EventType, ExamEvent, ReviewStatus, Severity } from "@/lib/types";
 
 /**
  * What every signal means, in one place, so the live room, the review page and the demo never disagree.
@@ -171,6 +171,28 @@ export const auditLabels: Record<string, string> = {
   "test.generated_from_file": "Testi u gjenerua nga skedari",
 };
 export const auditLabel = (action: string) => auditLabels[action] ?? action;
+
+const severityRank: Record<Severity, number> = { info: 0, low: 1, medium: 2, high: 3 };
+
+/** One chip per kind of exam signal: how often, how long for the absences, and the highest severity among them. */
+export function examSignalSummary(events: ExamEvent[]): { key: string; label: string; severity: Severity }[] {
+  const groups = new Map<string, ExamEvent[]>();
+  for (const event of events) {
+    const key = event.event_type === "tab_hidden" ? "away" : String(event.metadata.operation ?? "copy");
+    groups.set(key, [...(groups.get(key) ?? []), event]);
+  }
+  const label = (key: string, list: ExamEvent[]) => {
+    const times = `${list.length}×`;
+    if (key === "away") return `Doli nga faqja: ${times}, gjithsej ${formatDuration(list.reduce((sum, event) => sum + (event.duration_seconds ?? 0), 0))}`;
+    if (key === "paste") return `Ngjiti tekst: ${times}`;
+    if (key === "print") return `Provoi të printojë: ${times}`;
+    if (key === "screenshot_key") return `Shtypi Print Screen: ${times}`;
+    return `Provoi të kopjojë (u bllokua): ${times}`;
+  };
+  return [...groups.entries()]
+    .map(([key, list]) => ({ key, label: label(key, list), severity: list.reduce<Severity>((top, event) => (severityRank[event.severity] > severityRank[top] ? event.severity : top), "info") }))
+    .sort((a, b) => severityRank[b.severity] - severityRank[a.severity]);
+}
 
 /** "45 s", "12 min", "1 orë 12 min" */
 export function formatDuration(seconds: number) {

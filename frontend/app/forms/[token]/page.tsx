@@ -6,6 +6,8 @@ import { useParams } from "next/navigation";
 import { CheckCircle2, ClipboardList, Loader2 } from "lucide-react";
 import { api } from "@/lib/api";
 import { Test, TestAnswer, TestSubmission } from "@/lib/types";
+import { useExamGuard } from "@/lib/useExamGuard";
+import { ExamWatermark } from "@/components/ExamWatermark";
 import { ShellMark } from "@/components/ShellMark";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { Wordmark } from "@/components/Wordmark";
@@ -19,6 +21,13 @@ export default function PublicFormPage() {
   const [submission, setSubmission] = useState<TestSubmission | null>(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [accepted, setAccepted] = useState(false);
+  const [started, setStarted] = useState<Date | null>(null);
+  // A test (not a plain form) is an exam: it needs to know who is sitting it, tells them what is recorded, and only
+  // then shows the questions.
+  const exam = test ? !test.form_mode : false;
+  const guard = useExamGuard(exam && !!started && !submission);
+  const canStart = accepted && participantName.trim().length >= 2 && /^\S+@\S+\.\S+$/.test(participantEmail.trim());
 
   useEffect(() => {
     api<Test>(`/public/tests/${token}`, {}, false)
@@ -44,6 +53,7 @@ export default function PublicFormPage() {
           participant_name: participantName.trim() || null,
           participant_email: participantEmail.trim() || null,
           answers,
+          events: exam ? guard.collect() : [],
         }),
       }, false));
     } catch (err) {
@@ -82,8 +92,50 @@ export default function PublicFormPage() {
               Faleminderit, përgjigjet u ruajtën.
             </p>
           </div>
+        ) : exam && !started ? (
+          <form onSubmit={(event) => { event.preventDefault(); if (canStart) setStarted(new Date()); }} className="card p-7 sm:p-9" aria-labelledby="exam-title">
+            <div className="flex items-start gap-3">
+              <span className="rounded-xl bg-shell-200 p-3 text-teal"><ClipboardList aria-hidden="true" /></span>
+              <div>
+                <p className="eyebrow">Test publik</p>
+                <h1 id="exam-title" className="mt-2 text-3xl font-bold">{test.title}</h1>
+                <p className="mt-2 text-sm text-muted">{test.question_count} pyetje. Pyetjet shfaqen kur ta nisësh.</p>
+              </div>
+            </div>
+
+            <section aria-labelledby="exam-notice" className="mt-6 rounded-xl border border-line bg-shell-100 p-5">
+              <h2 id="exam-notice" className="font-bold">Para se të nisësh</h2>
+              <p className="mt-2 text-sm text-slate-700">Ky është një test njohurish. Gjatë tij kjo faqe:</p>
+              <ul className="mt-2 list-disc space-y-1.5 pl-5 text-sm text-slate-700">
+                <li>regjistron kur del nga kjo faqe ose skedë, dhe sa zgjat;</li>
+                <li>regjistron kur ngjit tekst, kur shtyp Print Screen ose provon të printosh; për tekstin e ngjitur ruhet vetëm sa i gjatë ishte, jo vetë teksti;</li>
+                <li>nuk të lejon të kopjosh ose të printosh pyetjet, dhe shfaq emrin tënd si filigram mbi to;</li>
+                <li>nuk përdor kamerën, mikrofonin ose ekranin tënd.</li>
+              </ul>
+              <p className="mt-3 text-sm text-slate-700">Këto janë sinjale për organizatorin, jo një vendim: ai i shikon së bashku me përgjigjet. Fshihen bashkë me përgjigjet pas afatit që ka caktuar. <Link href="/privacy" className="font-semibold underline" target="_blank" rel="noreferrer">Më shumë te privatësia</Link>.</p>
+            </section>
+
+            <div className="mt-6 grid gap-4 sm:grid-cols-2">
+              <div>
+                <label htmlFor="form-name" className="label">Emri dhe mbiemri</label>
+                <input id="form-name" autoComplete="name" className="input" value={participantName} onChange={(event) => setParticipantName(event.target.value)} placeholder="Emri yt" required minLength={2} maxLength={160} />
+              </div>
+              <div>
+                <label htmlFor="form-email" className="label">Email</label>
+                <input id="form-email" autoComplete="email" className="input" type="email" value={participantEmail} onChange={(event) => setParticipantEmail(event.target.value)} placeholder="email@example.com" required />
+              </div>
+            </div>
+
+            <label className="mt-6 flex cursor-pointer items-start gap-3 text-sm">
+              <input type="checkbox" className="mt-0.5 h-6 w-6 shrink-0 accent-teal" checked={accepted} onChange={(event) => setAccepted(event.target.checked)} />
+              <span>E kam lexuar dhe jam dakord që këto sinjale të regjistrohen gjatë testit.</span>
+            </label>
+
+            <button className="btn-primary mt-6 w-full" disabled={!canStart}>Fillo testin</button>
+          </form>
         ) : (
-          <form onSubmit={submit} className="card p-7 sm:p-9">
+          <form onSubmit={submit} className="card p-7 sm:p-9 print:hidden">
+            {exam && started && <ExamWatermark text={`${participantName.trim()} · ${participantEmail.trim()} · ${started.toLocaleString("en-GB", { dateStyle: "short", timeStyle: "short" })}`} />}
             <div className="flex items-start gap-3">
               <span className="rounded-xl bg-shell-200 p-3 text-teal"><ClipboardList aria-hidden="true" /></span>
               <div>
@@ -93,21 +145,27 @@ export default function PublicFormPage() {
               </div>
             </div>
 
-            <div className="mt-8 grid gap-4 sm:grid-cols-2">
-              <div>
-                <label htmlFor="form-name" className="label">Emri</label>
-                <input id="form-name" autoComplete="name" className="input" value={participantName} onChange={(event) => setParticipantName(event.target.value)} placeholder="Emri yt" />
+            {exam ? (
+              <p role="note" className="mt-6 rounded-xl border border-line bg-shell-100 p-3 text-sm text-slate-700">
+                Po përgjigjesh si <strong>{participantName.trim()}</strong>. Dalja nga kjo faqe, ngjitja e tekstit dhe printimi regjistrohen për organizatorin.
+              </p>
+            ) : (
+              <div className="mt-8 grid gap-4 sm:grid-cols-2">
+                <div>
+                  <label htmlFor="form-name" className="label">Emri</label>
+                  <input id="form-name" autoComplete="name" className="input" value={participantName} onChange={(event) => setParticipantName(event.target.value)} placeholder="Emri yt" />
+                </div>
+                <div>
+                  <label htmlFor="form-email" className="label">Email</label>
+                  <input id="form-email" autoComplete="email" className="input" type="email" value={participantEmail} onChange={(event) => setParticipantEmail(event.target.value)} placeholder="email@example.com" />
+                </div>
               </div>
-              <div>
-                <label htmlFor="form-email" className="label">Email</label>
-                <input id="form-email" autoComplete="email" className="input" type="email" value={participantEmail} onChange={(event) => setParticipantEmail(event.target.value)} placeholder="email@example.com" />
-              </div>
-            </div>
+            )}
 
             <div className="mt-8 space-y-5">
               {test.questions.map((question) => (
                 <section key={question.id} aria-labelledby={`q-${question.id}`} className="rounded-xl border border-line bg-shell-100 p-5">
-                  <p id={`q-${question.id}`} className="font-bold">{question.position}. {question.prompt}</p>
+                  <p id={`q-${question.id}`} className={exam ? "select-none font-bold" : "font-bold"}>{question.position}. {question.prompt}</p>
                   {question.question_type === "short_text" ? (
                     <textarea
                       aria-label={`Përgjigjja për pyetjen ${question.position}`}
@@ -129,7 +187,7 @@ export default function PublicFormPage() {
                             onChange={() => setAnswers((current) => ({ ...current, [question.id]: index }))}
                             required
                           />
-                          <span>{option}</span>
+                          <span className={exam ? "select-none" : undefined}>{option}</span>
                         </label>
                       ))}
                     </div>

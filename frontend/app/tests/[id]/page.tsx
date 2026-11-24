@@ -7,7 +7,7 @@ import { AlertTriangle, ArrowLeft, CheckCircle2, Clipboard, ClipboardList, Edit3
 import { AppShell } from "@/components/AppShell";
 import { StatusBadge } from "@/components/StatusBadge";
 import { api } from "@/lib/api";
-import { dateTime, eventLabels, sessionStatusLabels } from "@/lib/format";
+import { dateTime, eventLabels, examSignalSummary, sessionStatusLabels, severityLabels, severityStyles } from "@/lib/format";
 import { QuestionType, TestAnswer, TestDetail } from "@/lib/types";
 
 type DraftQuestion = {
@@ -350,6 +350,7 @@ function ReviewPanel({ test }: { test: TestDetail }) {
 
       <section className="space-y-4">
         <h2 className="text-xl font-bold">Përgjigje publike</h2>
+        {!test.form_mode && <p className="text-sm text-muted">Sinjalet vijnë nga browser-i i kandidatit dhe janë për t&apos;u parë, jo një vendim. Mungesa e tyre nuk provon se nuk ndodhi asgjë: një browser i modifikuar mund t&apos;i heqë, dhe screenshot ose foto e ekranit nuk zbulohet.</p>}
         {test.standalone_submissions.length === 0 ? (
           <div className="card p-8 text-center">
             <ClipboardList className="mx-auto text-teal" size={34} aria-hidden="true" />
@@ -368,6 +369,15 @@ function ReviewPanel({ test }: { test: TestDetail }) {
                   {submission.total > 0 ? `${submission.score}/${submission.total}` : "Formular"}
                 </span>
               </div>
+              {submission.events.length > 0 && (
+                <ul className="mt-4 flex flex-wrap gap-2" aria-label="Sinjale gjatë testit">
+                  {examSignalSummary(submission.events).map((signal) => (
+                    <li key={signal.key} className={`chip ${severityStyles[signal.severity]}`}>
+                      <span className="sr-only">{severityLabels[signal.severity]}: </span>{signal.label}
+                    </li>
+                  ))}
+                </ul>
+              )}
               <AnswersList test={test} answers={submission.answers} />
             </article>
           ))

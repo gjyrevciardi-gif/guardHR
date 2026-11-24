@@ -16,6 +16,7 @@ const sections: Array<{ title: string; body: string[] }> = [
     title: "Çfarë mblidhet",
     body: [
       "Sinjale aktiviteti nga browser-i yt gjatë call-it: dalja nga faqja ose tab-i, humbja e fokusit, fullscreen, ndryshimi i madhësisë së dritares, më shumë se një monitor, ndërprerja e lidhjes, copy/paste (vetëm numri i rreshtave dhe i shkronjave, dhe nëse duket si kod; jo teksti), fytyra që nuk shihet, disa persona, telefon i zbuluar, kamera ose ndarja e ekranit e ndalur.",
+      "Në një test me link publik (pa call): dalja nga faqja ose skeda dhe sa zgjat, ngjitja e tekstit (vetëm sa i gjatë ishte, jo teksti), përpjekjet për të kopjuar ose printuar pyetjet dhe tasti Print Screen. Para se të nisësh e lexon këtë dhe e pranon. Nuk përdoren kamera, mikrofoni ose ekrani. Emri dhe email-i yt shfaqen si filigram mbi pyetjet. Këto fshihen bashkë me përgjigjet pas afatit të organizatorit.",
       "Çdo 5 sekonda një pamje e vogël e kamerës dërgohet te serveri për të numëruar persona dhe për të gjetur telefon. Pamja analizohet në kujtesë dhe hidhet; nuk ruhet.",
       "Koha dhe adresa IP e pranimit, përgjigjet e testit (nëse ka), emri dhe email-i yt si i ftuar.",
       "Video, zëri dhe ekrani live shkojnë drejtpërdrejt te organizatori. Platforma nuk i regjistron.",
