@@ -7,8 +7,8 @@ import { AlertTriangle, ArrowLeft, CheckCircle2, Clipboard, ClipboardList, Edit3
 import { AppShell } from "@/components/AppShell";
 import { StatusBadge } from "@/components/StatusBadge";
 import { api } from "@/lib/api";
-import { dateTime, eventLabels, examSignalSummary, sessionStatusLabels, severityLabels, severityStyles } from "@/lib/format";
-import { QuestionType, TestAnswer, TestDetail } from "@/lib/types";
+import { dateTime, eventLabels, examSignalSummary, formatDuration, sessionStatusLabels, severityLabels, severityStyles } from "@/lib/format";
+import { ExamAttempt, QuestionType, TestAnswer, TestDetail } from "@/lib/types";
 
 type DraftQuestion = {
   id?: string;
@@ -34,6 +34,8 @@ export default function TestDetailPage() {
   const [description, setDescription] = useState("");
   const [formMode, setFormMode] = useState(false);
   const [isPublic, setIsPublic] = useState(true);
+  const [timeLimit, setTimeLimit] = useState("");
+  const [shuffle, setShuffle] = useState(false);
   const [questions, setQuestions] = useState<DraftQuestion[]>([emptyQuestion(false)]);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
@@ -46,6 +48,8 @@ export default function TestDetailPage() {
     setDescription(data.description || "");
     setFormMode(data.form_mode);
     setIsPublic(data.is_public);
+    setTimeLimit(data.time_limit_minutes ? String(data.time_limit_minutes) : "");
+    setShuffle(data.shuffle);
     setQuestions(data.questions.map((question) => ({
       id: question.id,
       question_type: question.question_type,
@@ -124,6 +128,17 @@ export default function TestDetailPage() {
     }
   }
 
+  async function releaseAttempt(attempt: ExamAttempt) {
+    if (!window.confirm(`${attempt.participant_name} do të mund ta nisë testin përsëri, me kohën e plotë. Vazhdoj?`)) return;
+    setError("");
+    try {
+      await api(`/tests/${id}/attempts/${attempt.id}`, { method: "DELETE" });
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Kandidati nuk u lejua të fillojë përsëri.");
+    }
+  }
+
   async function save(event: FormEvent) {
     event.preventDefault();
     setSaving(true);
@@ -135,6 +150,8 @@ export default function TestDetailPage() {
         description: description.trim() || null,
         form_mode: formMode,
         is_public: isPublic,
+        time_limit_minutes: formMode || !timeLimit.trim() ? null : Number(timeLimit),
+        shuffle: !formMode && shuffle,
         questions: questions.map((question) => ({
           id: question.id,
           question_type: question.question_type,
@@ -212,7 +229,7 @@ export default function TestDetailPage() {
       {error && mode === "review" && <p role="alert" className="mt-5 rounded-xl border border-red-200 bg-red-50 p-4 text-sm font-semibold text-red-700">{error}</p>}
 
       {mode === "review" ? (
-        <ReviewPanel test={test} />
+        <ReviewPanel test={test} onRelease={releaseAttempt} />
       ) : (
         <form onSubmit={save} className="card mt-8 space-y-6 p-7">
           <div className="flex items-center gap-3">
@@ -246,6 +263,22 @@ export default function TestDetailPage() {
               <p className="mt-2 text-sm text-muted">{formMode ? "Formular / pyetësor" : "Test me pikë"}</p>
             </div>
           </div>
+
+          {!formMode && (
+            <fieldset className="grid gap-3 rounded-xl border border-line bg-white p-4 sm:grid-cols-2">
+              <legend className="px-1 text-sm font-bold">Për linkun publik</legend>
+              <div>
+                <label htmlFor="test-time-limit" className="label">Koha në minuta (bosh = pa kufi)</label>
+                <input id="test-time-limit" className="input" type="number" inputMode="numeric" min={1} max={480} step={1} value={timeLimit} onChange={(event) => setTimeLimit(event.target.value)} aria-describedby="test-time-limit-help" />
+                <p id="test-time-limit-help" className="mt-2 text-xs leading-5 text-muted">Numërohet nga çasti që kandidati e nis, edhe nëse rihap faqen. Një dorëzim i vonuar pranohet dhe shënohet; pas kohës nuk jepen më pyetjet.</p>
+              </div>
+              <label className="cursor-pointer rounded-xl border border-line p-4">
+                <input type="checkbox" checked={shuffle} onChange={(event) => setShuffle(event.target.checked)} className="mr-2 accent-teal" />
+                <span className="font-bold">Përzie pyetjet dhe opsionet</span>
+                <span className="mt-2 block text-xs leading-5 text-muted">Çdo kandidat i sheh në renditje tjetër, kështu që “pyetja 3 është B” nuk i hyn punës tjetrit. Pikët llogariten sipas çelësit tënd.</span>
+              </label>
+            </fieldset>
+          )}
 
           <div>
             <label htmlFor="test-title" className="label">Titulli</label>
@@ -319,7 +352,7 @@ export default function TestDetailPage() {
   );
 }
 
-function ReviewPanel({ test }: { test: TestDetail }) {
+function ReviewPanel({ test, onRelease }: { test: TestDetail; onRelease: (attempt: ExamAttempt) => void }) {
   return (
     <div className="mt-8 grid gap-6 lg:grid-cols-[1fr_1.35fr]">
       <section className="card p-6">
@@ -351,6 +384,28 @@ function ReviewPanel({ test }: { test: TestDetail }) {
       <section className="space-y-4">
         <h2 className="text-xl font-bold">Përgjigje publike</h2>
         {!test.form_mode && <p className="text-sm text-muted">Sinjalet vijnë nga browser-i i kandidatit dhe janë për t&apos;u parë, jo një vendim. Mungesa e tyre nuk provon se nuk ndodhi asgjë: një browser i modifikuar mund t&apos;i heqë, dhe screenshot ose foto e ekranit nuk zbulohet.</p>}
+        {!test.form_mode && (test.time_limit_minutes || test.shuffle) && (
+          <p className="text-sm text-muted">
+            {test.time_limit_minutes ? `Koha: ${test.time_limit_minutes} minuta nga nisja.` : ""} {test.shuffle ? "Pyetjet dhe opsionet përzihen për çdo kandidat." : ""}
+          </p>
+        )}
+        {test.unfinished_attempts.length > 0 && (
+          <section className="card p-6" aria-labelledby="unfinished-title">
+            <h3 id="unfinished-title" className="text-lg font-bold">Kanë nisur, pa dorëzuar ({test.unfinished_attempts.length})</h3>
+            <p className="mt-1 text-sm text-muted">Mund të jenë ende duke u përgjigjur, ose e kanë braktisur. Kush ka kaluar kohën nuk i merr më pyetjet; “Lejo përsëri” i jep një fillim të ri.</p>
+            <ul className="mt-4 divide-y divide-line">
+              {test.unfinished_attempts.map((attempt) => (
+                <li key={attempt.id} className="flex flex-col gap-2 py-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <p className="font-semibold">{attempt.participant_name}</p>
+                    <p className="text-sm text-muted">{attempt.participant_email} · nisur {dateTime(attempt.started_at)}{attempt.expired ? " · koha ka mbaruar" : ""}</p>
+                  </div>
+                  <button type="button" onClick={() => onRelease(attempt)} className="btn-secondary" aria-label={`Lejo ${attempt.participant_name} të fillojë përsëri`}>Lejo përsëri</button>
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
         {test.standalone_submissions.length === 0 ? (
           <div className="card p-8 text-center">
             <ClipboardList className="mx-auto text-teal" size={34} aria-hidden="true" />
@@ -369,6 +424,12 @@ function ReviewPanel({ test }: { test: TestDetail }) {
                   {submission.total > 0 ? `${submission.score}/${submission.total}` : "Formular"}
                 </span>
               </div>
+              {(submission.duration_seconds != null || submission.over_limit_seconds != null) && (
+                <ul className="mt-4 flex flex-wrap gap-2" aria-label="Koha e testit">
+                  {submission.duration_seconds != null && <li className="chip bg-shell-100 text-slate-700 ring-line">Zgjati {formatDuration(submission.duration_seconds)}</li>}
+                  {submission.over_limit_seconds != null && <li className="chip bg-amber-50 text-amber-900 ring-amber-900/25">{formatDuration(submission.over_limit_seconds)} mbi kufirin e kohës</li>}
+                </ul>
+              )}
               {submission.events.length > 0 && (
                 <ul className="mt-4 flex flex-wrap gap-2" aria-label="Sinjale gjatë testit">
                   {examSignalSummary(submission.events).map((signal) => (

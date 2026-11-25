@@ -1,15 +1,19 @@
+import uuid
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, UploadFile
 from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, selectinload
 
 from ..database import get_db
 from ..enums import QuestionType
-from ..models import IntegrityEvent, InterviewSession, Test, TestQuestion, TestSubmission, User
+from ..exams import arrange, make_layout, original_answers, over_limit_seconds, seconds_left, shown_questions
+from ..models import ExamAttempt, IntegrityEvent, InterviewSession, Test, TestQuestion, TestSubmission, User
 from ..ratelimit import rate_limit
 from ..retention import delete_test
 from ..schemas import (
+    ExamAttemptOut,
     ExamEventCreate,
     ExamStart,
     ExamStarted,
@@ -18,15 +22,14 @@ from ..schemas import (
     TestDetailOut,
     TestOut,
     TestQuestionHostOut,
-    TestQuestionOut,
     TestReviewSessionOut,
     TestStandaloneSubmissionOut,
     TestSubmissionOut,
     TestUpdate,
 )
-from ..security import create_exam_attempt, get_current_user, read_exam_attempt
+from ..security import get_current_user
 from ..services import audit, parse_uuid, request_ip
-from ..signals import severity_for
+from ..signals import as_utc, severity_for
 from ..test_generator import extract_text_from_upload, generate_questions, infer_title
 
 router = APIRouter(prefix="/tests", tags=["tests"])
@@ -58,6 +61,11 @@ def validate_questions(payload: TestCreate | TestUpdate) -> None:
             raise HTTPException(status_code=422, detail=f"Correct answer is required for question {index + 1}")
         if question.correct_option_index is not None and question.correct_option_index >= len(cleaned_options):
             raise HTTPException(status_code=422, detail=f"Correct answer is invalid for question {index + 1}")
+
+
+def exam_settings(payload: TestCreate | TestUpdate) -> dict:
+    """The time limit and shuffle only mean something for a public exam; a plain form always saves neither."""
+    return {"time_limit_minutes": None if payload.form_mode else payload.time_limit_minutes, "shuffle": False if payload.form_mode else payload.shuffle}
 
 
 def build_question(test_id: str, index: int, question) -> TestQuestion:
@@ -163,11 +171,16 @@ def test_to_detail(test: Test, db: Session, user: User) -> TestDetailOut:
         .order_by(TestSubmission.submitted_at.desc())
         .limit(MAX_STANDALONE_SUBMISSIONS)
     ).all()
+    now = datetime.now(timezone.utc)
+    unfinished = db.scalars(
+        select(ExamAttempt).where(ExamAttempt.test_id == test.id, ExamAttempt.submitted_at.is_(None)).order_by(ExamAttempt.started_at.desc()).limit(MAX_STANDALONE_SUBMISSIONS)
+    ).all()
     return TestDetailOut(
         **TestOut.from_test(test, include_questions=False).model_dump(exclude={"questions"}),
         questions=[TestQuestionHostOut.model_validate(question) for question in test.questions],
         sessions=review_sessions,
         standalone_submissions=[TestStandaloneSubmissionOut.model_validate(submission) for submission in standalone],
+        unfinished_attempts=[ExamAttemptOut.model_validate(attempt).model_copy(update={"expired": seconds_left(test, attempt, now) == 0}) for attempt in unfinished],
     )
 
 
@@ -184,7 +197,14 @@ def list_tests(limit: int = Query(100, ge=1, le=500), offset: int = Query(0, ge=
 def create_test(payload: TestCreate, request: Request, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     validate_questions(payload)
 
-    test = Test(created_by=user.id, title=payload.title, description=payload.description, form_mode=payload.form_mode, is_public=payload.is_public)
+    test = Test(
+        created_by=user.id,
+        title=payload.title,
+        description=payload.description,
+        form_mode=payload.form_mode,
+        is_public=payload.is_public,
+        **exam_settings(payload),
+    )
     db.add(test)
     db.flush()
     for index, question in enumerate(payload.questions):
@@ -260,6 +280,8 @@ def update_test(test_id: str, payload: TestUpdate, request: Request, db: Session
     test.description = payload.description.strip() if payload.description else None
     test.form_mode = payload.form_mode
     test.is_public = payload.is_public
+    settings = exam_settings(payload)
+    test.time_limit_minutes, test.shuffle = settings["time_limit_minutes"], settings["shuffle"]
 
     for index, incoming in enumerate(payload.questions):
         if incoming.id:
@@ -289,7 +311,7 @@ def update_test(test_id: str, payload: TestUpdate, request: Request, db: Session
         "test",
         test.id,
         None,
-        {"question_count": len(payload.questions), "removed_questions": removed_count, "form_mode": payload.form_mode, "is_public": payload.is_public},
+        {"question_count": len(payload.questions), "removed_questions": removed_count, "form_mode": payload.form_mode, "is_public": payload.is_public, **settings},
     )
     db.commit()
     test = owned_test(db, test_id, user)
@@ -302,6 +324,20 @@ def remove_test(test_id: str, request: Request, db: Session = Depends(get_db), u
     deleted_id = test.id
     delete_test(db, test)
     audit(db, user, request, "test.deleted", "test", deleted_id)
+    db.commit()
+
+
+@router.delete("/{test_id}/attempts/{attempt_id}", status_code=204)
+def release_attempt(test_id: str, attempt_id: str, request: Request, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    """Let someone who started and never submitted (a crashed browser, a lapsed limit) start again."""
+    test = owned_test(db, test_id, user)
+    attempt = db.scalar(select(ExamAttempt).where(ExamAttempt.id == parse_uuid(attempt_id, "Attempt not found"), ExamAttempt.test_id == test.id).with_for_update())
+    if not attempt:
+        raise HTTPException(status_code=404, detail="Attempt not found")
+    if attempt.submitted_at:
+        raise HTTPException(status_code=409, detail="This attempt has already been submitted")
+    db.delete(attempt)
+    audit(db, user, request, "test.attempt_released", "test", test.id, None, {"attempt_id": attempt.id})
     db.commit()
 
 
@@ -332,18 +368,56 @@ def get_public_test(token: str, db: Session = Depends(get_db)):
     response_model=ExamStarted,
     dependencies=[Depends(rate_limit("public-test-start", 20, 3600, "token"))],
 )
-def start_public_exam(token: str, payload: ExamStart, db: Session = Depends(get_db)):
+def start_public_exam(token: str, payload: ExamStart, request: Request, db: Session = Depends(get_db)):
+    """Begin an exam, or pick one up again: the same email gets the same clock and the same order, never a fresh start."""
     test = public_test(db, token)
     if test.form_mode:
         raise HTTPException(status_code=400, detail="A plain form has no start; fill it in and submit it")
     email = str(payload.participant_email).lower()
     if already_submitted(db, test.id, email):
         raise HTTPException(status_code=409, detail="This email has already submitted this test")
+    questions = list(test.questions)
+    attempt = db.scalar(select(ExamAttempt).where(ExamAttempt.test_id == test.id, ExamAttempt.participant_email == email))
+    if attempt is None:
+        attempt = ExamAttempt(
+            test_id=test.id,
+            participant_name=payload.participant_name,
+            participant_email=email,
+            participant_ip=request_ip(request),
+            layout=make_layout(questions, test.shuffle),
+        )
+        db.add(attempt)
+        try:
+            db.commit()
+        except IntegrityError:  # the same person started twice at once: both end up on the one row
+            db.rollback()
+            attempt = db.scalar(select(ExamAttempt).where(ExamAttempt.test_id == test.id, ExamAttempt.participant_email == email))
+    if attempt is None or attempt.submitted_at:
+        raise HTTPException(status_code=409, detail="This email has already submitted this test")
+    left = seconds_left(test, attempt, datetime.now(timezone.utc))
+    if left == 0:
+        raise HTTPException(status_code=400, detail="Time is up for this attempt. Ask the organiser if you need to start again")
     return ExamStarted(
-        attempt=create_exam_attempt(test.id, payload.participant_name, email),
-        started_at=datetime.now(timezone.utc),
-        questions=[TestQuestionOut.model_validate(question) for question in test.questions],
+        attempt=attempt.id,
+        started_at=as_utc(attempt.started_at),
+        participant_name=attempt.participant_name,
+        seconds_left=left,
+        questions=shown_questions(arrange(questions, attempt.layout)),
     )
+
+
+def open_attempt(db: Session, token: str | None, test: Test) -> ExamAttempt:
+    """The unsubmitted attempt this token names for this test, locked so two submissions cannot both take it."""
+    try:
+        attempt_id = str(uuid.UUID(token or ""))
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Start the test before submitting it") from None
+    attempt = db.scalar(select(ExamAttempt).where(ExamAttempt.id == attempt_id, ExamAttempt.test_id == test.id).with_for_update())
+    if attempt is None:
+        raise HTTPException(status_code=400, detail="Start the test before submitting it")
+    if attempt.submitted_at:
+        raise HTTPException(status_code=409, detail="This email has already submitted this test")
+    return attempt
 
 
 @public_router.post(
@@ -354,15 +428,18 @@ def start_public_exam(token: str, payload: ExamStart, db: Session = Depends(get_
 )
 def submit_public_test(token: str, payload: PublicTestSubmit, request: Request, db: Session = Depends(get_db)):
     test = public_test(db, token)
+    questions = list(db.scalars(select(TestQuestion).where(TestQuestion.test_id == test.id).order_by(TestQuestion.position)).all())
     name, email = payload.participant_name, str(payload.participant_email).lower() if payload.participant_email else None
+    attempt, answers, started_at, over_limit = None, payload.answers, None, None
     if not test.form_mode:
-        # Who sat the exam is who started it, whatever the request body says.
-        claims = read_exam_attempt(payload.attempt, test.id)
-        name, email = claims["name"], claims["email"]
+        # Who sat the exam is who started it, whatever the request body says; the answers are the options as they were shown.
+        attempt = open_attempt(db, payload.attempt, test)
+        name, email = attempt.participant_name, attempt.participant_email
+        answers = original_answers(arrange(questions, attempt.layout), payload.answers)
+        started_at, over_limit = attempt.started_at, over_limit_seconds(test, attempt, datetime.now(timezone.utc))
     if email and already_submitted(db, test.id, email):
         raise HTTPException(status_code=409, detail="This email has already submitted this test")
-    questions = db.scalars(select(TestQuestion).where(TestQuestion.test_id == test.id).order_by(TestQuestion.position)).all()
-    checked_answers, score, total = grade_answers(list(questions), payload.answers)
+    checked_answers, score, total = grade_answers(questions, answers)
     submission = TestSubmission(
         session_id=None,
         test_id=test.id,
@@ -374,8 +451,12 @@ def submit_public_test(token: str, payload: PublicTestSubmit, request: Request, 
         total=total,
         # Plain forms are not monitored: anything a client sends for one is dropped, not stored.
         integrity_events=[] if test.form_mode else [stored_exam_event(event) for event in payload.events],
+        started_at=started_at,
+        over_limit_seconds=over_limit,
     )
     db.add(submission)
+    if attempt is not None:
+        attempt.submitted_at = datetime.now(timezone.utc)
     audit(db, None, request, "public_test.submitted", "test_submission", submission.id, None, {"test_id": test.id, "score": score, "total": total, "form_mode": test.form_mode})
     db.commit()
     db.refresh(submission)

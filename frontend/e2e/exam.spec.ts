@@ -19,6 +19,8 @@ test("a candidate sits an exam and the host sees the score and the signals", asy
       description: null,
       form_mode: false,
       is_public: true,
+      time_limit_minutes: 30,
+      shuffle: true, // the answers must still be scored against the host's key, whatever order the candidate saw
       questions: [
         { question_type: "multiple_choice", prompt: "What is 2 + 2?", options: ["Three", "Four"], correct_option_index: 1 },
         { question_type: "short_text", prompt: "Explain why the sky is blue", options: [], correct_option_index: null },
@@ -45,6 +47,7 @@ test("a candidate sits an exam and the host sees the score and the signals", asy
 
     await expect(page.getByText("What is 2 + 2?")).toBeVisible();
     await expect(page.locator('div.fixed[aria-hidden="true"]')).toBeVisible(); // the watermark
+    await expect(page.getByRole("timer")).toBeVisible(); // the test has a time limit
 
     const copyBlocked = await page.evaluate(() => {
       const event = new ClipboardEvent("copy", { bubbles: true, cancelable: true });
@@ -66,11 +69,53 @@ test("a candidate sits an exam and the host sees the score and the signals", asy
     await expect(page.getByText("Testi u dorëzua")).toBeVisible();
 
     const detail = await request.get(`${API}/tests/${exam.id}`, { headers: host });
-    const [submission] = (await detail.json()).standalone_submissions;
-    expect(submission).toMatchObject({ participant_name: "Smoke Candidate", participant_email: "smoke@example.com", score: 1, total: 1 });
+    const { standalone_submissions: [submission], unfinished_attempts: unfinished } = await detail.json();
+    expect(submission).toMatchObject({ participant_name: "Smoke Candidate", participant_email: "smoke@example.com", score: 1, total: 1, over_limit_seconds: null });
+    expect(submission.duration_seconds).toBeGreaterThanOrEqual(0);
+    expect(unfinished).toEqual([]); // starting and then submitting leaves nobody unfinished
     const signals = submission.events.map((event: { metadata: { operation?: string }; severity: string }) => [event.metadata.operation, event.severity]);
     expect(signals).toEqual(expect.arrayContaining([["copy", "low"], ["paste", "medium"]]));
     expect(JSON.stringify(submission.events)).not.toContain("def secret"); // lengths are kept, never the text
+  } finally {
+    await request.delete(`${API}/tests/${exam.id}`, { headers: host });
+  }
+});
+
+// The countdown runs on the server's seconds-left, and at zero the page sends what has been answered. Playwright's fake
+// clock moves the page past the limit without waiting a real minute.
+test("when the time runs out the page submits what the candidate has answered", async ({ page, request }) => {
+  const login = await request.post(`${API}/auth/login`, { data: { email: EMAIL, password: PASSWORD }, headers: { Origin: WEB } });
+  const host = { Origin: WEB, Authorization: `Bearer ${(await login.json()).access_token}` };
+  const created = await request.post(`${API}/tests`, {
+    headers: host,
+    data: {
+      title: "Timed exam",
+      description: null,
+      form_mode: false,
+      is_public: true,
+      time_limit_minutes: 1,
+      questions: [{ question_type: "multiple_choice", prompt: "What is 2 + 2?", options: ["Three", "Four"], correct_option_index: 1 }, { question_type: "short_text", prompt: "Say why", options: [], correct_option_index: null }],
+    },
+  });
+  const exam = await created.json();
+
+  try {
+    await page.clock.install();
+    await page.goto(`/forms/${exam.public_token}`);
+    await page.locator("#form-name").fill("Slow Candidate");
+    await page.locator("#form-email").fill("slow@example.com");
+    await page.getByRole("checkbox").check();
+    await page.getByRole("button", { name: "Fillo testin" }).click();
+    await expect(page.getByRole("timer")).toBeVisible();
+
+    await page.getByText("Four").click(); // one of two questions answered; the second stays empty
+    await page.clock.fastForward("01:05");
+    await expect(page.getByText("Testi u dorëzua")).toBeVisible();
+
+    const detail = await request.get(`${API}/tests/${exam.id}`, { headers: host });
+    const [submission] = (await detail.json()).standalone_submissions;
+    expect(submission).toMatchObject({ participant_email: "slow@example.com", score: 1, total: 1 });
+    expect(Object.keys(submission.answers)).toHaveLength(1); // only what had been answered
   } finally {
     await request.delete(`${API}/tests/${exam.id}`, { headers: host });
   }
