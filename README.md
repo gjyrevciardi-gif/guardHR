@@ -113,6 +113,7 @@ Skema nuk krijohet më nga `database/schema.sql` por nga Alembic. Një databazë
 | GET | `/api/public/tests/{token}` | Test/formular publik (një test jep vetëm titullin dhe numrin e pyetjeve, jo pyetjet) |
 | POST | `/api/public/tests/{token}/start` | Fillimi i një testi publik: emri dhe emaili, kthen pyetjet dhe një `attempt` |
 | POST | `/api/public/tests/{token}/submissions` | Dorëzim publik (një për email; testi kërkon `attempt` nga `/start`) |
+| DELETE | `/api/tests/{id}/attempts/{attempt_id}` | Host-i e lejon dikë që ka nisur e s'ka dorëzuar ta nisë testin përsëri |
 | GET | `/api/rtc-config` | Serverat ICE (STUN/TURN) për WebRTC; me `TURN_URLS`+`TURN_SECRET` shton një kredencial TURN 8-orëshe |
 | WS | `/api/ws/rooms/{token}?role=hr\|candidate` | Signaling; roli verifikohet në server |
 | PUT | `/api/settings/retention` | Ndryshon ditët e ruajtjes |
@@ -125,7 +126,7 @@ Skema nuk krijohet më nga `database/schema.sql` por nga Alembic. Një databazë
 - MediaPipe Face Detector punon në browser. Mungesa e fytyrës raportohet vetëm pas 5 sekondash.
 - Një frame JPEG i zvogëluar dërgohet çdo 5 sekonda te YOLO/OpenCV vetëm për klasat `person` dhe `cell phone`; bytes nuk ruhen.
 - Video/audio nuk regjistrohen në MVP.
-- **Retention:** në nisje të API-t dhe çdo ditë (`RETENTION_PURGE_INTERVAL_HOURS`) dhe me kërkesë (`/settings/retention/purge`) fshihen `integrity_events`, përgjigjet e testeve, `consent_ip` dhe IP-të në audit log për call-et e përfunduara përtej afatit. Call-et që mbeten `in_progress` më shumë se `ABANDONED_SESSION_HOURS` (12 orë) mbyllen si të braktisura dhe ndjekin të njëjtin afat; linket e skaduara që s'u përdorën kurrë humbin vetëm IP-në e pranimit. Sesioni, review-t, shënimet private të host-it dhe emri i kandidatit mbeten derisa HR të fshijë call-in (`DELETE /api/sessions/{id}`), që heq gjithçka, përfshirë kandidatin nëse nuk ka call tjetër. Mund ta ekzekutosh edhe nga cron: `python -m app.retention`.
+- **Retention:** në nisje të API-t dhe çdo ditë (`RETENTION_PURGE_INTERVAL_HOURS`) dhe me kërkesë (`/settings/retention/purge`) fshihen `integrity_events`, përgjigjet e testeve, nisjet e testeve publike (`exam_attempts`, edhe pa dorëzim), `consent_ip` dhe IP-të në audit log për call-et e përfunduara përtej afatit. Call-et që mbeten `in_progress` më shumë se `ABANDONED_SESSION_HOURS` (12 orë) mbyllen si të braktisura dhe ndjekin të njëjtin afat; linket e skaduara që s'u përdorën kurrë humbin vetëm IP-në e pranimit. Sesioni, review-t, shënimet private të host-it dhe emri i kandidatit mbeten derisa HR të fshijë call-in (`DELETE /api/sessions/{id}`), që heq gjithçka, përfshirë kandidatin nëse nuk ka call tjetër. Mund ta ekzekutosh edhe nga cron: `python -m app.retention`.
 - IP-ja e kandidatit (consent, audit) merret nga lidhja TCP. `X-Forwarded-For` besohet vetëm kur `TRUST_PROXY_HEADERS=true` (Nginx i përfshirë e mbishkruan).
 - Staging me certifikatë reale, TURN të vetin dhe zbulim telefoni (hapat, kontrollet dhe çfarë mbetet pa verifikuar): [docs/staging.md](docs/staging.md).
 - Rëndësia e sinjaleve, rregulli i rishikimit dhe mbulimi i monitorimit: [docs/signals.md](docs/signals.md).

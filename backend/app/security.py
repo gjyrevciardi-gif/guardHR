@@ -38,35 +38,6 @@ def keyed_hash(purpose: str, value: str) -> str:
     return hmac.new(get_settings().jwt_secret.encode(), f"{purpose}:{value}".encode(), hashlib.sha256).hexdigest()
 
 
-EXAM_ATTEMPT_HOURS = 6
-
-
-def create_exam_attempt(test_id: str, name: str, email: str, hours: float = EXAM_ATTEMPT_HOURS) -> str:
-    """Proof that someone started a public exam as `name` / `email`. Stateless, so nothing is stored until they submit.
-
-    Signed with a key derived for this purpose, so it can never pass as a login token, nor a login token as this.
-    ponytail: no attempts table, so no per-attempt time limit and a candidate can start again; add one if a limit is needed.
-    """
-    settings = get_settings()
-    expires = datetime.now(timezone.utc) + timedelta(hours=hours)
-    return jwt.encode({"sub": test_id, "name": name, "email": email, "exp": expires}, keyed_hash("exam-attempt", "key"), algorithm=settings.jwt_algorithm)
-
-
-def read_exam_attempt(token: str | None, test_id: str) -> dict:
-    """The claims of a valid attempt for this test, or a 400 saying to start again."""
-    if not token:
-        raise HTTPException(status_code=400, detail="Start the test before submitting it")
-    try:
-        claims = jwt.decode(token, keyed_hash("exam-attempt", "key"), algorithms=[get_settings().jwt_algorithm])
-    except jwt.ExpiredSignatureError:
-        raise HTTPException(status_code=400, detail="This attempt has expired. Start the test again") from None
-    except InvalidTokenError:
-        raise HTTPException(status_code=400, detail="Start the test before submitting it") from None
-    if claims.get("sub") != test_id:
-        raise HTTPException(status_code=400, detail="Start the test before submitting it")
-    return claims
-
-
 def create_access_token(user_id: str, token_version: int = 0) -> str:
     settings = get_settings()
     expires = datetime.now(timezone.utc) + timedelta(minutes=settings.jwt_expire_minutes)

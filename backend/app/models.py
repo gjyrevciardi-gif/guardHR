@@ -102,6 +102,7 @@ class InterviewSession(Base):
 class Test(Base):
     __test__ = False  # not a pytest test class
     __tablename__ = "tests"
+    __table_args__ = (CheckConstraint("time_limit_minutes IS NULL OR time_limit_minutes BETWEEN 1 AND 480", name="ck_tests_time_limit_minutes"),)
     id: Mapped[str] = mapped_column(Uuid(as_uuid=False), primary_key=True, default=uuid4_str)
     created_by: Mapped[str] = mapped_column(Uuid(as_uuid=False), ForeignKey("users.id", ondelete="CASCADE"), index=True)
     public_token: Mapped[str] = mapped_column(Uuid(as_uuid=False), unique=True, default=uuid4_str, index=True)
@@ -109,6 +110,9 @@ class Test(Base):
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     is_public: Mapped[bool] = mapped_column(Boolean, default=True)
     form_mode: Mapped[bool] = mapped_column(Boolean, default=False)
+    # Public exam link only (a plain form has neither): minutes from the start, and a per-candidate question and option order.
+    time_limit_minutes: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    shuffle: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     questions: Mapped[list["TestQuestion"]] = relationship(cascade="all, delete-orphan", order_by="TestQuestion.position")
 
@@ -143,7 +147,29 @@ class TestSubmission(Base):
     # exams fill it; a call's signals are IntegrityEvent rows. Part of the row, so every purge or delete that removes
     # the submission removes these too.
     integrity_events: Mapped[list] = mapped_column(JSON, default=list, server_default="[]")
+    # Public exams: when the candidate started, and by how many seconds they went past the time limit (only when it was
+    # more than a few seconds, so network lag is not reported). Copied from the attempt so the row stands on its own.
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    over_limit_seconds: Mapped[int | None] = mapped_column(Integer, nullable=True)
     submitted_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class ExamAttempt(Base):
+    """Someone started a public exam. Written at the start, so a candidate who never submits is on record, starting again
+    resumes this row (same clock, same order) instead of resetting it, and its id is what the candidate holds to submit.
+    One per test and email. Holds a name, email and IP, so retention removes it like a submission."""
+
+    __tablename__ = "exam_attempts"
+    __table_args__ = (UniqueConstraint("test_id", "participant_email", name="uq_exam_attempts_test_email"),)
+    id: Mapped[str] = mapped_column(Uuid(as_uuid=False), primary_key=True, default=uuid4_str)
+    test_id: Mapped[str] = mapped_column(Uuid(as_uuid=False), ForeignKey("tests.id", ondelete="CASCADE"))
+    participant_name: Mapped[str] = mapped_column(String(160))
+    participant_email: Mapped[str] = mapped_column(String(255))
+    participant_ip: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    # What this candidate was shown: [{"id": question id, "options": [original option indexes in the order shown]}].
+    layout: Mapped[list] = mapped_column(JSON, default=list, server_default="[]")
+    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    submitted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
 class IntegrityEvent(Base):

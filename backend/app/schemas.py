@@ -113,6 +113,9 @@ class TestCreate(BaseModel):
     description: str | None = Field(default=None, max_length=2000)
     form_mode: bool = False
     is_public: bool = True
+    # Public exam link only; a plain form ignores both.
+    time_limit_minutes: int | None = Field(default=None, ge=1, le=480)
+    shuffle: bool = False
     questions: list[TestQuestionCreate] = Field(min_length=1, max_length=100)
 
 
@@ -121,6 +124,8 @@ class TestUpdate(BaseModel):
     description: str | None = Field(default=None, max_length=2000)
     form_mode: bool = False
     is_public: bool = True
+    time_limit_minutes: int | None = Field(default=None, ge=1, le=480)
+    shuffle: bool = False
     questions: list[TestQuestionUpdate] = Field(min_length=1, max_length=100)
 
 
@@ -144,6 +149,8 @@ class TestOut(BaseModel):
     description: str | None
     is_public: bool = True
     form_mode: bool = False
+    time_limit_minutes: int | None = None
+    shuffle: bool = False
     created_at: datetime
     question_count: int = 0
     questions: list[TestQuestionOut] = Field(default_factory=list)
@@ -158,6 +165,8 @@ class TestOut(BaseModel):
             description=test.description,
             is_public=test.is_public,
             form_mode=test.form_mode,
+            time_limit_minutes=test.time_limit_minutes,
+            shuffle=test.shuffle,
             created_at=test.created_at,
             question_count=question_count if question_count is not None else len(test.questions),
             questions=[TestQuestionOut.model_validate(q) for q in test.questions] if include_questions else [],
@@ -235,6 +244,8 @@ class ExamStart(BaseModel):
 class ExamStarted(BaseModel):
     attempt: str
     started_at: datetime
+    participant_name: str
+    seconds_left: int | None = None  # None: no time limit
     questions: list[TestQuestionOut]
 
 
@@ -290,7 +301,28 @@ class TestStandaloneSubmissionOut(BaseModel):
     total: int
     answers: dict[str, Any]
     events: list[ExamEventOut] = Field(default_factory=list, validation_alias=AliasChoices("integrity_events", "events"))
+    started_at: datetime | None = None
+    over_limit_seconds: int | None = None
     submitted_at: datetime
+
+    @computed_field
+    @property
+    def duration_seconds(self) -> int | None:
+        if self.started_at is None:
+            return None
+        started = self.started_at if self.started_at.tzinfo else self.started_at.replace(tzinfo=self.submitted_at.tzinfo)  # SQLite drops the zone
+        return max(0, round((self.submitted_at - started).total_seconds()))
+
+
+class ExamAttemptOut(BaseModel):
+    """Someone who started a public exam and has not submitted. `id` is for the host's release action only."""
+
+    model_config = ConfigDict(from_attributes=True)
+    id: str
+    participant_name: str
+    participant_email: EmailStr
+    started_at: datetime
+    expired: bool = False  # past the time limit: they cannot get the questions again until the host releases them
 
 
 class TestDetailOut(BaseModel):
@@ -300,11 +332,14 @@ class TestDetailOut(BaseModel):
     description: str | None
     is_public: bool = True
     form_mode: bool = False
+    time_limit_minutes: int | None = None
+    shuffle: bool = False
     created_at: datetime
     question_count: int = 0
     questions: list[TestQuestionHostOut] = Field(default_factory=list)
     sessions: list[TestReviewSessionOut] = Field(default_factory=list)
     standalone_submissions: list[TestStandaloneSubmissionOut] = Field(default_factory=list)
+    unfinished_attempts: list[ExamAttemptOut] = Field(default_factory=list)
 
 
 class CandidateOut(BaseModel):

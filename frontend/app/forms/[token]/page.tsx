@@ -1,10 +1,11 @@
 "use client";
 
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { CheckCircle2, ClipboardList, Loader2 } from "lucide-react";
 import { api } from "@/lib/api";
+import { clock } from "@/lib/format";
 import { ExamStarted, Test, TestAnswer, TestQuestion, TestSubmission } from "@/lib/types";
 import { useExamGuard } from "@/lib/useExamGuard";
 import { ExamWatermark } from "@/components/ExamWatermark";
@@ -25,6 +26,11 @@ export default function PublicFormPage() {
   const [started, setStarted] = useState<Date | null>(null);
   const [attempt, setAttempt] = useState("");
   const [examQuestions, setExamQuestions] = useState<TestQuestion[]>([]);
+  const [attemptName, setAttemptName] = useState("");
+  const [deadline, setDeadline] = useState<number | null>(null);
+  const [remaining, setRemaining] = useState<number | null>(null);
+  const autoSubmitted = useRef(false);
+  const timeUp = remaining === 0;
   // A test (not a plain form) is an exam: it needs to know who is sitting it, tells them what is recorded, and only
   // then does the server send the questions (the link alone does not carry them).
   const exam = test ? !test.form_mode : false;
@@ -56,6 +62,9 @@ export default function PublicFormPage() {
       }, false);
       setAttempt(result.attempt);
       setExamQuestions(result.questions);
+      setAttemptName(result.participant_name);
+      // The server's count of seconds left, so a wrong clock on this device cannot shorten or stretch the time.
+      setDeadline(result.seconds_left == null ? null : Date.now() + result.seconds_left * 1000);
       setStarted(new Date(result.started_at));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Testi nuk u nis");
@@ -64,8 +73,7 @@ export default function PublicFormPage() {
     }
   }
 
-  async function submit(event: FormEvent) {
-    event.preventDefault();
+  const send = useCallback(async () => {
     if (!test) return;
     setLoading(true);
     setError("");
@@ -82,7 +90,31 @@ export default function PublicFormPage() {
     } finally {
       setLoading(false);
     }
+  }, [test, token, exam, attempt, answers, guard, participantName, participantEmail]);
+
+  function submit(event: FormEvent) {
+    event.preventDefault();
+    void send();
   }
+
+  // The countdown. Only an exam with a time limit has a deadline.
+  useEffect(() => {
+    if (deadline === null || submission) return;
+    const tick = () => setRemaining(Math.max(0, Math.ceil((deadline - Date.now()) / 1000)));
+    tick();
+    const timer = window.setInterval(tick, 1000);
+    return () => window.clearInterval(timer);
+  }, [deadline, submission]);
+
+  // When it reaches zero, what the candidate has answered so far goes in, complete or not.
+  useEffect(() => {
+    if (timeUp && !submission && !autoSubmitted.current) {
+      autoSubmitted.current = true;
+      void send();
+    }
+  }, [timeUp, submission, send]);
+
+  const milestone = remaining === null ? "" : remaining === 0 ? "Koha mbaroi" : remaining <= 60 ? "Mbetet një minutë" : remaining <= 300 ? "Mbeten pesë minuta" : "";
 
   return (
     <div className="min-h-screen bg-canvas text-navy">
@@ -120,7 +152,9 @@ export default function PublicFormPage() {
               <div>
                 <p className="eyebrow">Test publik</p>
                 <h1 id="exam-title" className="mt-2 text-3xl font-bold">{test.title}</h1>
-                <p className="mt-2 text-sm text-muted">{test.question_count} pyetje. Pyetjet shfaqen kur ta nisësh.</p>
+                <p className="mt-2 text-sm text-muted">
+                  {test.question_count} pyetje{test.time_limit_minutes ? `, ${test.time_limit_minutes} minuta` : ""}. Pyetjet shfaqen kur ta nisësh.
+                </p>
               </div>
             </div>
 
@@ -131,6 +165,7 @@ export default function PublicFormPage() {
                 <li>regjistron kur del nga kjo faqe ose skedë, dhe sa zgjat;</li>
                 <li>regjistron kur ngjit tekst, kur shtyp Print Screen ose provon të printosh; për tekstin e ngjitur ruhet vetëm sa i gjatë ishte, jo vetë teksti;</li>
                 <li>nuk të lejon të kopjosh ose të printosh pyetjet, dhe shfaq emrin tënd si filigram mbi to;</li>
+                {test.time_limit_minutes && <li>ka kohë të kufizuar prej {test.time_limit_minutes} minutash nga çasti që e nis: koha vazhdon edhe nëse e mbyll ose e rifreskon faqen, dhe kur mbaron dërgohet ajo që ke përgjigjur;</li>}
                 <li>nuk përdor kamerën, mikrofonin ose ekranin tënd.</li>
               </ul>
               <p className="mt-3 text-sm text-slate-700">Këto janë sinjale për organizatorin, jo një vendim: ai i shikon së bashku me përgjigjet. Fshihen bashkë me përgjigjet pas afatit që ka caktuar. <Link href="/privacy" className="font-semibold underline" target="_blank" rel="noreferrer">Më shumë te privatësia</Link>.</p>
@@ -157,8 +192,15 @@ export default function PublicFormPage() {
             <button className="btn-primary mt-6 w-full" disabled={!canStart || loading}>{loading ? "Duke nisur…" : "Fillo testin"}</button>
           </form>
         ) : (
-          <form onSubmit={submit} className="card p-7 sm:p-9 print:hidden">
-            {exam && started && <ExamWatermark text={`${participantName.trim()} · ${participantEmail.trim()} · ${started.toLocaleString("en-GB", { dateStyle: "short", timeStyle: "short" })}`} />}
+          <form onSubmit={submit} noValidate={timeUp} className="card p-7 sm:p-9 print:hidden">
+            {exam && started && <ExamWatermark text={`${attemptName || participantName.trim()} · ${participantEmail.trim().toLowerCase()} · ${started.toLocaleString("en-GB", { dateStyle: "short", timeStyle: "short" })}`} />}
+            {exam && remaining !== null && (
+              <div className="sticky top-0 z-10 mb-6 flex items-center justify-between gap-3 rounded-xl border border-line bg-white px-4 py-3">
+                <span className="text-sm font-semibold text-muted">{timeUp ? "Koha mbaroi" : "Koha e mbetur"}</span>
+                <span role="timer" aria-live="off" className={`font-mono text-lg font-bold tabular-nums ${remaining <= 60 ? "text-red-700" : "text-navy"}`}>{clock(remaining)}</span>
+              </div>
+            )}
+            <p role="status" className="sr-only">{milestone}</p>
             <div className="flex items-start gap-3">
               <span className="rounded-xl bg-shell-200 p-3 text-teal"><ClipboardList aria-hidden="true" /></span>
               <div>
@@ -170,7 +212,7 @@ export default function PublicFormPage() {
 
             {exam ? (
               <p role="note" className="mt-6 rounded-xl border border-line bg-shell-100 p-3 text-sm text-slate-700">
-                Po përgjigjesh si <strong>{participantName.trim()}</strong>. Dalja nga kjo faqe, ngjitja e tekstit dhe printimi regjistrohen për organizatorin.
+                Po përgjigjesh si <strong>{attemptName || participantName.trim()}</strong>. Dalja nga kjo faqe, ngjitja e tekstit dhe printimi regjistrohen për organizatorin.
               </p>
             ) : (
               <div className="mt-8 grid gap-4 sm:grid-cols-2">
@@ -221,7 +263,7 @@ export default function PublicFormPage() {
 
             {error && <p role="alert" className="mt-5 rounded-xl border border-red-200 bg-red-50 p-3 text-sm font-semibold text-red-700">{error}</p>}
 
-            <button className="btn-primary mt-6 w-full" disabled={loading || !allAnswered}>
+            <button className="btn-primary mt-6 w-full" disabled={loading || (!allAnswered && !timeUp)}>
               {loading ? "Duke dërguar…" : test.form_mode ? "Dërgo formularin" : "Dorëzo testin"}
             </button>
           </form>

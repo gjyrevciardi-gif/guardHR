@@ -167,6 +167,7 @@ export const auditLabels: Record<string, string> = {
   "test.created": "Testi u krijua",
   "test.updated": "Testi u ndryshua",
   "test.deleted": "Testi u fshi",
+  "test.attempt_released": "Një kandidat u lejua të fillojë testin përsëri",
   "test.viewed": "Testi u hap",
   "test.generated_from_file": "Testi u gjenerua nga skedari",
 };
