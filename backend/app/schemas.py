@@ -261,12 +261,18 @@ class ExamCodeConfirm(ExamStart):
     code: str = Field(pattern=r"^[0-9]{6}$")
 
 
+class ExamDraft(BaseModel):
+    answers: dict[str, Any] = Field(max_length=MAX_ANSWERS)
+
+
 class ExamStarted(BaseModel):
     attempt: str
     started_at: datetime
     participant_name: str
     seconds_left: int | None = None  # None: no time limit
     questions: list[TestQuestionOut]
+    # What this attempt had saved on the server, only for someone who proved the mailbox (empty otherwise).
+    draft: dict[str, int | str] = Field(default_factory=dict)
 
 
 class ExamEventOut(BaseModel):
@@ -344,6 +350,8 @@ class ExamAttemptOut(BaseModel):
     participant_email: EmailStr
     started_at: datetime
     email_verified_at: datetime | None = None
+    answered: int = 0  # how many questions have an answer saved: the count only, never the answers
+    draft_saved_at: datetime | None = None
     expired: bool = False  # past the time limit: they cannot get the questions again until the host releases them
 
 
