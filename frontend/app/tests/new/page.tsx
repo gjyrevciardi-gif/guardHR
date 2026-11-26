@@ -4,6 +4,7 @@ import { FormEvent, useState } from "react";
 import Link from "next/link";
 import { ArrowLeft, Eye, FileUp, Plus, Save, Trash2 } from "lucide-react";
 import { AppShell } from "@/components/AppShell";
+import { ExamOptions } from "@/components/ExamOptions";
 import { api } from "@/lib/api";
 import { useRequireSession } from "@/lib/session";
 import { QuestionType, Test } from "@/lib/types";
@@ -26,6 +27,9 @@ export default function NewTestPage() {
   const [formMode, setFormMode] = useState(false);
   const [title, setTitle] = useState("Test i ri");
   const [description, setDescription] = useState("");
+  const [timeLimit, setTimeLimit] = useState("");
+  const [shuffle, setShuffle] = useState(false);
+  const [verifyEmail, setVerifyEmail] = useState(false);
   const [questions, setQuestions] = useState<DraftQuestion[]>([emptyQuestion(false)]);
   const [created, setCreated] = useState<Test | null>(null);
   const [error, setError] = useState("");
@@ -99,6 +103,9 @@ export default function NewTestPage() {
         description: description.trim() || null,
         form_mode: formMode,
         is_public: true,
+        time_limit_minutes: formMode || !timeLimit.trim() ? null : Number(timeLimit),
+        shuffle: !formMode && shuffle,
+        verify_candidate_email: !formMode && verifyEmail,
         questions: questions.map((question) => ({
           question_type: question.question_type,
           prompt: question.prompt,
@@ -208,6 +215,8 @@ export default function NewTestPage() {
                 <label htmlFor="test-description" className="label">Përshkrimi ose udhëzimet</label>
                 <textarea id="test-description" className="input min-h-24" value={description} onChange={(event) => setDescription(event.target.value)} />
               </div>
+
+              {!formMode && <ExamOptions timeLimit={timeLimit} onTimeLimit={setTimeLimit} shuffle={shuffle} onShuffle={setShuffle} verifyEmail={verifyEmail} onVerifyEmail={setVerifyEmail} />}
 
               <div className="space-y-4">
                 {questions.map((question, questionIndex) => (
