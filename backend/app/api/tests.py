@@ -1,19 +1,23 @@
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, UploadFile
 from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, selectinload
 
+from .. import email as mailer
 from ..database import get_db
 from ..enums import QuestionType
 from ..exams import arrange, make_layout, original_answers, over_limit_seconds, seconds_left, shown_questions
-from ..models import ExamAttempt, IntegrityEvent, InterviewSession, Test, TestQuestion, TestSubmission, User
+from ..models import ExamAttempt, ExamEmailCode, IntegrityEvent, InterviewSession, Test, TestQuestion, TestSubmission, User
 from ..ratelimit import rate_limit
 from ..retention import delete_test
 from ..schemas import (
     ExamAttemptOut,
+    ExamCodeConfirm,
+    ExamCodeRequest,
+    ExamCodeSent,
     ExamEventCreate,
     ExamStart,
     ExamStarted,
@@ -31,6 +35,7 @@ from ..security import get_current_user
 from ..services import audit, parse_uuid, request_ip
 from ..signals import as_utc, severity_for
 from ..test_generator import extract_text_from_upload, generate_questions, infer_title
+from ..verification import CODE_TTL_SECONDS, EXAM_SENDS_WINDOW_SECONDS, MAX_ATTEMPTS, MAX_SENDS, RESEND_COOLDOWN_SECONDS, check_code, new_code
 
 router = APIRouter(prefix="/tests", tags=["tests"])
 public_router = APIRouter(prefix="/public/tests", tags=["public-tests"], dependencies=[Depends(rate_limit("public-tests", 240, 60))])
@@ -64,8 +69,13 @@ def validate_questions(payload: TestCreate | TestUpdate) -> None:
 
 
 def exam_settings(payload: TestCreate | TestUpdate) -> dict:
-    """The time limit and shuffle only mean something for a public exam; a plain form always saves neither."""
-    return {"time_limit_minutes": None if payload.form_mode else payload.time_limit_minutes, "shuffle": False if payload.form_mode else payload.shuffle}
+    """The time limit, shuffle and email code only mean something for a public exam; a plain form always saves none of them."""
+    exam = not payload.form_mode
+    return {
+        "time_limit_minutes": payload.time_limit_minutes if exam else None,
+        "shuffle": payload.shuffle if exam else False,
+        "verify_candidate_email": payload.verify_candidate_email if exam else False,
+    }
 
 
 def build_question(test_id: str, index: int, question) -> TestQuestion:
@@ -281,7 +291,7 @@ def update_test(test_id: str, payload: TestUpdate, request: Request, db: Session
     test.form_mode = payload.form_mode
     test.is_public = payload.is_public
     settings = exam_settings(payload)
-    test.time_limit_minutes, test.shuffle = settings["time_limit_minutes"], settings["shuffle"]
+    test.time_limit_minutes, test.shuffle, test.verify_candidate_email = settings["time_limit_minutes"], settings["shuffle"], settings["verify_candidate_email"]
 
     for index, incoming in enumerate(payload.questions):
         if incoming.id:
@@ -373,7 +383,13 @@ def start_public_exam(token: str, payload: ExamStart, request: Request, db: Sess
     test = public_test(db, token)
     if test.form_mode:
         raise HTTPException(status_code=400, detail="A plain form has no start; fill it in and submit it")
-    email = str(payload.participant_email).lower()
+    if test.verify_candidate_email:
+        raise HTTPException(status_code=403, detail="This test checks the email first: ask for a code, then enter it")
+    return begin_attempt(db, test, payload.participant_name, str(payload.participant_email).lower(), request, None)
+
+
+def begin_attempt(db: Session, test: Test, name: str, email: str, request: Request, verified_at: datetime | None) -> ExamStarted:
+    """The attempt for this email, written now or already there, and what the candidate is shown for it."""
     if already_submitted(db, test.id, email):
         raise HTTPException(status_code=409, detail="This email has already submitted this test")
     questions = list(test.questions)
@@ -381,7 +397,7 @@ def start_public_exam(token: str, payload: ExamStart, request: Request, db: Sess
     if attempt is None:
         attempt = ExamAttempt(
             test_id=test.id,
-            participant_name=payload.participant_name,
+            participant_name=name,
             participant_email=email,
             participant_ip=request_ip(request),
             layout=make_layout(questions, test.shuffle),
@@ -394,6 +410,9 @@ def start_public_exam(token: str, payload: ExamStart, request: Request, db: Sess
             attempt = db.scalar(select(ExamAttempt).where(ExamAttempt.test_id == test.id, ExamAttempt.participant_email == email))
     if attempt is None or attempt.submitted_at:
         raise HTTPException(status_code=409, detail="This email has already submitted this test")
+    if verified_at:
+        attempt.email_verified_at = verified_at
+        db.commit()
     left = seconds_left(test, attempt, datetime.now(timezone.utc))
     if left == 0:
         raise HTTPException(status_code=400, detail="Time is up for this attempt. Ask the organiser if you need to start again")
@@ -404,6 +423,78 @@ def start_public_exam(token: str, payload: ExamStart, request: Request, db: Sess
         seconds_left=left,
         questions=shown_questions(arrange(questions, attempt.layout)),
     )
+
+
+def exam_that_checks_email(db: Session, token: str) -> Test:
+    test = public_test(db, token)
+    if test.form_mode:
+        raise HTTPException(status_code=400, detail="A plain form has no start; fill it in and submit it")
+    if not test.verify_candidate_email:
+        raise HTTPException(status_code=409, detail="This test does not check the email")
+    return test
+
+
+@public_router.post(
+    "/{token}/verification",
+    response_model=ExamCodeSent,
+    dependencies=[Depends(rate_limit("public-test-code", 10, 3600, "token"))],
+)
+def send_exam_code(token: str, payload: ExamCodeRequest, request: Request, db: Session = Depends(get_db)):
+    """Email a one-time code to the address given. Sent inline so a delivery failure is reported, not hidden."""
+    test = exam_that_checks_email(db, token)
+    email = str(payload.participant_email).lower()
+    if already_submitted(db, test.id, email):
+        raise HTTPException(status_code=409, detail="This email has already submitted this test")
+    code_row = db.scalar(select(ExamEmailCode).where(ExamEmailCode.test_id == test.id, ExamEmailCode.email == email))
+    if code_row is None:
+        code_row = ExamEmailCode(test_id=test.id, email=email)
+        db.add(code_row)
+        try:
+            db.flush()
+        except IntegrityError:  # two requests for the same address at once: both use the one row
+            db.rollback()
+            code_row = db.scalar(select(ExamEmailCode).where(ExamEmailCode.test_id == test.id, ExamEmailCode.email == email))
+    now = datetime.now(timezone.utc)
+    if code_row.verification_sends >= MAX_SENDS and code_row.verification_sent_at and now - as_utc(code_row.verification_sent_at) > timedelta(seconds=EXAM_SENDS_WINDOW_SECONDS):
+        code_row.verification_sends = 0  # the cap is per hour here: nobody can lock an address out of an exam for good
+    code = new_code(code_row, now, "Too many codes requested for this address. Try again in an hour.")
+    db.commit()
+    try:
+        mailer.send_exam_code(email, test.title, code)
+    except Exception:
+        mailer.logger.exception("Exam code email for test %s could not be delivered", test.id)
+        code_row.verification_code_hash = None
+        code_row.verification_sent_at = None  # nothing arrived, so the candidate may retry straight away
+        audit(db, None, request, "public_test.code_failed", "test", test.id)
+        db.commit()
+        raise HTTPException(status_code=502, detail="The code could not be sent. Try again or ask the organiser.") from None
+    audit(db, None, request, "public_test.code_sent", "test", test.id, None, {"sends": code_row.verification_sends})
+    db.commit()
+    return ExamCodeSent(expires_in_seconds=CODE_TTL_SECONDS, resend_after_seconds=RESEND_COOLDOWN_SECONDS)
+
+
+@public_router.post(
+    "/{token}/verification/confirm",
+    response_model=ExamStarted,
+    dependencies=[Depends(rate_limit("public-test-confirm", 30, 600, "token"))],
+)
+def confirm_exam_code(token: str, payload: ExamCodeConfirm, request: Request, db: Session = Depends(get_db)):
+    """The right code is the start: it begins the exam, or picks the attempt up again, in the same request."""
+    test = exam_that_checks_email(db, token)
+    email = str(payload.participant_email).lower()
+    code_row = db.scalar(select(ExamEmailCode).where(ExamEmailCode.test_id == test.id, ExamEmailCode.email == email).with_for_update())
+    if code_row is None:
+        raise HTTPException(status_code=409, detail="No code was requested")
+    if not check_code(code_row, payload.code):  # raises when no usable code exists
+        locked = code_row.verification_attempts >= MAX_ATTEMPTS
+        if locked:
+            audit(db, None, request, "public_test.code_locked", "test", test.id)
+        db.commit()
+        raise HTTPException(status_code=429 if locked else 422, detail="Too many wrong attempts. Request a new code." if locked else "The code is incorrect")
+    verified_at = code_row.verified_at
+    audit(db, None, request, "public_test.code_verified", "test", test.id)
+    db.commit()
+    return begin_attempt(db, test, payload.participant_name, email, request, verified_at)
 
 
 def open_attempt(db: Session, token: str | None, test: Test) -> ExamAttempt:
@@ -430,13 +521,13 @@ def submit_public_test(token: str, payload: PublicTestSubmit, request: Request, 
     test = public_test(db, token)
     questions = list(db.scalars(select(TestQuestion).where(TestQuestion.test_id == test.id).order_by(TestQuestion.position)).all())
     name, email = payload.participant_name, str(payload.participant_email).lower() if payload.participant_email else None
-    attempt, answers, started_at, over_limit = None, payload.answers, None, None
+    attempt, answers, started_at, over_limit, verified_at = None, payload.answers, None, None, None
     if not test.form_mode:
         # Who sat the exam is who started it, whatever the request body says; the answers are the options as they were shown.
         attempt = open_attempt(db, payload.attempt, test)
         name, email = attempt.participant_name, attempt.participant_email
         answers = original_answers(arrange(questions, attempt.layout), payload.answers)
-        started_at, over_limit = attempt.started_at, over_limit_seconds(test, attempt, datetime.now(timezone.utc))
+        started_at, over_limit, verified_at = attempt.started_at, over_limit_seconds(test, attempt, datetime.now(timezone.utc)), attempt.email_verified_at
     if email and already_submitted(db, test.id, email):
         raise HTTPException(status_code=409, detail="This email has already submitted this test")
     checked_answers, score, total = grade_answers(questions, answers)
@@ -453,6 +544,7 @@ def submit_public_test(token: str, payload: PublicTestSubmit, request: Request, 
         integrity_events=[] if test.form_mode else [stored_exam_event(event) for event in payload.events],
         started_at=started_at,
         over_limit_seconds=over_limit,
+        email_verified_at=verified_at,
     )
     db.add(submission)
     if attempt is not None:

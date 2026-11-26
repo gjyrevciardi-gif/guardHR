@@ -165,6 +165,8 @@ npm run build
 # dhe frontend-i në :3100 (p.sh. `node .next/standalone/server.js` me PORT=3100 pas `npm run build`).
 PW_CHANNEL=chrome npm run e2e               # me Chrome-in që ke (ose `npx playwright install chromium` dhe pa PW_CHANNEL)
                                             # vendos E2E_EMAIL / E2E_PASSWORD nëse admini nuk është hr@example.com
+                                            # testi i kodit me email ndez vetë një server SMTP të vogël në :2525 (E2E_SMTP_PORT): nise API-n me
+                                            # SMTP_HOST=127.0.0.1 SMTP_PORT=2525 që emaili të arrijë aty (CI e bën këtë)
 ```
 
 CI (`.github/workflows/ci.yml`) ekzekuton të njëjtat kontrolle, përfshirë PostgreSQL. Dy workflow të tjerë: `e2e.yml` ndez API-n dhe frontend-in dhe ekzekuton testin smoke; `security.yml` ekzekuton `pip-audit` dhe `npm audit` për çdo PR dhe çdo të hënë (një dobësi e re te një varësi e pandryshuar del kështu pa PR). Dependabot (`.github/dependabot.yml`) hap PR javore për varësitë, imazhet Docker dhe actions.

@@ -15,6 +15,9 @@ jobs:
       E2E_EMAIL: e2e@example.com
       E2E_PASSWORD: E2e-Pass-123!
       DATABASE_URL: sqlite:///./e2e.db
+      # The API's mail goes to a tiny SMTP server the exam test starts itself, so the test can read the emailed code.
+      SMTP_HOST: 127.0.0.1
+      SMTP_PORT: "2525"
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5

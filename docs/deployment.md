@@ -113,6 +113,8 @@ Migration `0007` adds seven columns to `users` for account security (`token_vers
 
 Migration `0009` adds the `exam_attempts` table and the time limit and shuffle settings for public exams (see [exam-protection.md](exam-protection.md#upgrading)); it is additive and downgradable, and existing tests behave as before. Public exams now store the candidate's name, email and IP **when they start**, not only when they submit, and the retention purge removes those attempts. An exam page open during the upgrade cannot submit, so deploy between exams.
 
+Migration `0010` adds the email code for public exams: `tests.verify_candidate_email` (default off, so existing tests behave as before), the `exam_email_codes` table, and `email_verified_at` on attempts and submissions (see [exam-protection.md](exam-protection.md#email-code-the-hosts-option)); it is additive and downgradable. A test with the option on needs a working SMTP relay (the `SMTP_*` settings above): with a broken relay nobody can start it, and the candidate is told the code could not be sent. Test the relay before turning the option on for a real exam. The table holds the addresses of everyone who asked for a code, and the retention purge removes them like attempts.
+
 The interface has a light and a dark theme (a toggle in every header; the choice is kept in the browser's local storage). Nothing server-side changed for this, and no new environment variable is needed.
 
 ## Known limits (deliberate)

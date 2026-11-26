@@ -116,6 +116,7 @@ class TestCreate(BaseModel):
     # Public exam link only; a plain form ignores both.
     time_limit_minutes: int | None = Field(default=None, ge=1, le=480)
     shuffle: bool = False
+    verify_candidate_email: bool = False
     questions: list[TestQuestionCreate] = Field(min_length=1, max_length=100)
 
 
@@ -126,6 +127,7 @@ class TestUpdate(BaseModel):
     is_public: bool = True
     time_limit_minutes: int | None = Field(default=None, ge=1, le=480)
     shuffle: bool = False
+    verify_candidate_email: bool = False
     questions: list[TestQuestionUpdate] = Field(min_length=1, max_length=100)
 
 
@@ -151,6 +153,7 @@ class TestOut(BaseModel):
     form_mode: bool = False
     time_limit_minutes: int | None = None
     shuffle: bool = False
+    verify_candidate_email: bool = False
     created_at: datetime
     question_count: int = 0
     questions: list[TestQuestionOut] = Field(default_factory=list)
@@ -167,6 +170,7 @@ class TestOut(BaseModel):
             form_mode=test.form_mode,
             time_limit_minutes=test.time_limit_minutes,
             shuffle=test.shuffle,
+            verify_candidate_email=test.verify_candidate_email,
             created_at=test.created_at,
             question_count=question_count if question_count is not None else len(test.questions),
             questions=[TestQuestionOut.model_validate(q) for q in test.questions] if include_questions else [],
@@ -241,6 +245,22 @@ class ExamStart(BaseModel):
     participant_email: EmailStr
 
 
+class ExamCodeRequest(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True)
+    participant_email: EmailStr
+
+
+class ExamCodeSent(BaseModel):
+    expires_in_seconds: int
+    resend_after_seconds: int
+
+
+class ExamCodeConfirm(ExamStart):
+    """The name and email as given when the code was asked for, and the code that came to that email."""
+
+    code: str = Field(pattern=r"^[0-9]{6}$")
+
+
 class ExamStarted(BaseModel):
     attempt: str
     started_at: datetime
@@ -303,6 +323,7 @@ class TestStandaloneSubmissionOut(BaseModel):
     events: list[ExamEventOut] = Field(default_factory=list, validation_alias=AliasChoices("integrity_events", "events"))
     started_at: datetime | None = None
     over_limit_seconds: int | None = None
+    email_verified_at: datetime | None = None
     submitted_at: datetime
 
     @computed_field
@@ -322,6 +343,7 @@ class ExamAttemptOut(BaseModel):
     participant_name: str
     participant_email: EmailStr
     started_at: datetime
+    email_verified_at: datetime | None = None
     expired: bool = False  # past the time limit: they cannot get the questions again until the host releases them
 
 
@@ -334,6 +356,7 @@ class TestDetailOut(BaseModel):
     form_mode: bool = False
     time_limit_minutes: int | None = None
     shuffle: bool = False
+    verify_candidate_email: bool = False
     created_at: datetime
     question_count: int = 0
     questions: list[TestQuestionHostOut] = Field(default_factory=list)
