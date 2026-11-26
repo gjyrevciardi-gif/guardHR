@@ -11,7 +11,7 @@ export interface Review { id: string; outcome: string; notes: string; created_at
 export type QuestionType = "multiple_choice" | "short_text";
 export type TestAnswer = number | string;
 export interface TestQuestion { id: string; position: number; question_type: QuestionType; prompt: string; options: string[]; correct_option_index?: number | null }
-export interface Test { id: string; public_token: string; title: string; description: string | null; is_public: boolean; form_mode: boolean; time_limit_minutes: number | null; shuffle: boolean; created_at: string; question_count: number; questions: TestQuestion[] }
+export interface Test { id: string; public_token: string; title: string; description: string | null; is_public: boolean; form_mode: boolean; time_limit_minutes: number | null; shuffle: boolean; verify_candidate_email: boolean; created_at: string; question_count: number; questions: TestQuestion[] }
 /** What starting a public exam returns: the questions (the link alone does not carry them) and the attempt to submit with. */
 export interface ExamStarted { attempt: string; started_at: string; participant_name: string; seconds_left: number | null; questions: TestQuestion[] }
 export interface TestSubmission { id: string; test_id: string; session_id: string | null; participant_name: string | null; participant_email: string | null; score: number; total: number; answers: Record<string, TestAnswer>; submitted_at: string }
@@ -49,10 +49,11 @@ export interface TestStandaloneSubmission {
   started_at: string | null;
   duration_seconds: number | null;
   over_limit_seconds: number | null;
+  email_verified_at: string | null;
   submitted_at: string;
 }
 /** Someone who started a public exam and has not submitted. */
-export interface ExamAttempt { id: string; participant_name: string; participant_email: string; started_at: string; expired: boolean }
+export interface ExamAttempt { id: string; participant_name: string; participant_email: string; started_at: string; email_verified_at: string | null; expired: boolean }
 export interface TestDetail extends Test { sessions: TestReviewSession[]; standalone_submissions: TestStandaloneSubmission[]; unfinished_attempts: ExamAttempt[]; questions: Required<TestQuestion>[] }
 export interface PublicTest { id: string; title: string; description: string | null; form_mode: boolean; question_count: number; questions: TestQuestion[] }
 export interface InterviewSession {

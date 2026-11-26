@@ -5,7 +5,7 @@ A **test** shared as a public link (`/forms/<link>`, `form_mode` off) is an exam
 ## What the candidate goes through
 
 1. A notice says what is recorded and blocked, and the time limit if there is one, with a link to `/privacy`. The questions are **not** in the page, and not in the response that loaded it.
-2. They give their name and email (both required) and tick that they have read it. **Fillo testin** sends them to `POST /api/public/tests/<link>/start`. An email that already submitted is refused here (409), before the exam rather than after it.
+2. They give their name and email (both required) and tick that they have read it. **Fillo testin** sends them to `POST /api/public/tests/<link>/start`. An email that already submitted is refused here (409), before the exam rather than after it. If the host turned on the [email code](#email-code-the-hosts-option) there is no **Fillo testin**: the questions come after a code instead, and `/start` answers 403.
 3. The server writes an **attempt** (name, email, IP, start time, the order shown) and answers with the questions and the attempt's id. The questions appear, with the name, email and start time tiled faintly over them as a watermark, and a countdown when there is a limit.
 4. Starting again with the same email, for example after a refresh or a crash, **picks the same attempt up**: same start time, same order, the clock still running, and the answers the tab had saved come back (see below). It never gives a fresh start.
 5. On submit the answers, the attempt and the collected signals go to the server in one request. An exam submission without a valid, unsubmitted attempt for that test is refused (400, or 409 if it was already submitted), and it is recorded for the name and email in the attempt, whatever the request body says.
@@ -22,6 +22,32 @@ A **test** shared as a public link (`/forms/<link>`, `form_mode` off) is an exam
 ## Shuffle
 
 `tests.shuffle` (default off, so existing tests behave as before). When on, each attempt gets its own order of questions and of the options inside each question, fixed at the start and stored on the attempt (`exam_attempts.layout`), so a refresh shows the same order. The page numbers questions by where they are shown. Answers come back as "the option at this position"; the server maps them through the attempt's order to the test's own option numbers before grading, and stores them that way, so scoring uses the host's key and the host's review reads like any other. Editing a test while someone is sitting it is tolerated: a removed question is skipped, an added one is shown last, and a question whose options changed is shown in its original order.
+
+## Email code (the host's option)
+
+`tests.verify_candidate_email` (default off, so existing tests behave as before), set in the editor under **Për linkun publik**. When it is on, the questions are handed out only to someone who has read the mailbox they gave. A plain form never checks email (the option is saved off for it).
+
+1. They give a name and email, tick the notice, and press **Dërgo kodin**: `POST /api/public/tests/<link>/verification` emails a 6-digit code to that address. An address that already submitted gets nothing (409).
+2. They type it: `POST .../verification/confirm` with the name, email and code. **The right code is the start.** The answer is the same as `/start`'s (attempt, questions, clock), in the one request, so there is no token or session in between that could be passed on. The attempt is stamped `email_verified_at`; the host sees "email-i i verifikuar" in the unfinished list and "Email-i u verifikua me kod" on the submission (copied to it, so it outlives the attempt).
+3. Coming back after a refresh or a crash needs a new code, because a code is used once. The same attempt is picked up: same clock, same order, the answers the tab saved.
+
+It is the call flow's mechanism (`app/verification.py`, [candidate-checks.md](candidate-checks.md#email-code-hosts-option-on-by-default-for-new-calls)) with the limits below.
+
+| | |
+|---|---|
+| Code | 6 digits, valid 10 minutes, single use |
+| Wrong guesses | 5 per code, then a new code is needed |
+| Resend | 30 s between codes; at most 10 codes per address **per hour**. A call caps codes for the call's whole life, because the host can issue a new link; here nobody can, so the cap clears itself within the hour |
+| Requests | 10 code requests an hour and 30 confirmations per 10 minutes, per IP and test |
+| Stored | `exam_email_codes`: the address and only an HMAC of the code (keyed with `JWT_SECRET`, bound to that row) |
+| Audited | `public_test.code_sent`, `code_failed`, `code_locked`, `code_verified`, with the IP; never the address or the code |
+
+What it does and does not do:
+
+- It proves the person can read that mailbox. It does **not** prove who they are: a friend who reads a code out loud passes, and a throwaway mailbox works. It closes two gaps without it: a made-up name with a made-up email no longer gets the questions, and knowing someone else's address no longer lets you pick up their attempt.
+- Anyone with the link can ask for codes to be sent to any address, up to the caps, and can use up an address's ten codes for an hour. It annoys; it cannot start the exam as them.
+- It needs a working SMTP relay (see [deployment.md](deployment.md)). With a broken one nobody can start the test, and the candidate is told the code could not be sent (502).
+- The name is still self-declared. The attempt keeps the name given at the first start.
 
 ## What is recorded, blocked, and not possible
 
@@ -42,8 +68,8 @@ Severity is decided by the server, never by the browser: pasting, printing and P
 ## Limits to know before relying on it
 
 - **Signals come from the candidate's browser.** Their absence does not prove nothing happened. Signals still travel with the submission (there is no session to post them to), so someone who starts and never submits leaves an attempt on record but no signals.
-- **The link alone reveals nothing, but starting is open.** `GET /api/public/tests/<link>` carries the title, the number of questions and the time limit; the questions come from `/start`, which needs a name and a well-formed email, nothing more. Someone willing to give a made-up name and email can read the questions (from the network response) without taking the exam, and the watermark then carries that made-up name. Rate limit: 20 starts an hour per IP and test. For a stricter exam, run it inside a call.
-- **One attempt per email, and the email is self-declared and not verified.** Someone who knows another candidate's email can pick that attempt up and answer in their name; the attempt's page shows the name given at the first start.
+- **The link alone reveals nothing, but starting is open** unless the host turned on the email code. `GET /api/public/tests/<link>` carries the title, the number of questions and the time limit; the questions come from `/start`, which needs a name and a well-formed email, nothing more. Someone willing to give a made-up name and email can read the questions (from the network response) without taking the exam, and the watermark then carries that made-up name. Rate limit: 20 starts an hour per IP and test. With the email code on, the same person needs a mailbox they can read (a throwaway one will do). For a stricter exam, run it inside a call.
+- **One attempt per email, and without the email code the email is self-declared and not verified.** Someone who knows another candidate's email can pick that attempt up and answer in their name; the attempt's page shows the name given at the first start. With the code on, picking an attempt up needs a code sent to that mailbox.
 - **Answers are saved in the browser, not on the server.** They survive a refresh, a crash and a restored tab, because the same tab starts the same attempt again. They do not survive closing the tab, switching to another browser or device, or blocked storage, and the host cannot see them until the candidate submits. In those cases the clock and the order carry on but the answers start empty. Signals recorded before the refresh are lost the same way.
 - Mobile browsers have no Print Screen key and mostly no print dialog; there the notice, the watermark and the focus signals are what remain.
 
@@ -51,8 +77,9 @@ Severity is decided by the server, never by the browser: pasting, printing and P
 
 - **Draft answers** are kept in the candidate's own tab (`sessionStorage`, key `ng-exam-draft-<attempt id>`), saved as they type and dropped on submit. Session storage, not local storage, so closing the tab clears it and nothing stays behind on a shared computer; it never goes to the server. On picking an attempt up again, only answers that still fit the questions are restored.
 - **Signals** are stored in `test_submissions.integrity_events` (JSON, at most 300 per submission, only `tab_hidden` and `copy_paste` accepted). They are part of the submission row. The server drops anything sent for a plain form.
+- **Email codes** are `exam_email_codes` rows (only with the email code on): the address and a keyed hash of the last code, one per test and address, written when a code is asked for, so an address that never started is stored too. The retention purge removes them once their last code is older than the host's retention period; deleting the test removes them with it.
 - **Attempts** are `exam_attempts` rows: name, email, IP, start time, submit time, the order shown. One per test and email. Unlike a submission one exists **from the start**, so a person who never submitted is stored too. The retention purge removes attempts older than the host's retention period (`deleted_attempts` in its result), whether or not they submitted; deleting the test removes its attempts with it. Backups hold them until pruned (see [deployment.md](deployment.md)).
-- Submissions also keep `started_at` and `over_limit_seconds`, so a submission stands on its own after its attempt has been purged.
+- Submissions also keep `started_at`, `over_limit_seconds` and `email_verified_at`, so a submission stands on its own after its attempt has been purged.
 
 `/privacy` and the exam notice describe the processing; as the operator you still decide the legal basis (see [deployment.md](deployment.md#privacy-page)).
 
@@ -62,6 +89,10 @@ Migration `0009` adds `exam_attempts`, `tests.time_limit_minutes` and `tests.shu
 
 An exam page opened before this release has no attempt id of the new kind and cannot submit: the candidate gets "Start the test before submitting it" and has to reload. Deploy between exams, not during one. Plain forms are unaffected.
 
+## Upgrading to the email code
+
+Migration `0010` adds `tests.verify_candidate_email` (default off), the `exam_email_codes` table, and `email_verified_at` on `exam_attempts` and `test_submissions` (empty for every existing row). Existing tests behave as before until the host ticks the option. It is additive and downgradable; downgrading discards pending codes and the verified-at times. An exam page opened before the upgrade keeps working for a test without the option.
+
 ## Possible next steps (not built)
 
-Saving answers on the server as well (so a change of device loses nothing, and the host can see progress), and verifying the candidate's email before the questions are handed out (the code check the call flow already has, see [candidate-checks.md](candidate-checks.md)), which would close the "made-up name and email" gap above.
+Saving answers on the server as well (so a change of device loses nothing, and the host can see progress). A host-supplied list of invited addresses (so only those can ask for a code) would close the throwaway-mailbox gap above; it needs a data model of its own.

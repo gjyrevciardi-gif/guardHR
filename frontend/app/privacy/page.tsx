@@ -20,7 +20,7 @@ const sections: Array<{ title: string; body: string[] }> = [
       "Çdo 5 sekonda një pamje e vogël e kamerës dërgohet te serveri për të numëruar persona dhe për të gjetur telefon. Pamja analizohet në kujtesë dhe hidhet; nuk ruhet.",
       "Koha dhe adresa IP e pranimit, përgjigjet e testit (nëse ka), emri dhe email-i yt si i ftuar.",
       "Video, zëri dhe ekrani live shkojnë drejtpërdrejt te organizatori. Platforma nuk i regjistron.",
-      "Nëse organizatori ka kërkuar verifikim me email, të dërgohet një kod 6-shifror te adresa me të cilën të ftoi. Kodi ruhet vetëm si hash dhe vlen 10 minuta; ruhen koha dhe adresa IP e verifikimit. Kjo provon vetëm se ke akses te ajo kuti postare, jo kush je.",
+      "Nëse organizatori ka kërkuar verifikim me email, të dërgohet një kod 6-shifror te adresa me të cilën të ftoi. Kodi ruhet vetëm si hash dhe vlen 10 minuta; ruhen koha dhe adresa IP e verifikimit. Kjo provon vetëm se ke akses te ajo kuti postare, jo kush je. Në një test me link publik kodi dërgohet te email-i që shkruan ti: ai email ruhet që kur e kërkon kodin, edhe nëse nuk e nis testin, dhe fshihet me afatin e organizatorit.",
     ],
   },
   {

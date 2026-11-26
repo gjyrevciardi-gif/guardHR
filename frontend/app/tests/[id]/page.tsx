@@ -36,6 +36,7 @@ export default function TestDetailPage() {
   const [isPublic, setIsPublic] = useState(true);
   const [timeLimit, setTimeLimit] = useState("");
   const [shuffle, setShuffle] = useState(false);
+  const [verifyEmail, setVerifyEmail] = useState(false);
   const [questions, setQuestions] = useState<DraftQuestion[]>([emptyQuestion(false)]);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
@@ -50,6 +51,7 @@ export default function TestDetailPage() {
     setIsPublic(data.is_public);
     setTimeLimit(data.time_limit_minutes ? String(data.time_limit_minutes) : "");
     setShuffle(data.shuffle);
+    setVerifyEmail(data.verify_candidate_email);
     setQuestions(data.questions.map((question) => ({
       id: question.id,
       question_type: question.question_type,
@@ -152,6 +154,7 @@ export default function TestDetailPage() {
         is_public: isPublic,
         time_limit_minutes: formMode || !timeLimit.trim() ? null : Number(timeLimit),
         shuffle: !formMode && shuffle,
+        verify_candidate_email: !formMode && verifyEmail,
         questions: questions.map((question) => ({
           id: question.id,
           question_type: question.question_type,
@@ -277,6 +280,11 @@ export default function TestDetailPage() {
                 <span className="font-bold">Përzie pyetjet dhe opsionet</span>
                 <span className="mt-2 block text-xs leading-5 text-muted">Çdo kandidat i sheh në renditje tjetër, kështu që “pyetja 3 është B” nuk i hyn punës tjetrit. Pikët llogariten sipas çelësit tënd.</span>
               </label>
+              <label className="cursor-pointer rounded-xl border border-line p-4 sm:col-span-2">
+                <input type="checkbox" checked={verifyEmail} onChange={(event) => setVerifyEmail(event.target.checked)} className="mr-2 accent-teal" />
+                <span className="font-bold">Verifiko email-in e kandidatit me kod</span>
+                <span className="mt-2 block text-xs leading-5 text-muted">Pyetjet jepen vetëm pasi kandidati të shkruajë një kod 6-shifror që i vjen te email-i që ka dhënë. Provon se e lexon atë kuti postare, jo kush është personi. Kërkon SMTP që funksionon (shih docs/deployment.md): me një server emaili të prishur askush nuk e nis testin. Kush rifreskon faqen kërkon një kod të ri.</span>
+              </label>
             </fieldset>
           )}
 
@@ -384,9 +392,9 @@ function ReviewPanel({ test, onRelease }: { test: TestDetail; onRelease: (attemp
       <section className="space-y-4">
         <h2 className="text-xl font-bold">Përgjigje publike</h2>
         {!test.form_mode && <p className="text-sm text-muted">Sinjalet vijnë nga browser-i i kandidatit dhe janë për t&apos;u parë, jo një vendim. Mungesa e tyre nuk provon se nuk ndodhi asgjë: një browser i modifikuar mund t&apos;i heqë, dhe screenshot ose foto e ekranit nuk zbulohet.</p>}
-        {!test.form_mode && (test.time_limit_minutes || test.shuffle) && (
+        {!test.form_mode && (test.time_limit_minutes || test.shuffle || test.verify_candidate_email) && (
           <p className="text-sm text-muted">
-            {test.time_limit_minutes ? `Koha: ${test.time_limit_minutes} minuta nga nisja.` : ""} {test.shuffle ? "Pyetjet dhe opsionet përzihen për çdo kandidat." : ""}
+            {test.time_limit_minutes ? `Koha: ${test.time_limit_minutes} minuta nga nisja.` : ""} {test.shuffle ? "Pyetjet dhe opsionet përzihen për çdo kandidat." : ""} {test.verify_candidate_email ? "Email-i i kandidatit verifikohet me kod para pyetjeve." : ""}
           </p>
         )}
         {test.unfinished_attempts.length > 0 && (
@@ -398,7 +406,7 @@ function ReviewPanel({ test, onRelease }: { test: TestDetail; onRelease: (attemp
                 <li key={attempt.id} className="flex flex-col gap-2 py-3 sm:flex-row sm:items-center sm:justify-between">
                   <div>
                     <p className="font-semibold">{attempt.participant_name}</p>
-                    <p className="text-sm text-muted">{attempt.participant_email} · nisur {dateTime(attempt.started_at)}{attempt.expired ? " · koha ka mbaruar" : ""}</p>
+                    <p className="text-sm text-muted">{attempt.participant_email} · nisur {dateTime(attempt.started_at)}{attempt.email_verified_at ? " · email-i i verifikuar" : ""}{attempt.expired ? " · koha ka mbaruar" : ""}</p>
                   </div>
                   <button type="button" onClick={() => onRelease(attempt)} className="btn-secondary" aria-label={`Lejo ${attempt.participant_name} të fillojë përsëri`}>Lejo përsëri</button>
                 </li>
@@ -424,8 +432,9 @@ function ReviewPanel({ test, onRelease }: { test: TestDetail; onRelease: (attemp
                   {submission.total > 0 ? `${submission.score}/${submission.total}` : "Formular"}
                 </span>
               </div>
-              {(submission.duration_seconds != null || submission.over_limit_seconds != null) && (
-                <ul className="mt-4 flex flex-wrap gap-2" aria-label="Koha e testit">
+              {(submission.duration_seconds != null || submission.over_limit_seconds != null || submission.email_verified_at) && (
+                <ul className="mt-4 flex flex-wrap gap-2" aria-label="Koha dhe email-i">
+                  {submission.email_verified_at && <li className="chip bg-shell-100 text-slate-700 ring-line">Email-i u verifikua me kod</li>}
                   {submission.duration_seconds != null && <li className="chip bg-shell-100 text-slate-700 ring-line">Zgjati {formatDuration(submission.duration_seconds)}</li>}
                   {submission.over_limit_seconds != null && <li className="chip bg-amber-50 text-amber-900 ring-amber-900/25">{formatDuration(submission.over_limit_seconds)} mbi kufirin e kohës</li>}
                 </ul>

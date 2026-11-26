@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 from .config import get_settings
 from .database import SessionLocal
 from .enums import SessionStatus
-from .models import AuditLog, Candidate, ExamAttempt, IntegrityEvent, InterviewSession, Test, TestSubmission, User
+from .models import AuditLog, Candidate, ExamAttempt, ExamEmailCode, IntegrityEvent, InterviewSession, Test, TestSubmission, User
 from .services import record_audit
 from .signals import as_utc
 
@@ -56,6 +56,8 @@ def purge_user_data(db: Session, user: User, now: datetime | None = None) -> dic
     session_submissions = db.execute(delete(TestSubmission).where(TestSubmission.session_id.in_(old_sessions))).rowcount or 0
     public_submissions = db.execute(delete(TestSubmission).where(TestSubmission.session_id.is_(None), TestSubmission.test_id.in_(own_tests), TestSubmission.submitted_at < cutoff)).rowcount or 0
     attempts = db.execute(delete(ExamAttempt).where(ExamAttempt.test_id.in_(own_tests), ExamAttempt.started_at < cutoff)).rowcount or 0
+    # A code row is only an address that asked for a code; it ages from its last code, and one that never got a code has no age to keep.
+    db.execute(delete(ExamEmailCode).where(ExamEmailCode.test_id.in_(own_tests), or_(ExamEmailCode.verification_sent_at.is_(None), ExamEmailCode.verification_sent_at < cutoff)))
     db.execute(update(InterviewSession).where(InterviewSession.id.in_(old_sessions)).values(consent_ip=None))
     audit_scope = or_(AuditLog.user_id == user.id, AuditLog.session_id.in_(old_sessions))
     scrubbed = db.execute(update(AuditLog).where(audit_scope, AuditLog.created_at < cutoff, AuditLog.ip_address.is_not(None)).values(ip_address=None)).rowcount or 0
@@ -79,6 +81,7 @@ def delete_test(db: Session, test: Test) -> None:
     db.execute(update(InterviewSession).where(InterviewSession.test_id == test.id).values(test_id=None))
     db.execute(delete(TestSubmission).where(TestSubmission.test_id == test.id))
     db.execute(delete(ExamAttempt).where(ExamAttempt.test_id == test.id))
+    db.execute(delete(ExamEmailCode).where(ExamEmailCode.test_id == test.id))
     db.delete(test)  # questions cascade through the ORM relationship
 
 

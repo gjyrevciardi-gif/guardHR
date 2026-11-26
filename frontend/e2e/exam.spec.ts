@@ -1,9 +1,12 @@
+import { createServer } from "node:net";
 import { APIRequestContext, expect, test } from "@playwright/test";
 
 const WEB = process.env.E2E_WEB_URL ?? "http://localhost:3100";
 const API = process.env.E2E_API_URL ?? "http://127.0.0.1:8100/api";
 const EMAIL = process.env.E2E_EMAIL ?? "hr@example.com";
 const PASSWORD = process.env.E2E_PASSWORD ?? "ChangeMe123!";
+// The API must send its mail here (SMTP_HOST=127.0.0.1, SMTP_PORT=this): CI sets it, and the README says how to do it locally.
+const SMTP_PORT = Number(process.env.E2E_SMTP_PORT ?? 2525);
 
 // One login for the whole run: the API allows ten logins per account every fifteen minutes, and every test needs the host.
 let hostHeaders: Promise<Record<string, string>> | undefined;
@@ -181,6 +184,108 @@ test("a refresh in the middle of an exam keeps the order and the answers", async
     const [submission] = (await detail.json()).standalone_submissions;
     expect(submission).toMatchObject({ participant_email: "refresh@example.com", score: 2, total: 3 }); // Alpha 2 and Alpha 3 are right, Beta 1 is not, whatever order was shown
   } finally {
+    await request.delete(`${API}/tests/${exam.id}`, { headers: host });
+  }
+});
+
+// A just-enough SMTP server: it answers the API's mail client and keeps what it was sent, so the test can read the code.
+function mailSink() {
+  const mails: string[] = [];
+  const server = createServer((socket) => {
+    let buffer = "";
+    let inData = false;
+    socket.write("220 sink ESMTP\r\n");
+    socket.on("data", (chunk) => {
+      buffer += chunk.toString("utf8");
+      for (;;) {
+        if (inData) {
+          const end = buffer.indexOf("\r\n.\r\n");
+          if (end === -1) return;
+          mails.push(buffer.slice(0, end));
+          buffer = buffer.slice(end + 5);
+          inData = false;
+          socket.write("250 queued\r\n");
+        } else {
+          const eol = buffer.indexOf("\r\n");
+          if (eol === -1) return;
+          const verb = buffer.slice(0, 4).toUpperCase();
+          buffer = buffer.slice(eol + 2);
+          if (verb === "DATA") {
+            inData = true;
+            socket.write("354 go ahead\r\n");
+          } else if (verb === "QUIT") {
+            socket.end("221 bye\r\n");
+          } else {
+            socket.write("250 ok\r\n");
+          }
+        }
+      }
+    });
+  });
+  return new Promise<{ mails: string[]; close: () => void }>((resolve, reject) => {
+    server.once("error", reject);
+    server.listen(SMTP_PORT, "127.0.0.1", () => resolve({ mails, close: () => server.close() }));
+  });
+}
+
+// A test that checks email: the questions are not handed out until the code that was emailed to the candidate is typed in.
+test("a test that checks email hands out its questions only after the emailed code", async ({ page, request }) => {
+  const host = await loginHost(request);
+  const sink = await mailSink();
+  const created = await request.post(`${API}/tests`, {
+    headers: host,
+    data: {
+      title: "Checked exam",
+      description: null,
+      form_mode: false,
+      is_public: true,
+      verify_candidate_email: true,
+      questions: [{ question_type: "multiple_choice", prompt: "What is 2 + 2?", options: ["Three", "Four"], correct_option_index: 1 }],
+    },
+  });
+  expect(created.status()).toBe(201);
+  const exam = await created.json();
+
+  try {
+    const bypass = await request.post(`${API}/public/tests/${exam.public_token}/start`, { data: { participant_name: "Sneaky", participant_email: "sneaky@example.com" } });
+    expect(bypass.status()).toBe(403); // the plain start is closed for a test that checks email
+
+    await page.goto(`/forms/${exam.public_token}`);
+    await page.locator("#form-name").fill("Checked Candidate");
+    await page.locator("#form-email").fill("checked@example.com");
+    await expect(page.getByRole("button", { name: "Dërgo kodin" })).toHaveCount(0); // not until the notice is accepted
+    await page.getByRole("checkbox").check();
+    await expect(page.getByRole("button", { name: "Fillo testin" })).toHaveCount(0); // there is no way to start without the code
+    await page.getByRole("button", { name: "Dërgo kodin" }).click();
+
+    await expect.poll(() => sink.mails.length, { message: "the code email reaches the mail server" }).toBe(1);
+    expect(sink.mails[0]).toContain("To: checked@example.com");
+    const code = sink.mails[0].match(/Subject: Kodi i verifikimit NemoGuardHR: (\d{6})/)?.[1];
+    expect(code).toBeTruthy();
+    await expect(page.locator("#form-email")).toHaveJSProperty("readOnly", true); // the code belongs to this address
+    await expect(page.getByText("What is 2 + 2?")).toHaveCount(0);
+
+    const wrong = code === "000000" ? "111111" : "000000";
+    await page.locator("#verification-code").fill(wrong);
+    await page.getByRole("button", { name: "Verifiko", exact: true }).click();
+    await expect(page.locator("#verification-error")).toContainText("Kodi nuk është i saktë"); // not getByRole("alert"): the route announcer is one too
+    await expect(page.getByText("What is 2 + 2?")).toHaveCount(0);
+
+    await page.locator("#verification-code").fill(code!);
+    await page.getByRole("button", { name: "Verifiko", exact: true }).click();
+    await expect(page.getByText("What is 2 + 2?")).toBeVisible();
+    await expect(page.locator('div.fixed[aria-hidden="true"]')).toBeVisible(); // the watermark carries the verified address
+
+    await page.getByText("Four").click();
+    await page.getByRole("button", { name: "Dorëzo testin" }).click();
+    await expect(page.getByText("Testi u dorëzua")).toBeVisible();
+
+    const detail = await request.get(`${API}/tests/${exam.id}`, { headers: host });
+    const { standalone_submissions: [submission] } = await detail.json();
+    expect(submission).toMatchObject({ participant_email: "checked@example.com", score: 1, total: 1 });
+    expect(submission.email_verified_at).toBeTruthy();
+  } finally {
+    sink.close();
     await request.delete(`${API}/tests/${exam.id}`, { headers: host });
   }
 });
