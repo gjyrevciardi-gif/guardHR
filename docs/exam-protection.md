@@ -12,7 +12,7 @@ A **test** shared as a public link (`/forms/<link>`, `form_mode` off) is an exam
 
 ## Time limit
 
-`tests.time_limit_minutes` (1 to 480, empty = none), set in the editor under **Për linkun publik**. The clock starts at the attempt's start and is the server's: the page counts down from the seconds left the server reports, so a wrong clock on the candidate's device neither shortens nor stretches it.
+`tests.time_limit_minutes` (1 to 480, empty = none), set under **Për linkun publik**, on the page that creates a test and in its editor. The clock starts at the attempt's start and is the server's: the page counts down from the seconds left the server reports, so a wrong clock on the candidate's device neither shortens nor stretches it.
 
 - At zero the page sends what has been answered so far, complete or not.
 - After the limit the server **does not hand out the questions again** (400 "Time is up"); the host sees the person under **Kanë nisur, pa dorëzuar** with "koha ka mbaruar".
@@ -36,7 +36,7 @@ Saving does not count against the shared per-IP budget of the public test routes
 
 ## Email code (the host's option)
 
-`tests.verify_candidate_email` (default off, so existing tests behave as before), set in the editor under **Për linkun publik**. When it is on, the questions are handed out only to someone who has read the mailbox they gave. A plain form never checks email (the option is saved off for it).
+`tests.verify_candidate_email` (default off, so existing tests behave as before), set under **Për linkun publik**, on the page that creates a test and in its editor. When it is on, the questions are handed out only to someone who has read the mailbox they gave. A plain form never checks email (the option is saved off for it).
 
 1. They give a name and email, tick the notice, and press **Dërgo kodin**: `POST /api/public/tests/<link>/verification` emails a 6-digit code to that address. An address that already submitted gets nothing (409).
 2. They type it: `POST .../verification/confirm` with the name, email and code. **The right code is the start.** The answer is the same as `/start`'s (attempt, questions, clock), in the one request, so there is no token or session in between that could be passed on. The attempt is stamped `email_verified_at`; the host sees "email-i i verifikuar" in the unfinished list and "Email-i u verifikua me kod" on the submission (copied to it, so it outlives the attempt).

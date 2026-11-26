@@ -7,6 +7,8 @@ const EMAIL = process.env.E2E_EMAIL ?? "hr@example.com";
 const PASSWORD = process.env.E2E_PASSWORD ?? "ChangeMe123!";
 // The API must send its mail here (SMTP_HOST=127.0.0.1, SMTP_PORT=this): CI sets it, and the README says how to do it locally.
 const SMTP_PORT = Number(process.env.E2E_SMTP_PORT ?? 2525);
+// The address the built pages call, on a host name a browser cookie can use (the page is on localhost, so is this).
+const BROWSER_API = process.env.E2E_BROWSER_API_URL ?? "http://localhost:8100/api";
 
 // One login for the whole run: the API allows ten logins per account every fifteen minutes, and every test needs the host.
 let hostHeaders: Promise<Record<string, string>> | undefined;
@@ -293,5 +295,39 @@ test("a test that checks email hands out its questions only after the emailed co
   } finally {
     sink.close();
     await request.delete(`${API}/tests/${exam.id}`, { headers: host });
+  }
+});
+
+// The create page offers the same exam options as the editor and saves them: no creating a test and then editing it just to
+// set a time limit. It drives the real page, signed in with the session cookie a browser would hold.
+test("the create page saves the time limit, the shuffle and the email code", async ({ page, request }) => {
+  const host = await loginHost(request);
+  const signedIn = await page.context().request.post(`${BROWSER_API}/auth/login`, { data: { email: EMAIL, password: PASSWORD }, headers: { Origin: WEB } });
+  expect(signedIn.ok(), "the page's own API address (E2E_BROWSER_API_URL), on a host name the cookie can use").toBeTruthy();
+
+  try {
+    await page.goto("/tests/new");
+    await page.locator("#test-title").fill("Created with options");
+    await page.locator("#test-time-limit").fill("25");
+    await page.getByLabel("Përzie pyetjet dhe opsionet").check();
+    await page.getByLabel("Verifiko email-in e kandidatit me kod").check();
+    await page.locator("#question-0-prompt").fill("What is 2 + 2?");
+    await page.getByLabel("Opsioni 1", { exact: true }).fill("Three");
+    await page.getByLabel("Opsioni 2", { exact: true }).fill("Four");
+    await page.getByLabel("Opsioni 2 është përgjigjja e saktë").check();
+    await page.getByRole("button", { name: "Ruaj testin" }).click();
+    await expect(page.getByText("Testi u krijua")).toBeVisible();
+
+    const tests: { title: string; time_limit_minutes: number | null; shuffle: boolean; verify_candidate_email: boolean }[] = await (await request.get(`${API}/tests`, { headers: host })).json();
+    expect(tests.find((created) => created.title === "Created with options")).toMatchObject({ time_limit_minutes: 25, shuffle: true, verify_candidate_email: true });
+
+    // A form has no exam to protect: the options are not even offered for it.
+    await page.goto("/tests/new");
+    await expect(page.locator("#test-time-limit")).toBeVisible();
+    await page.getByRole("button", { name: /Formular publik/ }).click();
+    await expect(page.locator("#test-time-limit")).toHaveCount(0);
+  } finally {
+    const tests: { id: string; title: string }[] = await (await request.get(`${API}/tests`, { headers: host })).json();
+    for (const created of tests.filter((candidate) => candidate.title === "Created with options")) await request.delete(`${API}/tests/${created.id}`, { headers: host });
   }
 });
