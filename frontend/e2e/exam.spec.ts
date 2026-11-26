@@ -1,16 +1,24 @@
-import { expect, test } from "@playwright/test";
+import { APIRequestContext, expect, test } from "@playwright/test";
 
 const WEB = process.env.E2E_WEB_URL ?? "http://localhost:3100";
 const API = process.env.E2E_API_URL ?? "http://127.0.0.1:8100/api";
 const EMAIL = process.env.E2E_EMAIL ?? "hr@example.com";
 const PASSWORD = process.env.E2E_PASSWORD ?? "ChangeMe123!";
 
+// One login for the whole run: the API allows ten logins per account every fifteen minutes, and every test needs the host.
+let hostHeaders: Promise<Record<string, string>> | undefined;
+function loginHost(request: APIRequestContext) {
+  hostHeaders ??= request.post(`${API}/auth/login`, { data: { email: EMAIL, password: PASSWORD }, headers: { Origin: WEB } }).then(async (login) => {
+    expect(login.ok(), "the host account from the CI seed or your dev database").toBeTruthy();
+    return { Origin: WEB, Authorization: `Bearer ${(await login.json()).access_token}` };
+  });
+  return hostHeaders;
+}
+
 // One end-to-end path through everything that matters at once: the host's API, the candidate's exam page (notice, hidden
 // questions, blocked copy, recorded paste, submit), the database, and what the host reads back afterwards.
 test("a candidate sits an exam and the host sees the score and the signals", async ({ page, request }) => {
-  const login = await request.post(`${API}/auth/login`, { data: { email: EMAIL, password: PASSWORD }, headers: { Origin: WEB } });
-  expect(login.ok(), "the host account from the CI seed or your dev database").toBeTruthy();
-  const host = { Origin: WEB, Authorization: `Bearer ${(await login.json()).access_token}` };
+  const host = await loginHost(request);
 
   const created = await request.post(`${API}/tests`, {
     headers: host,
@@ -84,8 +92,7 @@ test("a candidate sits an exam and the host sees the score and the signals", asy
 // The countdown runs on the server's seconds-left, and at zero the page sends what has been answered. Playwright's fake
 // clock moves the page past the limit without waiting a real minute.
 test("when the time runs out the page submits what the candidate has answered", async ({ page, request }) => {
-  const login = await request.post(`${API}/auth/login`, { data: { email: EMAIL, password: PASSWORD }, headers: { Origin: WEB } });
-  const host = { Origin: WEB, Authorization: `Bearer ${(await login.json()).access_token}` };
+  const host = await loginHost(request);
   const created = await request.post(`${API}/tests`, {
     headers: host,
     data: {
@@ -116,6 +123,63 @@ test("when the time runs out the page submits what the candidate has answered", 
     const [submission] = (await detail.json()).standalone_submissions;
     expect(submission).toMatchObject({ participant_email: "slow@example.com", score: 1, total: 1 });
     expect(Object.keys(submission.answers)).toHaveLength(1); // only what had been answered
+  } finally {
+    await request.delete(`${API}/tests/${exam.id}`, { headers: host });
+  }
+});
+
+// A refresh or a crash mid-exam: starting again with the same email picks the attempt up (same order) and the tab's saved
+// answers come back, so nothing typed is lost. The draft is dropped once the exam is submitted.
+test("a refresh in the middle of an exam keeps the order and the answers", async ({ page, request }) => {
+  const host = await loginHost(request);
+  const created = await request.post(`${API}/tests`, {
+    headers: host,
+    data: {
+      title: "Refresh exam",
+      description: null,
+      form_mode: false,
+      is_public: true,
+      time_limit_minutes: 30,
+      shuffle: true,
+      questions: [
+        ...[1, 2, 3].map((n) => ({ question_type: "multiple_choice", prompt: `Question ${n}`, options: [`Alpha ${n}`, `Beta ${n}`], correct_option_index: 0 })),
+        { question_type: "short_text", prompt: "Say why", options: [], correct_option_index: null },
+      ],
+    },
+  });
+  const exam = await created.json();
+
+  async function startExam() {
+    await page.goto(`/forms/${exam.public_token}`);
+    await page.locator("#form-name").fill("Refresh Candidate");
+    await page.locator("#form-email").fill("refresh@example.com");
+    await page.getByRole("checkbox").check();
+    await page.getByRole("button", { name: "Fillo testin" }).click();
+    await expect(page.getByRole("timer")).toBeVisible();
+  }
+
+  try {
+    await startExam();
+    const order = await page.locator("p[id^=q-]").allTextContents();
+    await page.getByText("Beta 1").click();
+    await page.getByText("Alpha 3").click();
+    await page.locator("textarea").fill("half a thought");
+
+    await startExam(); // the page is loaded again from scratch, as after a refresh or a crash
+    expect(await page.locator("p[id^=q-]").allTextContents()).toEqual(order); // the server's order for this attempt
+    await expect(page.getByRole("radio", { name: "Beta 1" })).toBeChecked();
+    await expect(page.getByRole("radio", { name: "Alpha 3" })).toBeChecked();
+    await expect(page.getByRole("radio", { name: "Alpha 2" })).not.toBeChecked();
+    await expect(page.locator("textarea")).toHaveValue("half a thought");
+
+    await page.getByText("Alpha 2").click();
+    await page.getByRole("button", { name: "Dorëzo testin" }).click();
+    await expect(page.getByText("Testi u dorëzua")).toBeVisible();
+    expect(await page.evaluate(() => Object.keys(sessionStorage).filter((key) => key.startsWith("ng-exam-draft-")))).toEqual([]);
+
+    const detail = await request.get(`${API}/tests/${exam.id}`, { headers: host });
+    const [submission] = (await detail.json()).standalone_submissions;
+    expect(submission).toMatchObject({ participant_email: "refresh@example.com", score: 2, total: 3 }); // Alpha 2 and Alpha 3 are right, Beta 1 is not, whatever order was shown
   } finally {
     await request.delete(`${API}/tests/${exam.id}`, { headers: host });
   }

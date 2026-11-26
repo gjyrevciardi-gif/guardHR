@@ -7,7 +7,7 @@ A **test** shared as a public link (`/forms/<link>`, `form_mode` off) is an exam
 1. A notice says what is recorded and blocked, and the time limit if there is one, with a link to `/privacy`. The questions are **not** in the page, and not in the response that loaded it.
 2. They give their name and email (both required) and tick that they have read it. **Fillo testin** sends them to `POST /api/public/tests/<link>/start`. An email that already submitted is refused here (409), before the exam rather than after it.
 3. The server writes an **attempt** (name, email, IP, start time, the order shown) and answers with the questions and the attempt's id. The questions appear, with the name, email and start time tiled faintly over them as a watermark, and a countdown when there is a limit.
-4. Starting again with the same email, for example after a refresh or a crash, **picks the same attempt up**: same start time, same order, the clock still running. It never gives a fresh start.
+4. Starting again with the same email, for example after a refresh or a crash, **picks the same attempt up**: same start time, same order, the clock still running, and the answers the tab had saved come back (see below). It never gives a fresh start.
 5. On submit the answers, the attempt and the collected signals go to the server in one request. An exam submission without a valid, unsubmitted attempt for that test is refused (400, or 409 if it was already submitted), and it is recorded for the name and email in the attempt, whatever the request body says.
 
 ## Time limit
@@ -44,11 +44,12 @@ Severity is decided by the server, never by the browser: pasting, printing and P
 - **Signals come from the candidate's browser.** Their absence does not prove nothing happened. Signals still travel with the submission (there is no session to post them to), so someone who starts and never submits leaves an attempt on record but no signals.
 - **The link alone reveals nothing, but starting is open.** `GET /api/public/tests/<link>` carries the title, the number of questions and the time limit; the questions come from `/start`, which needs a name and a well-formed email, nothing more. Someone willing to give a made-up name and email can read the questions (from the network response) without taking the exam, and the watermark then carries that made-up name. Rate limit: 20 starts an hour per IP and test. For a stricter exam, run it inside a call.
 - **One attempt per email, and the email is self-declared and not verified.** Someone who knows another candidate's email can pick that attempt up and answer in their name; the attempt's page shows the name given at the first start.
-- **Answers are not saved while the candidate types.** A refresh or crash keeps the clock and the order but not what was typed; the candidate starts the same attempt again with empty answers.
+- **Answers are saved in the browser, not on the server.** They survive a refresh, a crash and a restored tab, because the same tab starts the same attempt again. They do not survive closing the tab, switching to another browser or device, or blocked storage, and the host cannot see them until the candidate submits. In those cases the clock and the order carry on but the answers start empty. Signals recorded before the refresh are lost the same way.
 - Mobile browsers have no Print Screen key and mostly no print dialog; there the notice, the watermark and the focus signals are what remain.
 
 ## Data
 
+- **Draft answers** are kept in the candidate's own tab (`sessionStorage`, key `ng-exam-draft-<attempt id>`), saved as they type and dropped on submit. Session storage, not local storage, so closing the tab clears it and nothing stays behind on a shared computer; it never goes to the server. On picking an attempt up again, only answers that still fit the questions are restored.
 - **Signals** are stored in `test_submissions.integrity_events` (JSON, at most 300 per submission, only `tab_hidden` and `copy_paste` accepted). They are part of the submission row. The server drops anything sent for a plain form.
 - **Attempts** are `exam_attempts` rows: name, email, IP, start time, submit time, the order shown. One per test and email. Unlike a submission one exists **from the start**, so a person who never submitted is stored too. The retention purge removes attempts older than the host's retention period (`deleted_attempts` in its result), whether or not they submitted; deleting the test removes its attempts with it. Backups hold them until pruned (see [deployment.md](deployment.md)).
 - Submissions also keep `started_at` and `over_limit_seconds`, so a submission stands on its own after its attempt has been purged.
@@ -63,4 +64,4 @@ An exam page opened before this release has no attempt id of the new kind and ca
 
 ## Possible next steps (not built)
 
-Saving answers as the candidate types (so a crash loses nothing), and verifying the candidate's email before the questions are handed out (the code check the call flow already has, see [candidate-checks.md](candidate-checks.md)), which would close the "made-up name and email" gap above.
+Saving answers on the server as well (so a change of device loses nothing, and the host can see progress), and verifying the candidate's email before the questions are handed out (the code check the call flow already has, see [candidate-checks.md](candidate-checks.md)), which would close the "made-up name and email" gap above.

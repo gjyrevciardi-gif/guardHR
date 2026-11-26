@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { CheckCircle2, ClipboardList, Loader2 } from "lucide-react";
 import { api } from "@/lib/api";
+import { clearDraft, loadDraft, saveDraft } from "@/lib/examDraft";
 import { clock } from "@/lib/format";
 import { ExamStarted, Test, TestAnswer, TestQuestion, TestSubmission } from "@/lib/types";
 import { useExamGuard } from "@/lib/useExamGuard";
@@ -62,6 +63,7 @@ export default function PublicFormPage() {
       }, false);
       setAttempt(result.attempt);
       setExamQuestions(result.questions);
+      setAnswers(loadDraft(result.attempt, result.questions)); // picking an attempt up again brings back what this tab had saved
       setAttemptName(result.participant_name);
       // The server's count of seconds left, so a wrong clock on this device cannot shorten or stretch the time.
       setDeadline(result.seconds_left == null ? null : Date.now() + result.seconds_left * 1000);
@@ -96,6 +98,13 @@ export default function PublicFormPage() {
     event.preventDefault();
     void send();
   }
+
+  // Keep the answers in this tab until they are submitted, so a refresh or a crash does not lose them.
+  useEffect(() => {
+    if (!exam || !attempt) return;
+    if (submission) clearDraft(attempt);
+    else saveDraft(attempt, answers);
+  }, [exam, attempt, answers, submission]);
 
   // The countdown. Only an exam with a time limit has a deadline.
   useEffect(() => {
@@ -166,6 +175,7 @@ export default function PublicFormPage() {
                 <li>regjistron kur ngjit tekst, kur shtyp Print Screen ose provon të printosh; për tekstin e ngjitur ruhet vetëm sa i gjatë ishte, jo vetë teksti;</li>
                 <li>nuk të lejon të kopjosh ose të printosh pyetjet, dhe shfaq emrin tënd si filigram mbi to;</li>
                 {test.time_limit_minutes && <li>ka kohë të kufizuar prej {test.time_limit_minutes} minutash nga çasti që e nis: koha vazhdon edhe nëse e mbyll ose e rifreskon faqen, dhe kur mbaron dërgohet ajo që ke përgjigjur;</li>}
+                <li>i ruan përgjigjet që shkruan vetëm në këtë skedë të browser-it, që të mos i humbasësh nëse rifreskon faqen; mbyllja e skedës i fshin;</li>
                 <li>nuk përdor kamerën, mikrofonin ose ekranin tënd.</li>
               </ul>
               <p className="mt-3 text-sm text-slate-700">Këto janë sinjale për organizatorin, jo një vendim: ai i shikon së bashku me përgjigjet. Fshihen bashkë me përgjigjet pas afatit që ka caktuar. <Link href="/privacy" className="font-semibold underline" target="_blank" rel="noreferrer">Më shumë te privatësia</Link>.</p>
