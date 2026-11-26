@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session, selectinload
 from .. import email as mailer
 from ..database import get_db
 from ..enums import QuestionType
-from ..exams import arrange, make_layout, original_answers, over_limit_seconds, seconds_left, shown_questions
+from ..exams import MAX_TEXT_ANSWER, arrange, clean_draft, make_layout, original_answers, over_limit_seconds, seconds_left, shown_questions
 from ..models import ExamAttempt, ExamEmailCode, IntegrityEvent, InterviewSession, Test, TestQuestion, TestSubmission, User
 from ..ratelimit import rate_limit
 from ..retention import delete_test
@@ -18,6 +18,7 @@ from ..schemas import (
     ExamCodeConfirm,
     ExamCodeRequest,
     ExamCodeSent,
+    ExamDraft,
     ExamEventCreate,
     ExamStart,
     ExamStarted,
@@ -39,6 +40,9 @@ from ..verification import CODE_TTL_SECONDS, EXAM_SENDS_WINDOW_SECONDS, MAX_ATTE
 
 router = APIRouter(prefix="/tests", tags=["tests"])
 public_router = APIRouter(prefix="/public/tests", tags=["public-tests"], dependencies=[Depends(rate_limit("public-tests", 240, 60))])
+# Saving a draft happens every few seconds for everyone sitting an exam, so it is not counted against the shared per-IP
+# budget above (a room of candidates behind one address would use it up and lock the others out of submitting).
+draft_router = APIRouter(prefix="/public/tests", tags=["public-tests"], dependencies=[Depends(rate_limit("public-test-draft-ip", 1200, 60))])
 
 
 MAX_STANDALONE_SUBMISSIONS = 500
@@ -100,7 +104,7 @@ def grade_answers(questions: list[TestQuestion], answers: dict) -> tuple[dict, i
             if answer is None:
                 continue
             value = str(answer).strip()
-            if len(value) > 5000:
+            if len(value) > MAX_TEXT_ANSWER:
                 raise HTTPException(status_code=422, detail="Text answer is too long")
             checked_answers[question.id] = value
             continue
@@ -190,7 +194,10 @@ def test_to_detail(test: Test, db: Session, user: User) -> TestDetailOut:
         questions=[TestQuestionHostOut.model_validate(question) for question in test.questions],
         sessions=review_sessions,
         standalone_submissions=[TestStandaloneSubmissionOut.model_validate(submission) for submission in standalone],
-        unfinished_attempts=[ExamAttemptOut.model_validate(attempt).model_copy(update={"expired": seconds_left(test, attempt, now) == 0}) for attempt in unfinished],
+        unfinished_attempts=[
+            ExamAttemptOut.model_validate(attempt).model_copy(update={"expired": seconds_left(test, attempt, now) == 0, "answered": len(attempt.draft_answers or {})})
+            for attempt in unfinished
+        ],
     )
 
 
@@ -416,13 +423,32 @@ def begin_attempt(db: Session, test: Test, name: str, email: str, request: Reque
     left = seconds_left(test, attempt, datetime.now(timezone.utc))
     if left == 0:
         raise HTTPException(status_code=400, detail="Time is up for this attempt. Ask the organiser if you need to start again")
+    arrangement = arrange(questions, attempt.layout)
     return ExamStarted(
         attempt=attempt.id,
         started_at=as_utc(attempt.started_at),
         participant_name=attempt.participant_name,
         seconds_left=left,
-        questions=shown_questions(arrange(questions, attempt.layout)),
+        questions=shown_questions(arrangement),
+        # Saved answers go back only to someone who just proved the mailbox: otherwise knowing an email would be enough to read them.
+        draft=clean_draft(arrangement, attempt.draft_answers or {}) if verified_at else {},
     )
+
+
+@draft_router.put(
+    "/{token}/attempts/{attempt_id}/draft",
+    status_code=204,
+    dependencies=[Depends(rate_limit("public-test-draft", 40, 60, "attempt_id"))],
+)
+def save_exam_draft(token: str, attempt_id: str, payload: ExamDraft, db: Session = Depends(get_db)):
+    """Keep what the candidate has answered so far, so a crash or a change of device does not lose it. The attempt id is the key, as for submitting."""
+    test = public_test(db, token)
+    if test.form_mode:
+        raise HTTPException(status_code=400, detail="A plain form has no attempt to save")
+    attempt = open_attempt(db, attempt_id, test)
+    attempt.draft_answers = clean_draft(arrange(list(test.questions), attempt.layout), payload.answers)
+    attempt.draft_saved_at = datetime.now(timezone.utc)
+    db.commit()
 
 
 def exam_that_checks_email(db: Session, token: str) -> Test:
@@ -549,6 +575,8 @@ def submit_public_test(token: str, payload: PublicTestSubmit, request: Request, 
     db.add(submission)
     if attempt is not None:
         attempt.submitted_at = datetime.now(timezone.utc)
+        attempt.draft_answers = {}  # the submission is the record now
+        attempt.draft_saved_at = None
     audit(db, None, request, "public_test.submitted", "test_submission", submission.id, None, {"test_id": test.id, "score": score, "total": total, "form_mode": test.form_mode})
     db.commit()
     db.refresh(submission)

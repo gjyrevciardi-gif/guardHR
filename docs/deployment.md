@@ -115,6 +115,8 @@ Migration `0009` adds the `exam_attempts` table and the time limit and shuffle s
 
 Migration `0010` adds the email code for public exams: `tests.verify_candidate_email` (default off, so existing tests behave as before), the `exam_email_codes` table, and `email_verified_at` on attempts and submissions (see [exam-protection.md](exam-protection.md#email-code-the-hosts-option)); it is additive and downgradable. A test with the option on needs a working SMTP relay (the `SMTP_*` settings above): with a broken relay nobody can start it, and the candidate is told the code could not be sent. Test the relay before turning the option on for a real exam. The table holds the addresses of everyone who asked for a code, and the retention purge removes them like attempts.
 
+Migration `0011` adds `exam_attempts.draft_answers` and `draft_saved_at`: the answers a candidate has written so far, saved while they work and emptied on submit (see [exam-protection.md](exam-protection.md#saved-answers)). It is additive and downgradable. A candidate who never submits leaves a partial draft in their attempt; it is removed with the attempt by the retention purge, so say so in your own privacy notice, and note that backups hold it until pruned.
+
 The interface has a light and a dark theme (a toggle in every header; the choice is kept in the browser's local storage). Nothing server-side changed for this, and no new environment variable is needed.
 
 ## Known limits (deliberate)

@@ -51,7 +51,7 @@ def test_fresh_database_reaches_head(scratch_engine):
     with scratch_engine.connect() as connection:
         tables = {row[0] for row in connection.execute(text("SELECT table_name FROM information_schema.tables WHERE table_schema = 'public'"))}
         assert {"users", "candidates", "interview_sessions", "tests", "test_submissions", "alembic_version"} <= tables
-        assert connection.execute(text("SELECT version_num FROM alembic_version")).scalar() == "0010"
+        assert connection.execute(text("SELECT version_num FROM alembic_version")).scalar() == "0011"
     upgrade(scratch_engine)  # running again is a no-op
 
 
@@ -272,4 +272,27 @@ def test_the_email_code_migration_changes_nothing_for_existing_tests_and_downgra
         columns = {row[0] for row in connection.execute(text("SELECT column_name FROM information_schema.columns WHERE table_name IN ('tests', 'exam_attempts', 'test_submissions')"))}
         assert "exam_email_codes" not in tables and not {"verify_candidate_email", "email_verified_at"} & columns
         assert connection.execute(text("SELECT count(*) FROM exam_attempts")).scalar() == 1  # the attempts survive
+    upgrade(scratch_engine)
+
+
+def test_the_draft_migration_gives_existing_attempts_an_empty_draft_and_downgrades_cleanly(scratch_engine):
+    upgrade(scratch_engine, "0010")
+    with scratch_engine.begin() as connection:
+        connection.execute(text("INSERT INTO users (id, email, password_hash, full_name) VALUES ('00000000-0000-0000-0000-000000000001', 'u@x.com', 'h', 'U')"))
+        connection.execute(text("INSERT INTO tests (id, created_by, public_token, title) VALUES ('00000000-0000-0000-0000-000000000004', '00000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000005', 'T')"))
+        connection.execute(text("INSERT INTO exam_attempts (test_id, participant_name, participant_email) VALUES ('00000000-0000-0000-0000-000000000004', 'A', 'a@x.com')"))
+    upgrade(scratch_engine)
+    with scratch_engine.connect() as connection:
+        draft, saved_at = connection.execute(text("SELECT draft_answers, draft_saved_at FROM exam_attempts")).one()
+        assert draft == {} and saved_at is None  # an attempt that began before the upgrade has nothing saved
+
+    config = Config(str(BACKEND_DIR / "alembic.ini"))
+    config.set_main_option("script_location", str(BACKEND_DIR / "alembic"))
+    with scratch_engine.begin() as connection:
+        config.attributes["connection"] = connection
+        command.downgrade(config, "0010")
+    with scratch_engine.connect() as connection:
+        columns = {row[0] for row in connection.execute(text("SELECT column_name FROM information_schema.columns WHERE table_name = 'exam_attempts'"))}
+        assert not {"draft_answers", "draft_saved_at"} & columns and "participant_email" in columns
+        assert connection.execute(text("SELECT count(*) FROM exam_attempts")).scalar() == 1  # the attempt itself survives
     upgrade(scratch_engine)

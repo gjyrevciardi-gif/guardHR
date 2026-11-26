@@ -168,6 +168,12 @@ test("a refresh in the middle of an exam keeps the order and the answers", async
     await page.getByText("Alpha 3").click();
     await page.locator("textarea").fill("half a thought");
 
+    // The page also saves them on the server a few seconds after they change: the host sees how many, never what.
+    await expect
+      .poll(async () => (await (await request.get(`${API}/tests/${exam.id}`, { headers: host })).json()).unfinished_attempts[0]?.answered, { timeout: 15_000 })
+      .toBe(3);
+    expect(JSON.stringify((await (await request.get(`${API}/tests/${exam.id}`, { headers: host })).json()).unfinished_attempts)).not.toContain("half a thought");
+
     await startExam(); // the page is loaded again from scratch, as after a refresh or a crash
     expect(await page.locator("p[id^=q-]").allTextContents()).toEqual(order); // the server's order for this attempt
     await expect(page.getByRole("radio", { name: "Beta 1" })).toBeChecked();

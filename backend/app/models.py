@@ -175,6 +175,10 @@ class ExamAttempt(Base):
     started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     submitted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     email_verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # What the candidate has answered so far, as they saw it ({question id: option position shown, or text}), saved while
+    # they work and emptied on submit. Handed back only to someone who proved the mailbox; the host sees how many, not what.
+    draft_answers: Mapped[dict] = mapped_column(JSON, default=dict, server_default="{}")
+    draft_saved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
 class ExamEmailCode(Base):

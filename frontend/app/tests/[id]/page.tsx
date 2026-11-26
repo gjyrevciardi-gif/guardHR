@@ -407,6 +407,7 @@ function ReviewPanel({ test, onRelease }: { test: TestDetail; onRelease: (attemp
                   <div>
                     <p className="font-semibold">{attempt.participant_name}</p>
                     <p className="text-sm text-muted">{attempt.participant_email} · nisur {dateTime(attempt.started_at)}{attempt.email_verified_at ? " · email-i i verifikuar" : ""}{attempt.expired ? " · koha ka mbaruar" : ""}</p>
+                    <p className="text-sm text-muted">{attempt.draft_saved_at ? `Ka përgjigjur ${attempt.answered} nga ${test.question_count} pyetje · ruajtur ${dateTime(attempt.draft_saved_at)}` : "Ende pa përgjigje të ruajtura"}</p>
                   </div>
                   <button type="button" onClick={() => onRelease(attempt)} className="btn-secondary" aria-label={`Lejo ${attempt.participant_name} të fillojë përsëri`}>Lejo përsëri</button>
                 </li>
