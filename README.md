@@ -99,7 +99,7 @@ Skema nuk krijohet më nga `database/schema.sql` por nga Alembic. Një databazë
 | GET/DELETE | `/api/sessions/{id}` | Timeline dhe reviews / fshirje e plotë |
 | POST | `/api/sessions/{id}/reviews` | Review manual |
 | PUT | `/api/sessions/{id}/notes` | Ruan shënimet private të host-it (vetëm pronari; shfaqen vetëm te detaji i call-it, kurrë te kandidati) |
-| GET/POST | `/api/tests` | Teste/formularë (listë me `limit`, `offset`); `POST /api/tests/generate-from-file` nga PDF/DOCX/TXT/MD |
+| GET/POST | `/api/tests` | Teste/formularë (listë me `limit`, `offset`); `POST /api/tests/generate-from-file` nga PDF/DOCX/TXT/MD (merr edhe `time_limit_minutes`, `shuffle`, `verify_candidate_email`) |
 | GET/PUT/DELETE | `/api/tests/{id}` | Detaje, editim, fshirje |
 | GET | `/api/public/sessions/{token}` | Detaje publike minimale (pa link publik të testit) |
 | POST | `/api/public/sessions/{token}/consent` | Consent eksplicit (idempotent) |
