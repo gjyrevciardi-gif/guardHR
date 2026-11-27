@@ -1,17 +1,20 @@
 import type { Metadata } from "next";
-import { IBM_Plex_Mono, Sora } from "next/font/google";
+import localFont from "next/font/local";
 import "./globals.css";
 
-const sora = Sora({
-  subsets: ["latin"],
-  weight: ["400", "600", "700"],
+// Files live in ./fonts (see its README): no download at build time, no request to Google when a page loads.
+const sora = localFont({
+  src: "./fonts/sora-latin.woff2",
+  weight: "400 700",
   variable: "--font-sora",
   display: "swap",
 });
 
-const plexMono = IBM_Plex_Mono({
-  subsets: ["latin"],
-  weight: ["400", "500"],
+const plexMono = localFont({
+  src: [
+    { path: "./fonts/ibm-plex-mono-400-latin.woff2", weight: "400", style: "normal" },
+    { path: "./fonts/ibm-plex-mono-500-latin.woff2", weight: "500", style: "normal" },
+  ],
   variable: "--font-plex-mono",
   display: "swap",
 });

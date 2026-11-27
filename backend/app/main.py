@@ -41,6 +41,7 @@ app.include_router(settings.router, prefix="/api")
 app.include_router(signaling.router, prefix="/api")
 app.include_router(tests.router, prefix="/api")
 app.include_router(tests.public_router, prefix="/api")
+app.include_router(tests.draft_router, prefix="/api")
 
 
 @app.get("/api/health")

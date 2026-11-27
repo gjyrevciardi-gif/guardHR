@@ -99,7 +99,7 @@ Skema nuk krijohet më nga `database/schema.sql` por nga Alembic. Një databazë
 | GET/DELETE | `/api/sessions/{id}` | Timeline dhe reviews / fshirje e plotë |
 | POST | `/api/sessions/{id}/reviews` | Review manual |
 | PUT | `/api/sessions/{id}/notes` | Ruan shënimet private të host-it (vetëm pronari; shfaqen vetëm te detaji i call-it, kurrë te kandidati) |
-| GET/POST | `/api/tests` | Teste/formularë (listë me `limit`, `offset`); `POST /api/tests/generate-from-file` nga PDF/DOCX/TXT/MD |
+| GET/POST | `/api/tests` | Teste/formularë (listë me `limit`, `offset`); `POST /api/tests/generate-from-file` nga PDF/DOCX/TXT/MD (merr edhe `time_limit_minutes`, `shuffle`, `verify_candidate_email`) |
 | GET/PUT/DELETE | `/api/tests/{id}` | Detaje, editim, fshirje |
 | GET | `/api/public/sessions/{token}` | Detaje publike minimale (pa link publik të testit) |
 | POST | `/api/public/sessions/{token}/consent` | Consent eksplicit (idempotent) |
@@ -110,8 +110,10 @@ Skema nuk krijohet më nga `database/schema.sql` por nga Alembic. Një databazë
 | POST | `/api/public/sessions/{token}/analyze-frame` | YOLO/OpenCV transient |
 | POST | `/api/public/sessions/{token}/test-submission` | Dorëzon testin e call-it |
 | POST | `/api/public/sessions/{token}/finish` | Përfundon sesionin |
-| GET | `/api/public/tests/{token}` | Test/formular publik |
-| POST | `/api/public/tests/{token}/submissions` | Dorëzim publik (një për email) |
+| GET | `/api/public/tests/{token}` | Test/formular publik (një test jep vetëm titullin dhe numrin e pyetjeve, jo pyetjet) |
+| POST | `/api/public/tests/{token}/start` | Fillimi i një testi publik: emri dhe emaili, kthen pyetjet dhe një `attempt` |
+| POST | `/api/public/tests/{token}/submissions` | Dorëzim publik (një për email; testi kërkon `attempt` nga `/start`) |
+| DELETE | `/api/tests/{id}/attempts/{attempt_id}` | Host-i e lejon dikë që ka nisur e s'ka dorëzuar ta nisë testin përsëri |
 | GET | `/api/rtc-config` | Serverat ICE (STUN/TURN) për WebRTC; me `TURN_URLS`+`TURN_SECRET` shton një kredencial TURN 8-orëshe |
 | WS | `/api/ws/rooms/{token}?role=hr\|candidate` | Signaling; roli verifikohet në server |
 | PUT | `/api/settings/retention` | Ndryshon ditët e ruajtjes |
@@ -124,7 +126,7 @@ Skema nuk krijohet më nga `database/schema.sql` por nga Alembic. Një databazë
 - MediaPipe Face Detector punon në browser. Mungesa e fytyrës raportohet vetëm pas 5 sekondash.
 - Një frame JPEG i zvogëluar dërgohet çdo 5 sekonda te YOLO/OpenCV vetëm për klasat `person` dhe `cell phone`; bytes nuk ruhen.
 - Video/audio nuk regjistrohen në MVP.
-- **Retention:** në nisje të API-t dhe çdo ditë (`RETENTION_PURGE_INTERVAL_HOURS`) dhe me kërkesë (`/settings/retention/purge`) fshihen `integrity_events`, përgjigjet e testeve, `consent_ip` dhe IP-të në audit log për call-et e përfunduara përtej afatit. Call-et që mbeten `in_progress` më shumë se `ABANDONED_SESSION_HOURS` (12 orë) mbyllen si të braktisura dhe ndjekin të njëjtin afat; linket e skaduara që s'u përdorën kurrë humbin vetëm IP-në e pranimit. Sesioni, review-t, shënimet private të host-it dhe emri i kandidatit mbeten derisa HR të fshijë call-in (`DELETE /api/sessions/{id}`), që heq gjithçka, përfshirë kandidatin nëse nuk ka call tjetër. Mund ta ekzekutosh edhe nga cron: `python -m app.retention`.
+- **Retention:** në nisje të API-t dhe çdo ditë (`RETENTION_PURGE_INTERVAL_HOURS`) dhe me kërkesë (`/settings/retention/purge`) fshihen `integrity_events`, përgjigjet e testeve, nisjet e testeve publike (`exam_attempts`, edhe pa dorëzim), `consent_ip` dhe IP-të në audit log për call-et e përfunduara përtej afatit. Call-et që mbeten `in_progress` më shumë se `ABANDONED_SESSION_HOURS` (12 orë) mbyllen si të braktisura dhe ndjekin të njëjtin afat; linket e skaduara që s'u përdorën kurrë humbin vetëm IP-në e pranimit. Sesioni, review-t, shënimet private të host-it dhe emri i kandidatit mbeten derisa HR të fshijë call-in (`DELETE /api/sessions/{id}`), që heq gjithçka, përfshirë kandidatin nëse nuk ka call tjetër. Mund ta ekzekutosh edhe nga cron: `python -m app.retention`.
 - IP-ja e kandidatit (consent, audit) merret nga lidhja TCP. `X-Forwarded-For` besohet vetëm kur `TRUST_PROXY_HEADERS=true` (Nginx i përfshirë e mbishkruan).
 - Staging me certifikatë reale, TURN të vetin dhe zbulim telefoni (hapat, kontrollet dhe çfarë mbetet pa verifikuar): [docs/staging.md](docs/staging.md).
 - Rëndësia e sinjaleve, rregulli i rishikimit dhe mbulimi i monitorimit: [docs/signals.md](docs/signals.md).
@@ -159,10 +161,17 @@ npm run lint
 npm run typecheck
 npm run build
 
-# Një test smoke me Playwright (kandidati bën një provim, hosti sheh pikët dhe sinjalet). Duhen ndezur API-ja në :8100
+# Teste smoke me Playwright: kandidati bën një provim dhe hosti sheh pikët dhe sinjalet; një host dhe një kandidat
+# takohen në një call të vërtetë (dy browser-a, kamera dhe mikrofon të rremë, video në të dyja anët, ndarja e ekranit,
+# sinjalet live, shënimet e hostit, mbyllja; të dyja radhët e hyrjes). Nëse call-i dështon, raporti ka log-un WebRTC të secilës anë.
+# Rifreskimi i faqes së kandidatit në mes të call-it (lidhja e vjetër mbyllet dhe ndërtohet një e re) nuk ka test të
+# automatizuar: në provat Chrome me kamerë të rreme e mbyllte herë pas here vetë kamerën kur faqja riçelej dhe testi dështonte rreth gjysmën e herëve.
+# Duhen ndezur API-ja në :8100
 # dhe frontend-i në :3100 (p.sh. `node .next/standalone/server.js` me PORT=3100 pas `npm run build`).
-npx playwright install chromium             # ose vendos PW_CHANNEL=chrome për Chrome-in që ke
-npm run e2e                                 # E2E_EMAIL / E2E_PASSWORD nëse admini nuk është hr@example.com
+PW_CHANNEL=chrome npm run e2e               # me Chrome-in që ke (ose `npx playwright install chromium` dhe pa PW_CHANNEL)
+                                            # vendos E2E_EMAIL / E2E_PASSWORD nëse admini nuk është hr@example.com
+                                            # testi i kodit me email ndez vetë një server SMTP të vogël në :2525 (E2E_SMTP_PORT): nise API-n me
+                                            # SMTP_HOST=127.0.0.1 SMTP_PORT=2525 që emaili të arrijë aty (CI e bën këtë)
 ```
 
 CI (`.github/workflows/ci.yml`) ekzekuton të njëjtat kontrolle, përfshirë PostgreSQL. Dy workflow të tjerë: `e2e.yml` ndez API-n dhe frontend-in dhe ekzekuton testin smoke; `security.yml` ekzekuton `pip-audit` dhe `npm audit` për çdo PR dhe çdo të hënë (një dobësi e re te një varësi e pandryshuar del kështu pa PR). Dependabot (`.github/dependabot.yml`) hap PR javore për varësitë, imazhet Docker dhe actions.

@@ -6,6 +6,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .database import Base
 from .enums import EventType, QuestionType, ReviewOutcome, ReviewStatus, SessionStatus, UserRole, check_in
+from .secrets_box import EncryptedString
 
 
 def uuid4_str() -> str:
@@ -34,8 +35,9 @@ class User(Base):
     # Only the keyed hash of the emailed reset token is stored (app/security.py keyed_hash).
     password_reset_hash: Mapped[str | None] = mapped_column(String(64), unique=True)
     password_reset_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-    # Two-step verification (app/mfa.py). mfa_secret is set at setup and only counts once mfa_enabled is true.
-    mfa_secret: Mapped[str | None] = mapped_column(String(64))
+    # Two-step verification (app/mfa.py). mfa_secret is set at setup and only counts once mfa_enabled is true; it is
+    # encrypted at rest (app/secrets_box.py), so code here always sees the plain value.
+    mfa_secret: Mapped[str | None] = mapped_column(EncryptedString)
     mfa_enabled: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
     mfa_last_step: Mapped[int | None] = mapped_column(Integer)
     mfa_recovery_hashes: Mapped[list[str] | None] = mapped_column(JSON)
@@ -102,6 +104,7 @@ class InterviewSession(Base):
 class Test(Base):
     __test__ = False  # not a pytest test class
     __tablename__ = "tests"
+    __table_args__ = (CheckConstraint("time_limit_minutes IS NULL OR time_limit_minutes BETWEEN 1 AND 480", name="ck_tests_time_limit_minutes"),)
     id: Mapped[str] = mapped_column(Uuid(as_uuid=False), primary_key=True, default=uuid4_str)
     created_by: Mapped[str] = mapped_column(Uuid(as_uuid=False), ForeignKey("users.id", ondelete="CASCADE"), index=True)
     public_token: Mapped[str] = mapped_column(Uuid(as_uuid=False), unique=True, default=uuid4_str, index=True)
@@ -109,6 +112,13 @@ class Test(Base):
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     is_public: Mapped[bool] = mapped_column(Boolean, default=True)
     form_mode: Mapped[bool] = mapped_column(Boolean, default=False)
+    # Public exam link only (a plain form has neither): minutes from the start, and a per-candidate question and option order.
+    time_limit_minutes: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    shuffle: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
+    # Public exam link only: the candidate must enter a code emailed to the address they give before the questions appear.
+    verify_candidate_email: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
+    # With the email code on: the lower-case addresses allowed to ask for a code. Empty means anyone. Host-only: never in a public response.
+    invited_emails: Mapped[list[str]] = mapped_column(JSON, default=list, server_default="[]")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     questions: Mapped[list["TestQuestion"]] = relationship(cascade="all, delete-orphan", order_by="TestQuestion.position")
 
@@ -143,7 +153,54 @@ class TestSubmission(Base):
     # exams fill it; a call's signals are IntegrityEvent rows. Part of the row, so every purge or delete that removes
     # the submission removes these too.
     integrity_events: Mapped[list] = mapped_column(JSON, default=list, server_default="[]")
+    # Public exams: when the candidate started, and by how many seconds they went past the time limit (only when it was
+    # more than a few seconds, so network lag is not reported). Copied from the attempt so the row stands on its own.
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    over_limit_seconds: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # Public exams with the email code on: when the candidate last proved they read this mailbox (copied from the attempt).
+    email_verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     submitted_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class ExamAttempt(Base):
+    """Someone started a public exam. Written at the start, so a candidate who never submits is on record, starting again
+    resumes this row (same clock, same order) instead of resetting it, and its id is what the candidate holds to submit.
+    One per test and email. Holds a name, email and IP, so retention removes it like a submission."""
+
+    __tablename__ = "exam_attempts"
+    __table_args__ = (UniqueConstraint("test_id", "participant_email", name="uq_exam_attempts_test_email"),)
+    id: Mapped[str] = mapped_column(Uuid(as_uuid=False), primary_key=True, default=uuid4_str)
+    test_id: Mapped[str] = mapped_column(Uuid(as_uuid=False), ForeignKey("tests.id", ondelete="CASCADE"))
+    participant_name: Mapped[str] = mapped_column(String(160))
+    participant_email: Mapped[str] = mapped_column(String(255))
+    participant_ip: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    # What this candidate was shown: [{"id": question id, "options": [original option indexes in the order shown]}].
+    layout: Mapped[list] = mapped_column(JSON, default=list, server_default="[]")
+    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    submitted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    email_verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # What the candidate has answered so far, as they saw it ({question id: option position shown, or text}), saved while
+    # they work and emptied on submit. Handed back only to someone who proved the mailbox; the host sees how many, not what.
+    draft_answers: Mapped[dict] = mapped_column(JSON, default=dict, server_default="{}")
+    draft_saved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class ExamEmailCode(Base):
+    """The one-time code emailed to someone who wants to start a public exam that checks email. One row per test and
+    address, written when they ask for a code, so it exists before any attempt does. Only a keyed hash of the code is
+    kept. The column names match the call's (app.verification works on either). Holds an email and nothing else, and
+    retention removes it like an attempt."""
+
+    __tablename__ = "exam_email_codes"
+    __table_args__ = (UniqueConstraint("test_id", "email", name="uq_exam_email_codes_test_email"),)
+    id: Mapped[str] = mapped_column(Uuid(as_uuid=False), primary_key=True, default=uuid4_str)
+    test_id: Mapped[str] = mapped_column(Uuid(as_uuid=False), ForeignKey("tests.id", ondelete="CASCADE"))
+    email: Mapped[str] = mapped_column(String(255))
+    verification_code_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    verification_sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    verification_sends: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    verification_attempts: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
 class IntegrityEvent(Base):

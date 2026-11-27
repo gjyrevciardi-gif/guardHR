@@ -5,10 +5,12 @@ import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { AlertTriangle, ArrowLeft, CheckCircle2, Clipboard, ClipboardList, Edit3, ExternalLink, Plus, Save, Trash2 } from "lucide-react";
 import { AppShell } from "@/components/AppShell";
+import { ExamOptions } from "@/components/ExamOptions";
+import { firstBadAddress, parseInvited } from "@/lib/invited";
 import { StatusBadge } from "@/components/StatusBadge";
 import { api } from "@/lib/api";
-import { dateTime, eventLabels, examSignalSummary, sessionStatusLabels, severityLabels, severityStyles } from "@/lib/format";
-import { QuestionType, TestAnswer, TestDetail } from "@/lib/types";
+import { dateTime, eventLabels, examSignalSummary, formatDuration, sessionStatusLabels, severityLabels, severityStyles } from "@/lib/format";
+import { ExamAttempt, QuestionType, TestAnswer, TestDetail } from "@/lib/types";
 
 type DraftQuestion = {
   id?: string;
@@ -34,6 +36,10 @@ export default function TestDetailPage() {
   const [description, setDescription] = useState("");
   const [formMode, setFormMode] = useState(false);
   const [isPublic, setIsPublic] = useState(true);
+  const [timeLimit, setTimeLimit] = useState("");
+  const [shuffle, setShuffle] = useState(false);
+  const [verifyEmail, setVerifyEmail] = useState(false);
+  const [invited, setInvited] = useState("");
   const [questions, setQuestions] = useState<DraftQuestion[]>([emptyQuestion(false)]);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
@@ -46,6 +52,10 @@ export default function TestDetailPage() {
     setDescription(data.description || "");
     setFormMode(data.form_mode);
     setIsPublic(data.is_public);
+    setTimeLimit(data.time_limit_minutes ? String(data.time_limit_minutes) : "");
+    setShuffle(data.shuffle);
+    setVerifyEmail(data.verify_candidate_email);
+    setInvited(data.invited_emails.join("\n"));
     setQuestions(data.questions.map((question) => ({
       id: question.id,
       question_type: question.question_type,
@@ -124,17 +134,35 @@ export default function TestDetailPage() {
     }
   }
 
+  async function releaseAttempt(attempt: ExamAttempt) {
+    if (!window.confirm(`${attempt.participant_name} do të mund ta nisë testin përsëri, me kohën e plotë. Vazhdoj?`)) return;
+    setError("");
+    try {
+      await api(`/tests/${id}/attempts/${attempt.id}`, { method: "DELETE" });
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Kandidati nuk u lejua të fillojë përsëri.");
+    }
+  }
+
   async function save(event: FormEvent) {
     event.preventDefault();
     setSaving(true);
     setError("");
     setMessage("");
     try {
+      const invitedList = !formMode && verifyEmail ? parseInvited(invited) : [];
+      const badAddress = firstBadAddress(invitedList);
+      if (badAddress) throw new Error(`“${badAddress}” nuk duket si adresë email. Kontrollo listën e të ftuarve.`);
       const payload = {
         title,
         description: description.trim() || null,
         form_mode: formMode,
         is_public: isPublic,
+        time_limit_minutes: formMode || !timeLimit.trim() ? null : Number(timeLimit),
+        shuffle: !formMode && shuffle,
+        verify_candidate_email: !formMode && verifyEmail,
+        invited_emails: invitedList,
         questions: questions.map((question) => ({
           id: question.id,
           question_type: question.question_type,
@@ -212,7 +240,7 @@ export default function TestDetailPage() {
       {error && mode === "review" && <p role="alert" className="mt-5 rounded-xl border border-red-200 bg-red-50 p-4 text-sm font-semibold text-red-700">{error}</p>}
 
       {mode === "review" ? (
-        <ReviewPanel test={test} />
+        <ReviewPanel test={test} onRelease={releaseAttempt} />
       ) : (
         <form onSubmit={save} className="card mt-8 space-y-6 p-7">
           <div className="flex items-center gap-3">
@@ -246,6 +274,10 @@ export default function TestDetailPage() {
               <p className="mt-2 text-sm text-muted">{formMode ? "Formular / pyetësor" : "Test me pikë"}</p>
             </div>
           </div>
+
+          {!formMode && (
+            <ExamOptions timeLimit={timeLimit} onTimeLimit={setTimeLimit} shuffle={shuffle} onShuffle={setShuffle} verifyEmail={verifyEmail} onVerifyEmail={setVerifyEmail} invited={invited} onInvited={setInvited} />
+          )}
 
           <div>
             <label htmlFor="test-title" className="label">Titulli</label>
@@ -319,7 +351,7 @@ export default function TestDetailPage() {
   );
 }
 
-function ReviewPanel({ test }: { test: TestDetail }) {
+function ReviewPanel({ test, onRelease }: { test: TestDetail; onRelease: (attempt: ExamAttempt) => void }) {
   return (
     <div className="mt-8 grid gap-6 lg:grid-cols-[1fr_1.35fr]">
       <section className="card p-6">
@@ -351,6 +383,29 @@ function ReviewPanel({ test }: { test: TestDetail }) {
       <section className="space-y-4">
         <h2 className="text-xl font-bold">Përgjigje publike</h2>
         {!test.form_mode && <p className="text-sm text-muted">Sinjalet vijnë nga browser-i i kandidatit dhe janë për t&apos;u parë, jo një vendim. Mungesa e tyre nuk provon se nuk ndodhi asgjë: një browser i modifikuar mund t&apos;i heqë, dhe screenshot ose foto e ekranit nuk zbulohet.</p>}
+        {!test.form_mode && (test.time_limit_minutes || test.shuffle || test.verify_candidate_email) && (
+          <p className="text-sm text-muted">
+            {test.time_limit_minutes ? `Koha: ${test.time_limit_minutes} minuta nga nisja.` : ""} {test.shuffle ? "Pyetjet dhe opsionet përzihen për çdo kandidat." : ""} {test.verify_candidate_email ? "Email-i i kandidatit verifikohet me kod para pyetjeve." : ""} {test.invited_emails.length ? `Vetëm ${test.invited_emails.length} adresa të ftuara marrin kod.` : ""}
+          </p>
+        )}
+        {test.unfinished_attempts.length > 0 && (
+          <section className="card p-6" aria-labelledby="unfinished-title">
+            <h3 id="unfinished-title" className="text-lg font-bold">Kanë nisur, pa dorëzuar ({test.unfinished_attempts.length})</h3>
+            <p className="mt-1 text-sm text-muted">Mund të jenë ende duke u përgjigjur, ose e kanë braktisur. Kush ka kaluar kohën nuk i merr më pyetjet; “Lejo përsëri” i jep një fillim të ri.</p>
+            <ul className="mt-4 divide-y divide-line">
+              {test.unfinished_attempts.map((attempt) => (
+                <li key={attempt.id} className="flex flex-col gap-2 py-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <p className="font-semibold">{attempt.participant_name}</p>
+                    <p className="text-sm text-muted">{attempt.participant_email} · nisur {dateTime(attempt.started_at)}{attempt.email_verified_at ? " · email-i i verifikuar" : ""}{attempt.expired ? " · koha ka mbaruar" : ""}</p>
+                    <p className="text-sm text-muted">{attempt.draft_saved_at ? `Ka përgjigjur ${attempt.answered} nga ${test.question_count} pyetje · ruajtur ${dateTime(attempt.draft_saved_at)}` : "Ende pa përgjigje të ruajtura"}</p>
+                  </div>
+                  <button type="button" onClick={() => onRelease(attempt)} className="btn-secondary" aria-label={`Lejo ${attempt.participant_name} të fillojë përsëri`}>Lejo përsëri</button>
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
         {test.standalone_submissions.length === 0 ? (
           <div className="card p-8 text-center">
             <ClipboardList className="mx-auto text-teal" size={34} aria-hidden="true" />
@@ -369,6 +424,13 @@ function ReviewPanel({ test }: { test: TestDetail }) {
                   {submission.total > 0 ? `${submission.score}/${submission.total}` : "Formular"}
                 </span>
               </div>
+              {(submission.duration_seconds != null || submission.over_limit_seconds != null || submission.email_verified_at) && (
+                <ul className="mt-4 flex flex-wrap gap-2" aria-label="Koha dhe email-i">
+                  {submission.email_verified_at && <li className="chip bg-shell-100 text-slate-700 ring-line">Email-i u verifikua me kod</li>}
+                  {submission.duration_seconds != null && <li className="chip bg-shell-100 text-slate-700 ring-line">Zgjati {formatDuration(submission.duration_seconds)}</li>}
+                  {submission.over_limit_seconds != null && <li className="chip bg-amber-50 text-amber-900 ring-amber-900/25">{formatDuration(submission.over_limit_seconds)} mbi kufirin e kohës</li>}
+                </ul>
+              )}
               {submission.events.length > 0 && (
                 <ul className="mt-4 flex flex-wrap gap-2" aria-label="Sinjale gjatë testit">
                   {examSignalSummary(submission.events).map((signal) => (

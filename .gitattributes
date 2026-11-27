@@ -1,3 +1,4 @@
 # Scripts and the relay config run on Linux: never let a Windows checkout turn them into CRLF.
 *.sh text eol=lf
 deploy/turnserver.conf text eol=lf
+*.woff2 binary

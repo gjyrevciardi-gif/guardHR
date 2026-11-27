@@ -8,7 +8,7 @@ from app.enums import EventType
 from app.models import TestSubmission
 from app.schemas import MAX_EXAM_EVENTS
 from app.signals import Severity, severity_for
-from helpers import make_test
+from helpers import make_test, start_exam
 
 
 def signal(event_type: str = "tab_hidden", **overrides) -> dict:
@@ -17,10 +17,15 @@ def signal(event_type: str = "tab_hidden", **overrides) -> dict:
 
 
 def submit(client, created: dict, **payload):
-    questions = client.get(f"/api/public/tests/{created['public_token']}").json()["questions"]
+    """Sit the exam (or fill in the plain form) and send the answers with `payload` on top."""
+    if created["form_mode"]:
+        questions = client.get(f"/api/public/tests/{created['public_token']}").json()["questions"]
+        body = {"participant_name": "Ardi", "participant_email": "ardi@example.com"}
+    else:
+        started = start_exam(client, created)
+        questions, body = started["questions"], {"attempt": started["attempt"]}
     answers = {questions[0]["id"]: 1, questions[1]["id"]: "Because"}
-    body = {"participant_name": "Ardi", "participant_email": "ardi@example.com", "answers": answers} | payload
-    return client.post(f"/api/public/tests/{created['public_token']}/submissions", json=body)
+    return client.post(f"/api/public/tests/{created['public_token']}/submissions", json=body | {"answers": answers} | payload)
 
 
 def standalone(client, hr, created: dict) -> list[dict]:
