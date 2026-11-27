@@ -9,6 +9,7 @@ from app.exams import arrange, make_layout, original_answers, over_limit_seconds
 from app.models import ExamAttempt, TestQuestion
 from helpers import make_test, start_exam
 
+DOCUMENT = "\n".join(f"{n}. Question {n}?\nA. One\nB. Two\nC. Three\nD. Four\n" for n in range(1, 4)) + "\nAnswer Key:\n1. B 2. A 3. C\n"
 THREE = [{"question_type": "multiple_choice", "prompt": f"Question {n}", "options": ["A", "B", "C"], "correct_option_index": 0} for n in range(1, 4)]
 
 
@@ -55,6 +56,26 @@ def test_the_time_limit_has_bounds(client, hr, minutes):
 def test_a_plain_form_saves_neither_setting(client, hr):
     created = make_test(client, hr, form_mode=True, time_limit_minutes=30, shuffle=True, questions=[{"question_type": "short_text", "prompt": "Team name", "options": [], "correct_option_index": None}])
     assert (created["time_limit_minutes"], created["shuffle"]) == (None, False)
+
+
+def upload(client, hr, **fields):
+    return client.post("/api/tests/generate-from-file", headers=hr, files={"file": ("quiz.txt", DOCUMENT.encode(), "text/plain")}, data={"question_count": "3", **fields})
+
+
+def test_a_test_made_from_a_document_can_take_the_exam_options(client, hr):
+    plain = upload(client, hr).json()
+    assert (plain["time_limit_minutes"], plain["shuffle"], plain["verify_candidate_email"]) == (None, False, False)
+
+    created = upload(client, hr, time_limit_minutes="25", shuffle="true", verify_candidate_email="true")
+    assert created.status_code == 201
+    assert (created.json()["time_limit_minutes"], created.json()["shuffle"], created.json()["verify_candidate_email"]) == (25, True, True)
+    assert client.get(url(created.json())).json()["time_limit_minutes"] == 25  # the link shows it, as for a test made by hand
+
+
+@pytest.mark.parametrize("minutes", ["0", "-5", "481", "soon"])
+def test_a_document_upload_checks_the_time_limit_before_making_a_test(client, hr, minutes):
+    assert upload(client, hr, time_limit_minutes=minutes).status_code == 422
+    assert client.get("/api/tests", headers=hr).json() == []
 
 
 # --- the clock ----------------------------------------------------------------------------------------------------

@@ -12,7 +12,7 @@ A **test** shared as a public link (`/forms/<link>`, `form_mode` off) is an exam
 
 ## Time limit
 
-`tests.time_limit_minutes` (1 to 480, empty = none), set under **Për linkun publik**, on the page that creates a test and in its editor. The clock starts at the attempt's start and is the server's: the page counts down from the seconds left the server reports, so a wrong clock on the candidate's device neither shortens nor stretches it.
+`tests.time_limit_minutes` (1 to 480, empty = none), set under **Për linkun publik**, on the page that creates a test (it applies to a test typed in by hand and to one made from an uploaded document) and in its editor. The clock starts at the attempt's start and is the server's: the page counts down from the seconds left the server reports, so a wrong clock on the candidate's device neither shortens nor stretches it.
 
 - At zero the page sends what has been answered so far, complete or not.
 - After the limit the server **does not hand out the questions again** (400 "Time is up"); the host sees the person under **Kanë nisur, pa dorëzuar** with "koha ka mbaruar".
@@ -53,7 +53,7 @@ It is the call flow's mechanism (`app/verification.py`, [candidate-checks.md](ca
 | Stored | `exam_email_codes`: the address and only an HMAC of the code (keyed with `JWT_SECRET`, bound to that row) |
 | Audited | `public_test.code_sent`, `code_failed`, `code_locked`, `code_verified`, `code_refused` (an address off the invited list), with the IP; never the address or the code |
 
-**Invited list (optional).** Under the email code option the host can paste the addresses that may take the exam (`tests.invited_emails`, one per line or separated by commas; up to 500; stored lower case, repeats dropped). Empty means anyone with the link, as before. With a list, asking for a code (and confirming one) is refused with 403 for any other address: nothing is mailed to it and no code row is written, and `public_test.code_refused` is audited without the address. This closes the throwaway-mailbox gap: only mailboxes the host named can start the exam. Rules worth knowing:
+**Invited list (optional).** Under the email code option the host can paste the addresses that may take the exam (`tests.invited_emails`, one per line or separated by commas; up to 500; stored lower case, repeats dropped). Empty means anyone with the link, as before. With a list, asking for a code (and confirming one) is refused with 403 for any other address: nothing is mailed to it and no code row is written, and `public_test.code_refused` is audited without the address. This closes the throwaway-mailbox gap: only mailboxes the host named can start the exam. It is offered on the create page for a test made from an uploaded document as well (`invited_emails` is a form field of `POST /api/tests/generate-from-file`). Rules worth knowing:
 
 - The list needs the email code. Saving a list on a test that does not check email, or on a plain form, is refused (422) rather than quietly ignored, and so is switching the code off while a list stands, because that would open the exam without the host noticing.
 - It is the host's: only the test's owner gets it back (`GET /api/tests/{id}`); the public link, the test list and every candidate response leave it out, so nobody learns who else was invited.

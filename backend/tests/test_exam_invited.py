@@ -117,3 +117,18 @@ def test_a_code_asked_for_before_the_list_existed_stops_working_once_the_address
         json={"title": "Python basics", "description": None, "form_mode": False, "is_public": True, "verify_candidate_email": True, "invited_emails": ["ardi@example.com"], "questions": questions},
     )
     assert confirm(client, created, "stranger@example.com", code).status_code == 403
+
+
+def test_a_test_made_from_a_document_takes_the_invited_list_too(client, hr, codes):
+    document = "\n".join(f"{n}. Question {n}?\nA. One\nB. Two\nC. Three\nD. Four\n" for n in range(1, 4)) + "\nAnswer Key:\n1. B 2. A 3. C\n"
+
+    def upload(**fields):
+        return client.post("/api/tests/generate-from-file", headers=hr, files={"file": ("quiz.txt", document.encode(), "text/plain")}, data={"question_count": "3", **fields})
+
+    created = upload(verify_candidate_email="true", invited_emails=INVITED)
+    assert created.status_code == 201
+    assert client.get(f"/api/tests/{created.json()['id']}", headers=hr).json()["invited_emails"] == ["ardi@example.com", "bora@example.com"]
+    assert ask(client, created.json(), "stranger@example.com").status_code == 403
+
+    assert upload(invited_emails=INVITED).status_code == 422  # without the email code the list would do nothing
+    assert upload(verify_candidate_email="true", invited_emails="not-an-address").status_code == 422

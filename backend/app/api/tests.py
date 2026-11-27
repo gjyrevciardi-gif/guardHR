@@ -2,6 +2,7 @@ import uuid
 from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, UploadFile
+from pydantic import TypeAdapter, ValidationError
 from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, selectinload
@@ -22,6 +23,7 @@ from ..schemas import (
     ExamEventCreate,
     ExamStart,
     ExamStarted,
+    InvitedEmails,
     PublicTestSubmit,
     TestCreate,
     TestDetailOut,
@@ -72,12 +74,16 @@ def validate_questions(payload: TestCreate | TestUpdate) -> None:
             raise HTTPException(status_code=422, detail=f"Correct answer is invalid for question {index + 1}")
 
 
+def require_email_code_for_invited(invited: list[str], email_code: bool) -> None:
+    if invited and not email_code:
+        # Saved quietly it would do nothing, and the host would think the exam was closed to everyone else.
+        raise HTTPException(status_code=422, detail="The invited list only works for an exam that checks the email with a code")
+
+
 def exam_settings(payload: TestCreate | TestUpdate) -> dict:
     """The time limit, shuffle and email code only mean something for a public exam; a plain form always saves none of them."""
     exam = not payload.form_mode
-    if payload.invited_emails and not (exam and payload.verify_candidate_email):
-        # Saved quietly it would do nothing, and the host would think the exam was closed to everyone else.
-        raise HTTPException(status_code=422, detail="The invited list only works for an exam that checks the email with a code")
+    require_email_code_for_invited(payload.invited_emails, exam and payload.verify_candidate_email)
     return {
         "time_limit_minutes": payload.time_limit_minutes if exam else None,
         "shuffle": payload.shuffle if exam else False,
@@ -243,9 +249,18 @@ async def generate_test_from_file(
     request: Request,
     file: UploadFile = File(...),
     question_count: int = Form(10),
+    time_limit_minutes: int | None = Form(None, ge=1, le=480),
+    shuffle: bool = Form(False),
+    verify_candidate_email: bool = Form(False),
+    invited_emails: list[str] = Form([]),
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
+    try:
+        invited = TypeAdapter(InvitedEmails).validate_python(invited_emails)
+    except ValidationError as exc:
+        raise HTTPException(status_code=422, detail="The invited list has an address that is not an email") from exc
+    require_email_code_for_invited(invited, verify_candidate_email)
     if question_count < 2 or question_count > 50:
         raise HTTPException(status_code=422, detail="Question count must be between 2 and 50")
     content = await file.read(8_000_001)
@@ -264,6 +279,10 @@ async def generate_test_from_file(
         description=f"Generated automatically from {file.filename}. Review questions before using in a live call.",
         form_mode=False,
         is_public=True,
+        time_limit_minutes=time_limit_minutes,
+        shuffle=shuffle,
+        verify_candidate_email=verify_candidate_email,
+        invited_emails=invited,
     )
     db.add(test)
     db.flush()

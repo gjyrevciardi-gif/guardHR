@@ -79,6 +79,13 @@ export default function NewTestPage() {
     }));
   }
 
+  function invitedAddresses() {
+    const list = verifyEmail ? parseInvited(invited) : [];
+    const badAddress = firstBadAddress(list);
+    if (badAddress) throw new Error(`“${badAddress}” nuk duket si adresë email. Kontrollo listën e të ftuarve.`);
+    return list;
+  }
+
   async function generateFromFile(file: File | null) {
     if (!file) return;
     setUploading(true);
@@ -87,6 +94,10 @@ export default function NewTestPage() {
       const formData = new FormData();
       formData.append("file", file);
       formData.append("question_count", String(questionCount));
+      if (timeLimit.trim()) formData.append("time_limit_minutes", timeLimit.trim());
+      formData.append("shuffle", String(shuffle));
+      formData.append("verify_candidate_email", String(verifyEmail));
+      invitedAddresses().forEach((address) => formData.append("invited_emails", address));
       setCreated(await api<Test>("/tests/generate-from-file", { method: "POST", body: formData }));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Testi nuk u krijua nga dokumenti");
@@ -100,9 +111,7 @@ export default function NewTestPage() {
     setLoading(true);
     setError("");
     try {
-      const invitedList = !formMode && verifyEmail ? parseInvited(invited) : [];
-      const badAddress = firstBadAddress(invitedList);
-      if (badAddress) throw new Error(`“${badAddress}” nuk duket si adresë email. Kontrollo listën e të ftuarve.`);
+      const invitedList = formMode ? [] : invitedAddresses();
       const payload = {
         title,
         description: description.trim() || null,
@@ -177,6 +186,12 @@ export default function NewTestPage() {
             </section>
 
             {!formMode && (
+              <div className="mt-6">
+                <ExamOptions timeLimit={timeLimit} onTimeLimit={setTimeLimit} shuffle={shuffle} onShuffle={setShuffle} verifyEmail={verifyEmail} onVerifyEmail={setVerifyEmail} invited={invited} onInvited={setInvited} />
+              </div>
+            )}
+
+            {!formMode && (
               <section className="card mt-6 p-7">
                 <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
                   <div className="flex items-center gap-3">
@@ -221,8 +236,6 @@ export default function NewTestPage() {
                 <label htmlFor="test-description" className="label">Përshkrimi ose udhëzimet</label>
                 <textarea id="test-description" className="input min-h-24" value={description} onChange={(event) => setDescription(event.target.value)} />
               </div>
-
-              {!formMode && <ExamOptions timeLimit={timeLimit} onTimeLimit={setTimeLimit} shuffle={shuffle} onShuffle={setShuffle} verifyEmail={verifyEmail} onVerifyEmail={setVerifyEmail} invited={invited} onInvited={setInvited} />}
 
               <div className="space-y-4">
                 {questions.map((question, questionIndex) => (
