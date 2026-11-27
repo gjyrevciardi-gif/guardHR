@@ -4,17 +4,26 @@ import { FormEvent, useEffect, useState } from "react";
 import { Loader2, MailCheck } from "lucide-react";
 import { api } from "@/lib/api";
 
-type Props = {
-  token: string;
-  /** Masked address the code goes to, e.g. a**@example.com. */
+type Props<T> = {
+  /** Where the code is requested and where it is confirmed (both POST), with whatever each needs besides the code. */
+  sendPath: string;
+  sendBody?: object;
+  confirmPath: string;
+  confirmBody?: object;
+  /** Address the code goes to, as shown: masked for a call (a**@example.com), as typed for a public test. */
   emailHint: string | null;
-  onVerified: () => void;
+  /** Who asks for the code, in the sentence that explains it. */
+  requester?: string;
+  /** A code was emailed: the caller can stop the address from changing under it. */
+  onSent?: () => void;
+  /** The code was right; `result` is what the confirm endpoint answered. */
+  onVerified: (result: T) => void;
 };
 
-type Sent = { email_hint: string; expires_in_seconds: number; resend_after_seconds: number };
+type Sent = { email_hint?: string; expires_in_seconds: number; resend_after_seconds: number };
 
-/** Step shown in the candidate's pre-join panel when the host asked for an email code. */
-export function EmailVerification({ token, emailHint, onVerified }: Props) {
+/** The email-code step: in a candidate's pre-join panel when the host asked for it, and before a public test's questions. */
+export function EmailVerification<T = unknown>({ sendPath, sendBody, confirmPath, confirmBody, emailHint, requester = "Host-i", onSent, onVerified }: Props<T>) {
   const [sent, setSent] = useState<Sent | null>(null);
   const [code, setCode] = useState("");
   const [busy, setBusy] = useState<"send" | "confirm" | null>(null);
@@ -31,10 +40,11 @@ export function EmailVerification({ token, emailHint, onVerified }: Props) {
     setBusy("send");
     setError("");
     try {
-      const result = await api<Sent>(`/public/sessions/${token}/verification`, { method: "POST" }, false);
+      const result = await api<Sent>(sendPath, { method: "POST", ...(sendBody ? { body: JSON.stringify(sendBody) } : {}) }, false);
       setSent(result);
       setCooldown(result.resend_after_seconds);
       setCode("");
+      onSent?.();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Kodi nuk u dërgua.");
     } finally {
@@ -47,8 +57,7 @@ export function EmailVerification({ token, emailHint, onVerified }: Props) {
     setBusy("confirm");
     setError("");
     try {
-      await api(`/public/sessions/${token}/verification/confirm`, { method: "POST", body: JSON.stringify({ code }) }, false);
-      onVerified();
+      onVerified(await api<T>(confirmPath, { method: "POST", body: JSON.stringify({ ...confirmBody, code }) }, false));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Kodi nuk u verifikua.");
     } finally {
@@ -64,7 +73,7 @@ export function EmailVerification({ token, emailHint, onVerified }: Props) {
         <MailCheck size={17} className="text-teal" aria-hidden="true" /> Verifiko email-in
       </h2>
       <p className="mt-1 text-sm leading-6 text-slate-600">
-        Host-i kërkon një kod njëpërdorimsh. Do ta dërgojmë te <strong className="font-semibold text-navy">{target}</strong>. Kodi vlen 10 minuta.
+        {requester} kërkon një kod njëpërdorimsh. Do ta dërgojmë te <strong className="font-semibold text-navy">{target}</strong>. Kodi vlen 10 minuta.
       </p>
 
       {!sent ? (

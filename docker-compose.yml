@@ -26,6 +26,7 @@ services:
       APP_ENV: ${APP_ENV:-development}
       DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg://interviewguard:interviewguard_dev@db:5432/interviewguard}
       JWT_SECRET: ${JWT_SECRET:-development-only-secret-change-me-now}
+      SECRETS_ENCRYPTION_KEY: ${SECRETS_ENCRYPTION_KEY:-}
       JWT_EXPIRE_MINUTES: ${JWT_EXPIRE_MINUTES:-480}
       CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3100}
       INITIAL_ADMIN_EMAIL: ${INITIAL_ADMIN_EMAIL:-hr@example.com}
@@ -70,6 +71,10 @@ services:
         NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8100/api}
     environment:
       NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8100/api}
+      # Shown on /privacy (docs/deployment.md, "Privacy page"); read at request time, no rebuild needed.
+      OPERATOR_NAME: ${OPERATOR_NAME:-}
+      OPERATOR_CONTACT: ${OPERATOR_CONTACT:-}
+      OPERATOR_LEGAL_BASIS: ${OPERATOR_LEGAL_BASIS:-}
     ports:
       - "${FRONTEND_PORT:-3100}:3000"
     depends_on:

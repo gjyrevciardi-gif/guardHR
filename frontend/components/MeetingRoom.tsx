@@ -101,6 +101,10 @@ export function MeetingRoom({ token, role, session, onFinish, sessionId, backHre
   const localStreamRef = useRef<MediaStream | null>(null);
   const screenStreamRef = useRef<MediaStream | null>(null);
   const nextRemoteVideoTarget = useRef<RemoteTarget>("camera");
+  // Offer collisions ("glare"): both sides may start negotiating at once. The host is impolite (ignores a colliding offer),
+  // the candidate is polite (drops its own offer and answers the host's), so exactly one negotiation wins. See onmessage.
+  const makingOffer = useRef(false);
+  const ignoreOffer = useRef(false);
 
   const [localStream, setLocalStream] = useState<MediaStream | null>(null);
   const [screenStream, setScreenStream] = useState<MediaStream | null>(null);
@@ -126,7 +130,8 @@ export function MeetingRoom({ token, role, session, onFinish, sessionId, backHre
   const localSpeaking = useSpeaking(localStream, micEnabled);
   const remoteSpeaking = useSpeaking(remoteAudioStream, true);
   const mediaBlockedByBrowser = typeof window !== "undefined" && !window.isSecureContext;
-  const mediaBlockedMessage = "Kamera, mikrofoni dhe screen share nuk aktivizohen ne HTTP me IP lokale. Monitoring per nderrim faqeje punon prape. Per kamera nga dy pajisje duhet HTTPS/tunnel, ose hapeni ne localhost ne te njejtin PC.";
+  const cameraLostMessage = "Kamera ose mikrofoni u ndal: ose e mori një aplikacion tjetër, ose u shkëput. Mbyll aplikacionet që e përdorin (Teams, Zoom) dhe rifresko faqen.";
+  const mediaBlockedMessage ="Kamera, mikrofoni dhe screen share nuk aktivizohen ne HTTP me IP lokale. Monitoring per nderrim faqeje punon prape. Per kamera nga dy pajisje duhet HTTPS/tunnel, ose hapeni ne localhost ne te njejtin PC.";
 
   const pushRoomAlert = useCallback((alert: { id: string; title: string; message: string }) => {
     setRoomAlerts((current) => [alert, ...current.filter((item) => item.id !== alert.id)].slice(0, 4));
@@ -169,13 +174,23 @@ export function MeetingRoom({ token, role, session, onFinish, sessionId, backHre
     if (socketRef.current?.readyState === WebSocket.OPEN) socketRef.current.send(JSON.stringify(payload));
   }, []);
 
+  // Sends an offer. Not while an offer from the other side is being answered (setLocalDescription() would then produce an
+  // answer): that exchange finishes on its own and the browser raises negotiationneeded again if more has to be offered.
+  // From have-local-offer it offers again on purpose: an earlier offer sent to an empty room was lost.
   const createAndSendOffer = useCallback(async () => {
     const peer = peerRef.current;
-    if (!peer || socketRef.current?.readyState !== WebSocket.OPEN) return;
-    const offer = await peer.createOffer();
-    await peer.setLocalDescription(offer);
-    send({ type: "offer", description: offer });
-  }, [send]);
+    if (!peer || socketRef.current?.readyState !== WebSocket.OPEN || peer.signalingState === "have-remote-offer") return;
+    // The host makes the first offer, always: it offers as soon as the two meet. A candidate offer at the same moment collides
+    // with it, and after the rollback Chrome can end up with a connection that never gathers a single ICE candidate.
+    if (role === "candidate" && !peer.remoteDescription) return;
+    try {
+      makingOffer.current = true;
+      await peer.setLocalDescription(); // the browser picks the right kind (an offer here)
+      if (peer.localDescription) send({ type: peer.localDescription.type, description: peer.localDescription });
+    } finally {
+      makingOffer.current = false;
+    }
+  }, [role, send]);
 
   const addTracksToPeer = useCallback((peer: RTCPeerConnection, stream: MediaStream, kind: "camera" | "screen") => {
     stream.getTracks().forEach((track) => {
@@ -213,6 +228,9 @@ export function MeetingRoom({ token, role, session, onFinish, sessionId, backHre
       if (event.candidate) send({ type: "ice", candidate: event.candidate });
     };
 
+    // Adding or removing a track (camera, screen) is what asks for a new negotiation; nothing else offers on its own.
+    peer.onnegotiationneeded = () => void createAndSendOffer().catch(() => undefined);
+
     peer.onconnectionstatechange = () => {
       if (["disconnected", "failed", "closed"].includes(peer.connectionState)) {
         setRemoteCameraStream(null);
@@ -223,7 +241,23 @@ export function MeetingRoom({ token, role, session, onFinish, sessionId, backHre
 
     peerRef.current = peer;
     return peer;
-  }, [addTracksToPeer, remoteCameraStream, send]);
+  }, [addTracksToPeer, createAndSendOffer, remoteCameraStream, send]);
+
+  // The other side is a new browser page every time it (re)joins, with its own ICE and DTLS identity: the old connection can
+  // never be renegotiated with it, so drop it and let the next message build a fresh one.
+  const dropPeer = useCallback(() => {
+    const peer = peerRef.current;
+    if (!peer) return;
+    peer.onnegotiationneeded = peer.onicecandidate = peer.ontrack = peer.onconnectionstatechange = null;
+    peer.close();
+    peerRef.current = null;
+    makingOffer.current = false;
+    ignoreOffer.current = false;
+    nextRemoteVideoTarget.current = "camera";
+    setRemoteCameraStream(null);
+    setRemoteAudioStream(null);
+    setRemoteScreenStream(null);
+  }, []);
 
   const connectSignaling = useCallback(() => {
     const socket = new WebSocket(`${wsUrl(`/ws/rooms/${token}`)}?role=${role}`);
@@ -236,6 +270,7 @@ export function MeetingRoom({ token, role, session, onFinish, sessionId, backHre
 
     socket.onmessage = async (event) => {
       const message = JSON.parse(event.data);
+      if (message.type === "peer-joined" || message.type === "peer-left") dropPeer();
       const peer = ensurePeer();
 
       if (message.type === "screen-started") nextRemoteVideoTarget.current = "screen";
@@ -261,15 +296,30 @@ export function MeetingRoom({ token, role, session, onFinish, sessionId, backHre
         await createAndSendOffer();
       }
 
-      if (message.type === "offer") {
-        await peer.setRemoteDescription(message.description);
-        const answer = await peer.createAnswer();
-        await peer.setLocalDescription(answer);
-        send({ type: "answer", description: answer });
+      if (message.type === "offer" || message.type === "answer") {
+        const description = message.description as RTCSessionDescriptionInit;
+        const collision = description.type === "offer" && (makingOffer.current || peer.signalingState !== "stable");
+        ignoreOffer.current = role === "hr" && collision; // the host wins a collision; the candidate rolls back and answers
+        if (!ignoreOffer.current) {
+          try {
+            await peer.setRemoteDescription(description);
+            if (description.type === "offer") {
+              await peer.setLocalDescription();
+              if (peer.localDescription) send({ type: "answer", description: peer.localDescription });
+            }
+          } catch {
+            // A stale answer or a superseded offer: the exchange that is still open (or the next negotiationneeded) settles it.
+          }
+        }
       }
 
-      if (message.type === "answer") await peer.setRemoteDescription(message.description);
-      if (message.type === "ice" && message.candidate) await peer.addIceCandidate(message.candidate);
+      if (message.type === "ice" && message.candidate) {
+        try {
+          await peer.addIceCandidate(message.candidate);
+        } catch (err) {
+          if (!ignoreOffer.current) throw err; // candidates for an offer we ignored are expected to fail
+        }
+      }
       if (message.type === "peer-left") {
         setPeerPresent(false);
         setRemoteCameraStream(null);
@@ -277,7 +327,7 @@ export function MeetingRoom({ token, role, session, onFinish, sessionId, backHre
         setRemoteScreenStream(null);
       }
     };
-  }, [createAndSendOffer, ensurePeer, pushRoomAlert, role, send, token]);
+  }, [createAndSendOffer, dropPeer, ensurePeer, pushRoomAlert, role, send, token]);
 
   async function start() {
     setError("");
@@ -332,14 +382,17 @@ export function MeetingRoom({ token, role, session, onFinish, sessionId, backHre
       }
 
       localStreamRef.current = camera;
+      // A device another app took or that was unplugged ends its track by itself (stop() from here does not fire this), and a
+      // track can even arrive already ended. Without a word the candidate just sits in a call nobody can see.
+      camera.getTracks().forEach((track) => {
+        if (track.readyState === "ended") setError(cameraLostMessage);
+        else track.addEventListener("ended", () => setError(cameraLostMessage));
+      });
       setLocalStream(camera);
       setCameraEnabled(camera.getVideoTracks().some((track) => track.enabled));
       setMicEnabled(camera.getAudioTracks().some((track) => track.enabled));
       await attachStream(localVideoRef.current, camera);
-      if (peerRef.current) {
-        addTracksToPeer(peerRef.current, camera, "camera");
-        await createAndSendOffer();
-      }
+      if (peerRef.current) addTracksToPeer(peerRef.current, camera, "camera"); // negotiationneeded sends the offer
     } catch (err) {
       camera?.getTracks().forEach((track) => track.stop());
       const message = err instanceof Error ? err.message : "Leja për kamerën ose mikrofonin u refuzua";
@@ -361,8 +414,7 @@ export function MeetingRoom({ token, role, session, onFinish, sessionId, backHre
       });
 
       const peer = ensurePeer();
-      addTracksToPeer(peer, stream, "screen");
-      await createAndSendOffer();
+      addTracksToPeer(peer, stream, "screen"); // negotiationneeded sends the offer
     } catch (err) {
       const message = err instanceof Error ? err.message : "";
       setError(message.includes("Permission denied") ? "Screen sharing u refuzua nga browser-i. Provo prape dhe zgjidh dritaren/tab-in qe do ta ndash." : "Screen sharing nuk u aktivizua.");
@@ -381,8 +433,7 @@ export function MeetingRoom({ token, role, session, onFinish, sessionId, backHre
     });
     screenStreamRef.current = null;
     setScreenStream(null);
-    send({ type: "screen-stopped" });
-    await createAndSendOffer();
+    send({ type: "screen-stopped" }); // removeTrack above raised negotiationneeded
   }
 
   function toggleCamera() {

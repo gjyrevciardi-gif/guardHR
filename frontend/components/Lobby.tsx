@@ -95,7 +95,7 @@ export function Lobby(props: Props) {
           <div className="space-y-6">
             {!verified && (
               <section className="card p-6 sm:p-8 animate-rise" aria-label="Verifikimi i email-it">
-                <EmailVerification token={props.token} emailHint={session.candidate_email_hint} onVerified={props.onVerified} />
+                <EmailVerification sendPath={`/public/sessions/${props.token}/verification`} confirmPath={`/public/sessions/${props.token}/verification/confirm`} emailHint={session.candidate_email_hint} onVerified={() => props.onVerified()} />
               </section>
             )}
 
