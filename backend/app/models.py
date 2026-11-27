@@ -6,6 +6,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .database import Base
 from .enums import EventType, QuestionType, ReviewOutcome, ReviewStatus, SessionStatus, UserRole, check_in
+from .secrets_box import EncryptedString
 
 
 def uuid4_str() -> str:
@@ -34,8 +35,9 @@ class User(Base):
     # Only the keyed hash of the emailed reset token is stored (app/security.py keyed_hash).
     password_reset_hash: Mapped[str | None] = mapped_column(String(64), unique=True)
     password_reset_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-    # Two-step verification (app/mfa.py). mfa_secret is set at setup and only counts once mfa_enabled is true.
-    mfa_secret: Mapped[str | None] = mapped_column(String(64))
+    # Two-step verification (app/mfa.py). mfa_secret is set at setup and only counts once mfa_enabled is true; it is
+    # encrypted at rest (app/secrets_box.py), so code here always sees the plain value.
+    mfa_secret: Mapped[str | None] = mapped_column(EncryptedString)
     mfa_enabled: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
     mfa_last_step: Mapped[int | None] = mapped_column(Integer)
     mfa_recovery_hashes: Mapped[list[str] | None] = mapped_column(JSON)
@@ -115,6 +117,8 @@ class Test(Base):
     shuffle: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
     # Public exam link only: the candidate must enter a code emailed to the address they give before the questions appear.
     verify_candidate_email: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
+    # With the email code on: the lower-case addresses allowed to ask for a code. Empty means anyone. Host-only: never in a public response.
+    invited_emails: Mapped[list[str]] = mapped_column(JSON, default=list, server_default="[]")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     questions: Mapped[list["TestQuestion"]] = relationship(cascade="all, delete-orphan", order_by="TestQuestion.position")
 
@@ -175,6 +179,10 @@ class ExamAttempt(Base):
     started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     submitted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     email_verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # What the candidate has answered so far, as they saw it ({question id: option position shown, or text}), saved while
+    # they work and emptied on submit. Handed back only to someone who proved the mailbox; the host sees how many, not what.
+    draft_answers: Mapped[dict] = mapped_column(JSON, default=dict, server_default="{}")
+    draft_saved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
 class ExamEmailCode(Base):

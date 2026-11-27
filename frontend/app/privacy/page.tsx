@@ -4,9 +4,20 @@ import { ShieldCheck } from "lucide-react";
 import { Wordmark } from "@/components/Wordmark";
 
 export const metadata: Metadata = { title: "Politika e privatësisë", robots: { index: false } };
+// The operator block below is read from the environment when the page is requested, not when the image is built.
+export const dynamic = "force-dynamic";
+
+// Who runs this deployment (docs/deployment.md, "Privacy page"). Shown only when a name and a contact are set; the legal
+// basis is the operator's own wording and is never invented here.
+function operatorDetails() {
+  const { OPERATOR_NAME, OPERATOR_CONTACT, OPERATOR_LEGAL_BASIS } = process.env;
+  const name = OPERATOR_NAME?.trim();
+  const contact = OPERATOR_CONTACT?.trim();
+  return name && contact ? { name, contact, legalBasis: OPERATOR_LEGAL_BASIS?.trim() } : null;
+}
 
 // Describes what the software does. The operator running this deployment is responsible for the data and
-// should add its legal entity and contact below (see docs/deployment.md, "Privacy page").
+// names itself through OPERATOR_NAME / OPERATOR_CONTACT / OPERATOR_LEGAL_BASIS (see docs/deployment.md, "Privacy page").
 const sections: Array<{ title: string; body: string[] }> = [
   {
     title: "Kush është përgjegjës",
@@ -16,7 +27,7 @@ const sections: Array<{ title: string; body: string[] }> = [
     title: "Çfarë mblidhet",
     body: [
       "Sinjale aktiviteti nga browser-i yt gjatë call-it: dalja nga faqja ose tab-i, humbja e fokusit, fullscreen, ndryshimi i madhësisë së dritares, më shumë se një monitor, ndërprerja e lidhjes, copy/paste (vetëm numri i rreshtave dhe i shkronjave, dhe nëse duket si kod; jo teksti), fytyra që nuk shihet, disa persona, telefon i zbuluar, kamera ose ndarja e ekranit e ndalur.",
-      "Në një test me link publik (pa call): dalja nga faqja ose skeda dhe sa zgjat, ngjitja e tekstit (vetëm sa i gjatë ishte, jo teksti), përpjekjet për të kopjuar ose printuar pyetjet dhe tasti Print Screen. Para se të nisësh e lexon këtë dhe e pranon. Nuk përdoren kamera, mikrofoni ose ekrani. Emri dhe email-i yt shfaqen si filigram mbi pyetjet. Që nga çasti që e nis testin ruhen emri, email-i, adresa IP dhe ora e nisjes, edhe nëse nuk e dorëzon; kur testi ka kohë të kufizuar, organizatori sheh edhe sa zgjati. Përgjigjet që shkruan ruhen përkohësisht edhe në skedën e browser-it tënd, që të mos humbasin nëse rifreskon faqen; nuk dërgohen askund para dorëzimit dhe fshihen kur e dorëzon ose e mbyll skedën. Këto fshihen bashkë me përgjigjet pas afatit të organizatorit.",
+      "Në një test me link publik (pa call): dalja nga faqja ose skeda dhe sa zgjat, ngjitja e tekstit (vetëm sa i gjatë ishte, jo teksti), përpjekjet për të kopjuar ose printuar pyetjet dhe tasti Print Screen. Para se të nisësh e lexon këtë dhe e pranon. Nuk përdoren kamera, mikrofoni ose ekrani. Emri dhe email-i yt shfaqen si filigram mbi pyetjet. Që nga çasti që e nis testin ruhen emri, email-i, adresa IP dhe ora e nisjes, edhe nëse nuk e dorëzon; kur testi ka kohë të kufizuar, organizatori sheh edhe sa zgjati. Përgjigjet që shkruan ruhen gjatë testit në skedën e browser-it tënd dhe te serveri, që të mos humbasin nëse rifreskon faqen ose ndërron pajisje, edhe nëse nuk e dorëzon; organizatori sheh vetëm sa pyetje ke përgjigjur, jo përgjigjet, derisa t'i dorëzosh. Kopja te serveri fshihet kur e dorëzon ose me afatin e organizatorit; ajo në skedë fshihet kur e dorëzon ose e mbyll skedën. Këto fshihen bashkë me përgjigjet pas afatit të organizatorit.",
       "Çdo 5 sekonda një pamje e vogël e kamerës dërgohet te serveri për të numëruar persona dhe për të gjetur telefon. Pamja analizohet në kujtesë dhe hidhet; nuk ruhet.",
       "Koha dhe adresa IP e pranimit, përgjigjet e testit (nëse ka), emri dhe email-i yt si i ftuar.",
       "Video, zëri dhe ekrani live shkojnë drejtpërdrejt te organizatori. Platforma nuk i regjistron.",
@@ -46,6 +57,7 @@ const sections: Array<{ title: string; body: string[] }> = [
 ];
 
 export default function PrivacyPage() {
+  const operator = operatorDetails();
   return (
     <main id="main" className="min-h-screen bg-canvas px-5 py-10">
       <div className="mx-auto max-w-3xl">
@@ -56,6 +68,14 @@ export default function PrivacyPage() {
         <article className="card p-7 sm:p-9">
           <h1 className="text-3xl font-bold">Politika e privatësisë</h1>
           <p className="mt-3 text-slate-600">Çfarë bën ky sistem me të dhënat e tua gjatë një call-i ose testi.</p>
+          {operator && (
+            <section id="operator" className="mt-8">
+              <h2 className="text-lg font-bold">Operatori i këtij sistemi</h2>
+              <p className="mt-2 text-sm leading-6 text-slate-700">{operator.name}</p>
+              <p className="mt-2 text-sm leading-6 text-slate-700">Kontakti për të drejtat e tua (qasje, korrigjim, fshirje): {operator.contact}</p>
+              {operator.legalBasis && <p className="mt-2 text-sm leading-6 text-slate-700">Baza ligjore: {operator.legalBasis}</p>}
+            </section>
+          )}
           {sections.map((section) => (
             <section key={section.title} className="mt-8">
               <h2 className="text-lg font-bold">{section.title}</h2>

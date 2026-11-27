@@ -4,8 +4,8 @@ import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { CheckCircle2, ClipboardList, Loader2 } from "lucide-react";
-import { api } from "@/lib/api";
-import { clearDraft, loadDraft, saveDraft } from "@/lib/examDraft";
+import { ApiError, api } from "@/lib/api";
+import { clearDraft, fitDraft, loadDraft, saveDraft } from "@/lib/examDraft";
 import { clock } from "@/lib/format";
 import { ExamStarted, Test, TestAnswer, TestQuestion, TestSubmission } from "@/lib/types";
 import { useExamGuard } from "@/lib/useExamGuard";
@@ -35,6 +35,12 @@ export default function PublicFormPage() {
   const [deadline, setDeadline] = useState<number | null>(null);
   const [remaining, setRemaining] = useState<number | null>(null);
   const autoSubmitted = useRef(false);
+  // Saving the answers on the server too (see the effect below).
+  const answersRef = useRef<Record<string, TestAnswer>>({});
+  const lastSaved = useRef("{}");
+  const saveTimer = useRef<number | null>(null);
+  const [saveState, setSaveState] = useState<"idle" | "saved" | "failed">("idle");
+  const [saveRound, setSaveRound] = useState(0);
   const timeUp = remaining === 0;
   // A test (not a plain form) is an exam: it needs to know who is sitting it, tells them what is recorded, and only
   // then does the server send the questions (the link alone does not carry them).
@@ -60,7 +66,12 @@ export default function PublicFormPage() {
   function begin(result: ExamStarted) {
     setAttempt(result.attempt);
     setExamQuestions(result.questions);
-    setAnswers(loadDraft(result.attempt, result.questions)); // picking an attempt up again brings back what this tab had saved
+    // Picking an attempt up again brings back what this tab saved; a tab that has nothing (another device, a new tab)
+    // takes what the server has, which it only hands to someone who proved the mailbox.
+    const local = loadDraft(result.attempt, result.questions);
+    const onServer = fitDraft(result.draft, result.questions);
+    lastSaved.current = JSON.stringify(onServer);
+    setAnswers(Object.keys(local).length > 0 ? local : onServer);
     setAttemptName(result.participant_name);
     // The server's count of seconds left, so a wrong clock on this device cannot shorten or stretch the time.
     setDeadline(result.seconds_left == null ? null : Date.now() + result.seconds_left * 1000);
@@ -114,6 +125,36 @@ export default function PublicFormPage() {
     if (submission) clearDraft(attempt);
     else saveDraft(attempt, answers);
   }, [exam, attempt, answers, submission]);
+
+  // Also keep them on the server, at most every few seconds while the candidate works, so a crash or another device loses
+  // nothing and the organiser can see how far they are. A failed save is not fatal: this tab still has the answers.
+  useEffect(() => {
+    answersRef.current = answers;
+    if (!exam || !attempt) return;
+    if (submission) {
+      if (saveTimer.current !== null) window.clearTimeout(saveTimer.current);
+      saveTimer.current = null;
+      return;
+    }
+    if (JSON.stringify(answers) === lastSaved.current || saveTimer.current !== null) return;
+    saveTimer.current = window.setTimeout(async () => {
+      saveTimer.current = null;
+      const sent = JSON.stringify(answersRef.current);
+      try {
+        await api(`/public/tests/${token}/attempts/${attempt}/draft`, { method: "PUT", body: JSON.stringify({ answers: answersRef.current }) }, false);
+        lastSaved.current = sent;
+        setSaveState("saved");
+      } catch (err) {
+        setSaveState("failed");
+        // A refusal (the attempt was released, or already submitted elsewhere) will not change on a retry; a network error or a busy server may.
+        if (err instanceof ApiError && err.status < 500 && err.status !== 429) lastSaved.current = sent;
+      }
+      setSaveRound((round) => round + 1); // whatever was typed while this was in flight goes next, and a failed save is retried
+    }, 4000);
+  }, [exam, attempt, answers, submission, token, saveRound]);
+  useEffect(() => () => {
+    if (saveTimer.current !== null) window.clearTimeout(saveTimer.current);
+  }, []);
 
   // The countdown. Only an exam with a time limit has a deadline.
   useEffect(() => {
@@ -185,7 +226,7 @@ export default function PublicFormPage() {
                 <li>nuk të lejon të kopjosh ose të printosh pyetjet, dhe shfaq emrin tënd si filigram mbi to;</li>
                 {test.time_limit_minutes && <li>ka kohë të kufizuar prej {test.time_limit_minutes} minutash nga çasti që e nis: koha vazhdon edhe nëse e mbyll ose e rifreskon faqen, dhe kur mbaron dërgohet ajo që ke përgjigjur;</li>}
                 {verifies && <li>të dërgon një kod 6-shifror te email-i që jep, për të provuar se e lexon; kodi vlen 10 minuta dhe nuk ruhet i hapur. Nëse e rifreskon faqen, kërkon një kod të ri për të vazhduar;</li>}
-                <li>i ruan përgjigjet që shkruan vetëm në këtë skedë të browser-it, që të mos i humbasësh nëse rifreskon faqen; mbyllja e skedës i fshin;</li>
+                <li>i ruan përgjigjet që shkruan, në këtë skedë të browser-it dhe te serveri, që të mos i humbasësh nëse rifreskon faqen ose ndërron pajisje; organizatori sheh vetëm sa pyetje ke përgjigjur, jo përgjigjet, derisa t&apos;i dorëzosh;</li>
                 <li>nuk përdor kamerën, mikrofonin ose ekranin tënd.</li>
               </ul>
               <p className="mt-3 text-sm text-slate-700">Këto janë sinjale për organizatorin, jo një vendim: ai i shikon së bashku me përgjigjet. Fshihen bashkë me përgjigjet pas afatit që ka caktuar. <Link href="/privacy" className="font-semibold underline" target="_blank" rel="noreferrer">Më shumë te privatësia</Link>.</p>
@@ -248,6 +289,7 @@ export default function PublicFormPage() {
               </div>
             )}
             <p role="status" className="sr-only">{milestone}</p>
+            <p role="status" className="sr-only">{saveState === "failed" ? "Përgjigjet nuk u ruajtën te serveri; mbeten në këtë skedë." : ""}</p>
             <div className="flex items-start gap-3">
               <span className="rounded-xl bg-shell-200 p-3 text-teal"><ClipboardList aria-hidden="true" /></span>
               <div>
@@ -260,6 +302,7 @@ export default function PublicFormPage() {
             {exam ? (
               <p role="note" className="mt-6 rounded-xl border border-line bg-shell-100 p-3 text-sm text-slate-700">
                 Po përgjigjesh si <strong>{attemptName || participantName.trim()}</strong>. Dalja nga kjo faqe, ngjitja e tekstit dhe printimi regjistrohen për organizatorin.
+                {saveState !== "idle" && <span className="mt-1 block text-xs text-muted">{saveState === "saved" ? "Përgjigjet u ruajtën te serveri." : "Nuk u ruajtën te serveri; përgjigjet mbeten në këtë skedë."}</span>}
               </p>
             ) : (
               <div className="mt-8 grid gap-4 sm:grid-cols-2">

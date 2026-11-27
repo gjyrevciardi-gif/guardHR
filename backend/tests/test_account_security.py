@@ -12,10 +12,9 @@ from app.config import Settings
 from app.database import SessionLocal
 from app.email import build_password_reset
 from app.models import AuditLog, User
-from helpers import PASSWORD
+from helpers import PASSWORD, PRODUCTION
 
 NEW_PASSWORD = "Another-Pass-456!"
-PRODUCTION = {"app_env": "production", "jwt_secret": "x" * 40, "initial_admin_password": "Another-Strong-1!", "public_app_url": "https://hr.example.com"}
 
 
 @pytest.fixture

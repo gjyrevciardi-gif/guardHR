@@ -2,6 +2,7 @@ import json
 from functools import lru_cache
 from urllib.parse import urlparse
 
+from cryptography.fernet import Fernet
 from pydantic import field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -14,6 +15,9 @@ class Settings(BaseSettings):
     app_env: str = "development"
     database_url: str = "sqlite:///./nemoguard.db"
     jwt_secret: str = "development-only-secret-change-me-now"
+    # Fernet key(s) that encrypt secrets stored in the database (the TOTP secret). Comma-separated: the first encrypts,
+    # all decrypt (key rotation). Blank = stored as plain text, accepted in development only.
+    secrets_encryption_key: str = ""
     jwt_algorithm: str = "HS256"
     jwt_expire_minutes: int = 480
     session_cookie_name: str = "nemoguard_session"
@@ -90,6 +94,10 @@ class Settings(BaseSettings):
         return json.loads(self.ice_servers)
 
     @property
+    def encryption_key_list(self) -> list[str]:
+        return [item.strip() for item in self.secrets_encryption_key.split(",") if item.strip()]
+
+    @property
     def turn_url_list(self) -> list[str]:
         return [item.strip() for item in self.turn_urls.split(",") if item.strip()]
 
@@ -102,6 +110,11 @@ class Settings(BaseSettings):
         if not isinstance(servers, list) or not all(isinstance(item, dict) and "urls" in item for item in servers):
             raise ValueError('ICE_SERVERS must be a JSON list of objects like {"urls": "stun:host:3478"}')
 
+        for key in self.encryption_key_list:
+            try:
+                Fernet(key)
+            except ValueError as exc:
+                raise ValueError("SECRETS_ENCRYPTION_KEY must be Fernet key(s): 32 url-safe base64 bytes, comma-separated") from exc
         if bool(self.turn_url_list) != bool(self.turn_secret):
             raise ValueError("TURN_URLS and TURN_SECRET must be set together")
         if self.is_production:
@@ -110,6 +123,8 @@ class Settings(BaseSettings):
                 problems.append("TURN_SECRET must be a random value of at least 32 characters")
             if len(self.jwt_secret) < 32 or self.jwt_secret.startswith(PLACEHOLDER_SECRET_PREFIXES):
                 problems.append("JWT_SECRET must be a random value of at least 32 characters")
+            if not self.encryption_key_list:
+                problems.append("SECRETS_ENCRYPTION_KEY must be set (generate one with the command in .env.example)")
             if self.initial_admin_password == DEFAULT_ADMIN_PASSWORD:
                 problems.append("INITIAL_ADMIN_PASSWORD must not be the default")
             if not self.public_app_url.startswith("https://"):

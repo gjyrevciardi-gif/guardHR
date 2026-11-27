@@ -4,8 +4,8 @@ Works with any authenticator app (HMAC-SHA1, 30 s steps, 6 digits). A code is ac
 one step either side (clock drift) and never twice: the last accepted step is stored and anything at or before
 it is refused. Eight single-use recovery codes cover a lost phone; only their keyed hashes are stored.
 
-The TOTP secret has to be readable to check a code, so it sits in the users table as is. Someone who can read the
-database can therefore read it; see docs/deployment.md.
+The TOTP secret has to be readable to check a code, so it is stored encrypted with a key that is not in the database
+(app/secrets_box.py); this module only ever handles the plain value.
 """
 
 import base64

@@ -12,6 +12,7 @@ services:
       APP_ENV: production
       DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-interviewguard}:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-interviewguard}
       JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET to a random value of at least 32 characters}
+      SECRETS_ENCRYPTION_KEY: ${SECRETS_ENCRYPTION_KEY:?set SECRETS_ENCRYPTION_KEY, see .env.example}
       INITIAL_ADMIN_PASSWORD: ${INITIAL_ADMIN_PASSWORD:?set INITIAL_ADMIN_PASSWORD}
       PUBLIC_APP_URL: ${PUBLIC_APP_URL:?set PUBLIC_APP_URL, e.g. https://hr.example.com}
       CORS_ORIGINS: ${PUBLIC_APP_URL}
