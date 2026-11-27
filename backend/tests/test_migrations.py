@@ -4,12 +4,14 @@ from pathlib import Path
 
 import pytest
 from alembic.config import Config
+from cryptography.fernet import Fernet
 from sqlalchemy import create_engine, text
 from sqlalchemy.engine import make_url
 from sqlalchemy.exc import IntegrityError
 
 from alembic import command
 from app.database import engine
+from app.secrets_box import PREFIX, decrypt
 
 pytestmark = pytest.mark.skipif(engine.dialect.name != "postgresql", reason="migrations are PostgreSQL-only")
 
@@ -51,7 +53,7 @@ def test_fresh_database_reaches_head(scratch_engine):
     with scratch_engine.connect() as connection:
         tables = {row[0] for row in connection.execute(text("SELECT table_name FROM information_schema.tables WHERE table_schema = 'public'"))}
         assert {"users", "candidates", "interview_sessions", "tests", "test_submissions", "alembic_version"} <= tables
-        assert connection.execute(text("SELECT version_num FROM alembic_version")).scalar() == "0011"
+        assert connection.execute(text("SELECT version_num FROM alembic_version")).scalar() == "0012"
     upgrade(scratch_engine)  # running again is a no-op
 
 
@@ -295,4 +297,29 @@ def test_the_draft_migration_gives_existing_attempts_an_empty_draft_and_downgrad
         columns = {row[0] for row in connection.execute(text("SELECT column_name FROM information_schema.columns WHERE table_name = 'exam_attempts'"))}
         assert not {"draft_answers", "draft_saved_at"} & columns and "participant_email" in columns
         assert connection.execute(text("SELECT count(*) FROM exam_attempts")).scalar() == 1  # the attempt itself survives
+    upgrade(scratch_engine)
+
+
+def test_the_secret_migration_encrypts_existing_second_step_secrets_and_downgrades_back_to_plain_text(scratch_engine, settings, monkeypatch):
+    upgrade(scratch_engine, "0011")
+    secret = "JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP"
+    with scratch_engine.begin() as connection:
+        connection.execute(text("INSERT INTO users (id, email, password_hash, full_name, mfa_secret) VALUES ('00000000-0000-0000-0000-000000000001', 'a@x.com', 'h', 'A', :secret)"), {"secret": secret})
+        connection.execute(text("INSERT INTO users (id, email, password_hash, full_name) VALUES ('00000000-0000-0000-0000-000000000002', 'b@x.com', 'h', 'B')"))
+    monkeypatch.setattr(settings, "secrets_encryption_key", Fernet.generate_key().decode())
+    upgrade(scratch_engine)
+    with scratch_engine.connect() as connection:
+        stored = dict(connection.execute(text("SELECT email, mfa_secret FROM users")).all())
+        assert stored["a@x.com"].startswith(PREFIX) and secret not in stored["a@x.com"] and decrypt(stored["a@x.com"]) == secret
+        assert stored["b@x.com"] is None  # an account without a second step stays without one
+        assert connection.execute(text("SELECT character_maximum_length FROM information_schema.columns WHERE table_name = 'users' AND column_name = 'mfa_secret'")).scalar() == 255
+
+    config = Config(str(BACKEND_DIR / "alembic.ini"))
+    config.set_main_option("script_location", str(BACKEND_DIR / "alembic"))
+    with scratch_engine.begin() as connection:
+        config.attributes["connection"] = connection
+        command.downgrade(config, "0011")
+    with scratch_engine.connect() as connection:
+        assert connection.execute(text("SELECT mfa_secret FROM users WHERE email = 'a@x.com'")).scalar() == secret
+        assert connection.execute(text("SELECT character_maximum_length FROM information_schema.columns WHERE table_name = 'users' AND column_name = 'mfa_secret'")).scalar() == 64
     upgrade(scratch_engine)

@@ -7,9 +7,7 @@ from app.database import SessionLocal
 from app.models import AuditLog
 from app.ratelimit import hit
 from app.security import DUMMY_PASSWORD_HASH, verify_password
-from helpers import ORIGIN, PASSWORD
-
-PRODUCTION = {"app_env": "production", "jwt_secret": "x" * 40, "initial_admin_password": "Another-Strong-1!", "public_app_url": "https://hr.example.com"}
+from helpers import ORIGIN, PASSWORD, PRODUCTION
 
 
 def test_login_sets_httponly_cookie_and_cookie_authenticates(client, make_user):
@@ -103,7 +101,7 @@ def test_only_admins_can_create_users(client, make_user, login):
 
 def test_production_refuses_insecure_configuration():
     Settings(_env_file=None, **PRODUCTION)
-    for bad in ({"jwt_secret": "short"}, {"jwt_secret": "replace-with-at-least-32-random-characters"}, {"initial_admin_password": "ChangeMe123!"}, {"public_app_url": "http://hr.example.com"}):
+    for bad in ({"jwt_secret": "short"}, {"jwt_secret": "replace-with-at-least-32-random-characters"}, {"initial_admin_password": "ChangeMe123!"}, {"public_app_url": "http://hr.example.com"}, {"secrets_encryption_key": ""}, {"secrets_encryption_key": "not-a-key"}):
         with pytest.raises(ValidationError):
             Settings(_env_file=None, **(PRODUCTION | bad))
 

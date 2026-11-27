@@ -6,6 +6,7 @@ psycopg[binary]==3.2.9
 pydantic-settings==2.10.1
 PyJWT==2.15.0
 pwdlib[argon2]==0.2.1
+cryptography==50.0.2
 email-validator==2.2.0
 python-multipart==0.0.31
 pypdf==6.21.4
