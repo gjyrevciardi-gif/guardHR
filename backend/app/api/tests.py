@@ -2,6 +2,7 @@ import uuid
 from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, UploadFile
+from pydantic import TypeAdapter, ValidationError
 from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, selectinload
@@ -9,7 +10,7 @@ from sqlalchemy.orm import Session, selectinload
 from .. import email as mailer
 from ..database import get_db
 from ..enums import QuestionType
-from ..exams import arrange, make_layout, original_answers, over_limit_seconds, seconds_left, shown_questions
+from ..exams import MAX_TEXT_ANSWER, arrange, clean_draft, make_layout, original_answers, over_limit_seconds, seconds_left, shown_questions
 from ..models import ExamAttempt, ExamEmailCode, IntegrityEvent, InterviewSession, Test, TestQuestion, TestSubmission, User
 from ..ratelimit import rate_limit
 from ..retention import delete_test
@@ -18,9 +19,11 @@ from ..schemas import (
     ExamCodeConfirm,
     ExamCodeRequest,
     ExamCodeSent,
+    ExamDraft,
     ExamEventCreate,
     ExamStart,
     ExamStarted,
+    InvitedEmails,
     PublicTestSubmit,
     TestCreate,
     TestDetailOut,
@@ -39,6 +42,9 @@ from ..verification import CODE_TTL_SECONDS, EXAM_SENDS_WINDOW_SECONDS, MAX_ATTE
 
 router = APIRouter(prefix="/tests", tags=["tests"])
 public_router = APIRouter(prefix="/public/tests", tags=["public-tests"], dependencies=[Depends(rate_limit("public-tests", 240, 60))])
+# Saving a draft happens every few seconds for everyone sitting an exam, so it is not counted against the shared per-IP
+# budget above (a room of candidates behind one address would use it up and lock the others out of submitting).
+draft_router = APIRouter(prefix="/public/tests", tags=["public-tests"], dependencies=[Depends(rate_limit("public-test-draft-ip", 1200, 60))])
 
 
 MAX_STANDALONE_SUBMISSIONS = 500
@@ -68,13 +74,21 @@ def validate_questions(payload: TestCreate | TestUpdate) -> None:
             raise HTTPException(status_code=422, detail=f"Correct answer is invalid for question {index + 1}")
 
 
+def require_email_code_for_invited(invited: list[str], email_code: bool) -> None:
+    if invited and not email_code:
+        # Saved quietly it would do nothing, and the host would think the exam was closed to everyone else.
+        raise HTTPException(status_code=422, detail="The invited list only works for an exam that checks the email with a code")
+
+
 def exam_settings(payload: TestCreate | TestUpdate) -> dict:
     """The time limit, shuffle and email code only mean something for a public exam; a plain form always saves none of them."""
     exam = not payload.form_mode
+    require_email_code_for_invited(payload.invited_emails, exam and payload.verify_candidate_email)
     return {
         "time_limit_minutes": payload.time_limit_minutes if exam else None,
         "shuffle": payload.shuffle if exam else False,
         "verify_candidate_email": payload.verify_candidate_email if exam else False,
+        "invited_emails": payload.invited_emails,
     }
 
 
@@ -100,7 +114,7 @@ def grade_answers(questions: list[TestQuestion], answers: dict) -> tuple[dict, i
             if answer is None:
                 continue
             value = str(answer).strip()
-            if len(value) > 5000:
+            if len(value) > MAX_TEXT_ANSWER:
                 raise HTTPException(status_code=422, detail="Text answer is too long")
             checked_answers[question.id] = value
             continue
@@ -187,10 +201,14 @@ def test_to_detail(test: Test, db: Session, user: User) -> TestDetailOut:
     ).all()
     return TestDetailOut(
         **TestOut.from_test(test, include_questions=False).model_dump(exclude={"questions"}),
+        invited_emails=list(test.invited_emails or []),
         questions=[TestQuestionHostOut.model_validate(question) for question in test.questions],
         sessions=review_sessions,
         standalone_submissions=[TestStandaloneSubmissionOut.model_validate(submission) for submission in standalone],
-        unfinished_attempts=[ExamAttemptOut.model_validate(attempt).model_copy(update={"expired": seconds_left(test, attempt, now) == 0}) for attempt in unfinished],
+        unfinished_attempts=[
+            ExamAttemptOut.model_validate(attempt).model_copy(update={"expired": seconds_left(test, attempt, now) == 0, "answered": len(attempt.draft_answers or {})})
+            for attempt in unfinished
+        ],
     )
 
 
@@ -231,9 +249,18 @@ async def generate_test_from_file(
     request: Request,
     file: UploadFile = File(...),
     question_count: int = Form(10),
+    time_limit_minutes: int | None = Form(None, ge=1, le=480),
+    shuffle: bool = Form(False),
+    verify_candidate_email: bool = Form(False),
+    invited_emails: list[str] = Form([]),
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
+    try:
+        invited = TypeAdapter(InvitedEmails).validate_python(invited_emails)
+    except ValidationError as exc:
+        raise HTTPException(status_code=422, detail="The invited list has an address that is not an email") from exc
+    require_email_code_for_invited(invited, verify_candidate_email)
     if question_count < 2 or question_count > 50:
         raise HTTPException(status_code=422, detail="Question count must be between 2 and 50")
     content = await file.read(8_000_001)
@@ -252,6 +279,10 @@ async def generate_test_from_file(
         description=f"Generated automatically from {file.filename}. Review questions before using in a live call.",
         form_mode=False,
         is_public=True,
+        time_limit_minutes=time_limit_minutes,
+        shuffle=shuffle,
+        verify_candidate_email=verify_candidate_email,
+        invited_emails=invited,
     )
     db.add(test)
     db.flush()
@@ -291,7 +322,9 @@ def update_test(test_id: str, payload: TestUpdate, request: Request, db: Session
     test.form_mode = payload.form_mode
     test.is_public = payload.is_public
     settings = exam_settings(payload)
-    test.time_limit_minutes, test.shuffle, test.verify_candidate_email = settings["time_limit_minutes"], settings["shuffle"], settings["verify_candidate_email"]
+    test.time_limit_minutes, test.shuffle, test.verify_candidate_email, test.invited_emails = (
+        settings["time_limit_minutes"], settings["shuffle"], settings["verify_candidate_email"], settings["invited_emails"]
+    )
 
     for index, incoming in enumerate(payload.questions):
         if incoming.id:
@@ -416,13 +449,40 @@ def begin_attempt(db: Session, test: Test, name: str, email: str, request: Reque
     left = seconds_left(test, attempt, datetime.now(timezone.utc))
     if left == 0:
         raise HTTPException(status_code=400, detail="Time is up for this attempt. Ask the organiser if you need to start again")
+    arrangement = arrange(questions, attempt.layout)
     return ExamStarted(
         attempt=attempt.id,
         started_at=as_utc(attempt.started_at),
         participant_name=attempt.participant_name,
         seconds_left=left,
-        questions=shown_questions(arrange(questions, attempt.layout)),
+        questions=shown_questions(arrangement),
+        # Saved answers go back only to someone who just proved the mailbox: otherwise knowing an email would be enough to read them.
+        draft=clean_draft(arrangement, attempt.draft_answers or {}) if verified_at else {},
     )
+
+
+@draft_router.put(
+    "/{token}/attempts/{attempt_id}/draft",
+    status_code=204,
+    dependencies=[Depends(rate_limit("public-test-draft", 40, 60, "attempt_id"))],
+)
+def save_exam_draft(token: str, attempt_id: str, payload: ExamDraft, db: Session = Depends(get_db)):
+    """Keep what the candidate has answered so far, so a crash or a change of device does not lose it. The attempt id is the key, as for submitting."""
+    test = public_test(db, token)
+    if test.form_mode:
+        raise HTTPException(status_code=400, detail="A plain form has no attempt to save")
+    attempt = open_attempt(db, attempt_id, test)
+    attempt.draft_answers = clean_draft(arrange(list(test.questions), attempt.layout), payload.answers)
+    attempt.draft_saved_at = datetime.now(timezone.utc)
+    db.commit()
+
+
+NOT_INVITED = "This address is not on the invited list. Check it, or ask the organiser."
+
+
+def is_invited(test: Test, email: str) -> bool:
+    """With an invited list, only those addresses may ask for a code or use one. No list means anyone."""
+    return not test.invited_emails or email in test.invited_emails
 
 
 def exam_that_checks_email(db: Session, token: str) -> Test:
@@ -443,6 +503,10 @@ def send_exam_code(token: str, payload: ExamCodeRequest, request: Request, db: S
     """Email a one-time code to the address given. Sent inline so a delivery failure is reported, not hidden."""
     test = exam_that_checks_email(db, token)
     email = str(payload.participant_email).lower()
+    if not is_invited(test, email):
+        audit(db, None, request, "public_test.code_refused", "test", test.id)  # no address in it: it is not someone invited
+        db.commit()
+        raise HTTPException(status_code=403, detail=NOT_INVITED)
     if already_submitted(db, test.id, email):
         raise HTTPException(status_code=409, detail="This email has already submitted this test")
     code_row = db.scalar(select(ExamEmailCode).where(ExamEmailCode.test_id == test.id, ExamEmailCode.email == email))
@@ -482,6 +546,8 @@ def confirm_exam_code(token: str, payload: ExamCodeConfirm, request: Request, db
     """The right code is the start: it begins the exam, or picks the attempt up again, in the same request."""
     test = exam_that_checks_email(db, token)
     email = str(payload.participant_email).lower()
+    if not is_invited(test, email):  # a code asked for before the list was made is no good now
+        raise HTTPException(status_code=403, detail=NOT_INVITED)
     code_row = db.scalar(select(ExamEmailCode).where(ExamEmailCode.test_id == test.id, ExamEmailCode.email == email).with_for_update())
     if code_row is None:
         raise HTTPException(status_code=409, detail="No code was requested")
@@ -549,6 +615,8 @@ def submit_public_test(token: str, payload: PublicTestSubmit, request: Request, 
     db.add(submission)
     if attempt is not None:
         attempt.submitted_at = datetime.now(timezone.utc)
+        attempt.draft_answers = {}  # the submission is the record now
+        attempt.draft_saved_at = None
     audit(db, None, request, "public_test.submitted", "test_submission", submission.id, None, {"test_id": test.id, "score": score, "total": total, "form_mode": test.form_mode})
     db.commit()
     db.refresh(submission)

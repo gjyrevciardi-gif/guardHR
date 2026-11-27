@@ -12,6 +12,9 @@ from .signals import as_utc
 # A submission this much past the limit is not reported: the browser sends at 0:00, and the request takes time.
 OVER_LIMIT_GRACE_SECONDS = 30
 
+# The longest text answer the server keeps, in a draft and on submit alike.
+MAX_TEXT_ANSWER = 5000
+
 Arrangement = list[tuple[TestQuestion, list[int]]]
 
 
@@ -62,6 +65,21 @@ def original_answers(arrangement: Arrangement, answers: dict) -> dict:
         if 0 <= shown < len(order):
             mapped[question.id] = order[shown]
     return mapped
+
+
+def clean_draft(arrangement: Arrangement, answers: dict) -> dict:
+    """A draft is best effort, so what is not a plausible answer to a question shown is dropped rather than refused: a
+    choice must be one of the positions shown, a text is kept as typed (cut at the limit) unless it is only whitespace.
+    Real validation happens when the exam is submitted."""
+    kept: dict = {}
+    for question, order in arrangement:
+        value = answers.get(question.id)
+        if question.question_type == QuestionType.short_text:
+            if isinstance(value, str) and value.strip():
+                kept[question.id] = value[:MAX_TEXT_ANSWER]
+        elif isinstance(value, int) and not isinstance(value, bool) and 0 <= value < len(order):
+            kept[question.id] = value
+    return kept
 
 
 def seconds_left(test: Test, attempt: ExamAttempt, now: datetime) -> int | None:

@@ -5,6 +5,8 @@ import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { AlertTriangle, ArrowLeft, CheckCircle2, Clipboard, ClipboardList, Edit3, ExternalLink, Plus, Save, Trash2 } from "lucide-react";
 import { AppShell } from "@/components/AppShell";
+import { ExamOptions } from "@/components/ExamOptions";
+import { firstBadAddress, parseInvited } from "@/lib/invited";
 import { StatusBadge } from "@/components/StatusBadge";
 import { api } from "@/lib/api";
 import { dateTime, eventLabels, examSignalSummary, formatDuration, sessionStatusLabels, severityLabels, severityStyles } from "@/lib/format";
@@ -37,6 +39,7 @@ export default function TestDetailPage() {
   const [timeLimit, setTimeLimit] = useState("");
   const [shuffle, setShuffle] = useState(false);
   const [verifyEmail, setVerifyEmail] = useState(false);
+  const [invited, setInvited] = useState("");
   const [questions, setQuestions] = useState<DraftQuestion[]>([emptyQuestion(false)]);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
@@ -52,6 +55,7 @@ export default function TestDetailPage() {
     setTimeLimit(data.time_limit_minutes ? String(data.time_limit_minutes) : "");
     setShuffle(data.shuffle);
     setVerifyEmail(data.verify_candidate_email);
+    setInvited(data.invited_emails.join("\n"));
     setQuestions(data.questions.map((question) => ({
       id: question.id,
       question_type: question.question_type,
@@ -147,6 +151,9 @@ export default function TestDetailPage() {
     setError("");
     setMessage("");
     try {
+      const invitedList = !formMode && verifyEmail ? parseInvited(invited) : [];
+      const badAddress = firstBadAddress(invitedList);
+      if (badAddress) throw new Error(`“${badAddress}” nuk duket si adresë email. Kontrollo listën e të ftuarve.`);
       const payload = {
         title,
         description: description.trim() || null,
@@ -155,6 +162,7 @@ export default function TestDetailPage() {
         time_limit_minutes: formMode || !timeLimit.trim() ? null : Number(timeLimit),
         shuffle: !formMode && shuffle,
         verify_candidate_email: !formMode && verifyEmail,
+        invited_emails: invitedList,
         questions: questions.map((question) => ({
           id: question.id,
           question_type: question.question_type,
@@ -268,24 +276,7 @@ export default function TestDetailPage() {
           </div>
 
           {!formMode && (
-            <fieldset className="grid gap-3 rounded-xl border border-line bg-white p-4 sm:grid-cols-2">
-              <legend className="px-1 text-sm font-bold">Për linkun publik</legend>
-              <div>
-                <label htmlFor="test-time-limit" className="label">Koha në minuta (bosh = pa kufi)</label>
-                <input id="test-time-limit" className="input" type="number" inputMode="numeric" min={1} max={480} step={1} value={timeLimit} onChange={(event) => setTimeLimit(event.target.value)} aria-describedby="test-time-limit-help" />
-                <p id="test-time-limit-help" className="mt-2 text-xs leading-5 text-muted">Numërohet nga çasti që kandidati e nis, edhe nëse rihap faqen. Një dorëzim i vonuar pranohet dhe shënohet; pas kohës nuk jepen më pyetjet.</p>
-              </div>
-              <label className="cursor-pointer rounded-xl border border-line p-4">
-                <input type="checkbox" checked={shuffle} onChange={(event) => setShuffle(event.target.checked)} className="mr-2 accent-teal" />
-                <span className="font-bold">Përzie pyetjet dhe opsionet</span>
-                <span className="mt-2 block text-xs leading-5 text-muted">Çdo kandidat i sheh në renditje tjetër, kështu që “pyetja 3 është B” nuk i hyn punës tjetrit. Pikët llogariten sipas çelësit tënd.</span>
-              </label>
-              <label className="cursor-pointer rounded-xl border border-line p-4 sm:col-span-2">
-                <input type="checkbox" checked={verifyEmail} onChange={(event) => setVerifyEmail(event.target.checked)} className="mr-2 accent-teal" />
-                <span className="font-bold">Verifiko email-in e kandidatit me kod</span>
-                <span className="mt-2 block text-xs leading-5 text-muted">Pyetjet jepen vetëm pasi kandidati të shkruajë një kod 6-shifror që i vjen te email-i që ka dhënë. Provon se e lexon atë kuti postare, jo kush është personi. Kërkon SMTP që funksionon (shih docs/deployment.md): me një server emaili të prishur askush nuk e nis testin. Kush rifreskon faqen kërkon një kod të ri.</span>
-              </label>
-            </fieldset>
+            <ExamOptions timeLimit={timeLimit} onTimeLimit={setTimeLimit} shuffle={shuffle} onShuffle={setShuffle} verifyEmail={verifyEmail} onVerifyEmail={setVerifyEmail} invited={invited} onInvited={setInvited} />
           )}
 
           <div>
@@ -394,7 +385,7 @@ function ReviewPanel({ test, onRelease }: { test: TestDetail; onRelease: (attemp
         {!test.form_mode && <p className="text-sm text-muted">Sinjalet vijnë nga browser-i i kandidatit dhe janë për t&apos;u parë, jo një vendim. Mungesa e tyre nuk provon se nuk ndodhi asgjë: një browser i modifikuar mund t&apos;i heqë, dhe screenshot ose foto e ekranit nuk zbulohet.</p>}
         {!test.form_mode && (test.time_limit_minutes || test.shuffle || test.verify_candidate_email) && (
           <p className="text-sm text-muted">
-            {test.time_limit_minutes ? `Koha: ${test.time_limit_minutes} minuta nga nisja.` : ""} {test.shuffle ? "Pyetjet dhe opsionet përzihen për çdo kandidat." : ""} {test.verify_candidate_email ? "Email-i i kandidatit verifikohet me kod para pyetjeve." : ""}
+            {test.time_limit_minutes ? `Koha: ${test.time_limit_minutes} minuta nga nisja.` : ""} {test.shuffle ? "Pyetjet dhe opsionet përzihen për çdo kandidat." : ""} {test.verify_candidate_email ? "Email-i i kandidatit verifikohet me kod para pyetjeve." : ""} {test.invited_emails.length ? `Vetëm ${test.invited_emails.length} adresa të ftuara marrin kod.` : ""}
           </p>
         )}
         {test.unfinished_attempts.length > 0 && (
@@ -407,6 +398,7 @@ function ReviewPanel({ test, onRelease }: { test: TestDetail; onRelease: (attemp
                   <div>
                     <p className="font-semibold">{attempt.participant_name}</p>
                     <p className="text-sm text-muted">{attempt.participant_email} · nisur {dateTime(attempt.started_at)}{attempt.email_verified_at ? " · email-i i verifikuar" : ""}{attempt.expired ? " · koha ka mbaruar" : ""}</p>
+                    <p className="text-sm text-muted">{attempt.draft_saved_at ? `Ka përgjigjur ${attempt.answered} nga ${test.question_count} pyetje · ruajtur ${dateTime(attempt.draft_saved_at)}` : "Ende pa përgjigje të ruajtura"}</p>
                   </div>
                   <button type="button" onClick={() => onRelease(attempt)} className="btn-secondary" aria-label={`Lejo ${attempt.participant_name} të fillojë përsëri`}>Lejo përsëri</button>
                 </li>
