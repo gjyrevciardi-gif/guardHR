@@ -75,10 +75,14 @@ def validate_questions(payload: TestCreate | TestUpdate) -> None:
 def exam_settings(payload: TestCreate | TestUpdate) -> dict:
     """The time limit, shuffle and email code only mean something for a public exam; a plain form always saves none of them."""
     exam = not payload.form_mode
+    if payload.invited_emails and not (exam and payload.verify_candidate_email):
+        # Saved quietly it would do nothing, and the host would think the exam was closed to everyone else.
+        raise HTTPException(status_code=422, detail="The invited list only works for an exam that checks the email with a code")
     return {
         "time_limit_minutes": payload.time_limit_minutes if exam else None,
         "shuffle": payload.shuffle if exam else False,
         "verify_candidate_email": payload.verify_candidate_email if exam else False,
+        "invited_emails": payload.invited_emails,
     }
 
 
@@ -191,6 +195,7 @@ def test_to_detail(test: Test, db: Session, user: User) -> TestDetailOut:
     ).all()
     return TestDetailOut(
         **TestOut.from_test(test, include_questions=False).model_dump(exclude={"questions"}),
+        invited_emails=list(test.invited_emails or []),
         questions=[TestQuestionHostOut.model_validate(question) for question in test.questions],
         sessions=review_sessions,
         standalone_submissions=[TestStandaloneSubmissionOut.model_validate(submission) for submission in standalone],
@@ -298,7 +303,9 @@ def update_test(test_id: str, payload: TestUpdate, request: Request, db: Session
     test.form_mode = payload.form_mode
     test.is_public = payload.is_public
     settings = exam_settings(payload)
-    test.time_limit_minutes, test.shuffle, test.verify_candidate_email = settings["time_limit_minutes"], settings["shuffle"], settings["verify_candidate_email"]
+    test.time_limit_minutes, test.shuffle, test.verify_candidate_email, test.invited_emails = (
+        settings["time_limit_minutes"], settings["shuffle"], settings["verify_candidate_email"], settings["invited_emails"]
+    )
 
     for index, incoming in enumerate(payload.questions):
         if incoming.id:
@@ -451,6 +458,14 @@ def save_exam_draft(token: str, attempt_id: str, payload: ExamDraft, db: Session
     db.commit()
 
 
+NOT_INVITED = "This address is not on the invited list. Check it, or ask the organiser."
+
+
+def is_invited(test: Test, email: str) -> bool:
+    """With an invited list, only those addresses may ask for a code or use one. No list means anyone."""
+    return not test.invited_emails or email in test.invited_emails
+
+
 def exam_that_checks_email(db: Session, token: str) -> Test:
     test = public_test(db, token)
     if test.form_mode:
@@ -469,6 +484,10 @@ def send_exam_code(token: str, payload: ExamCodeRequest, request: Request, db: S
     """Email a one-time code to the address given. Sent inline so a delivery failure is reported, not hidden."""
     test = exam_that_checks_email(db, token)
     email = str(payload.participant_email).lower()
+    if not is_invited(test, email):
+        audit(db, None, request, "public_test.code_refused", "test", test.id)  # no address in it: it is not someone invited
+        db.commit()
+        raise HTTPException(status_code=403, detail=NOT_INVITED)
     if already_submitted(db, test.id, email):
         raise HTTPException(status_code=409, detail="This email has already submitted this test")
     code_row = db.scalar(select(ExamEmailCode).where(ExamEmailCode.test_id == test.id, ExamEmailCode.email == email))
@@ -508,6 +527,8 @@ def confirm_exam_code(token: str, payload: ExamCodeConfirm, request: Request, db
     """The right code is the start: it begins the exam, or picks the attempt up again, in the same request."""
     test = exam_that_checks_email(db, token)
     email = str(payload.participant_email).lower()
+    if not is_invited(test, email):  # a code asked for before the list was made is no good now
+        raise HTTPException(status_code=403, detail=NOT_INVITED)
     code_row = db.scalar(select(ExamEmailCode).where(ExamEmailCode.test_id == test.id, ExamEmailCode.email == email).with_for_update())
     if code_row is None:
         raise HTTPException(status_code=409, detail="No code was requested")

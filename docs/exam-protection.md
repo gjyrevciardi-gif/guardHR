@@ -51,11 +51,19 @@ It is the call flow's mechanism (`app/verification.py`, [candidate-checks.md](ca
 | Resend | 30 s between codes; at most 10 codes per address **per hour**. A call caps codes for the call's whole life, because the host can issue a new link; here nobody can, so the cap clears itself within the hour |
 | Requests | 10 code requests an hour and 30 confirmations per 10 minutes, per IP and test |
 | Stored | `exam_email_codes`: the address and only an HMAC of the code (keyed with `JWT_SECRET`, bound to that row) |
-| Audited | `public_test.code_sent`, `code_failed`, `code_locked`, `code_verified`, with the IP; never the address or the code |
+| Audited | `public_test.code_sent`, `code_failed`, `code_locked`, `code_verified`, `code_refused` (an address off the invited list), with the IP; never the address or the code |
+
+**Invited list (optional).** Under the email code option the host can paste the addresses that may take the exam (`tests.invited_emails`, one per line or separated by commas; up to 500; stored lower case, repeats dropped). Empty means anyone with the link, as before. With a list, asking for a code (and confirming one) is refused with 403 for any other address: nothing is mailed to it and no code row is written, and `public_test.code_refused` is audited without the address. This closes the throwaway-mailbox gap: only mailboxes the host named can start the exam. Rules worth knowing:
+
+- The list needs the email code. Saving a list on a test that does not check email, or on a plain form, is refused (422) rather than quietly ignored, and so is switching the code off while a list stands, because that would open the exam without the host noticing.
+- It is the host's: only the test's owner gets it back (`GET /api/tests/{id}`); the public link, the test list and every candidate response leave it out, so nobody learns who else was invited.
+- A candidate who types an address that is not on it is told so ("not on the invited list"). That lets someone with the link test whether an address is invited (at most 10 requests an hour per test); the list is not otherwise revealed. Known limit: a uniform answer would hide this but leave a mistyping candidate waiting for a mail that never comes.
+- Changing the list takes effect at once, including for a code that was asked for earlier: confirming it is refused if the address is no longer on the list.
+- The addresses are personal data the host entered. They are kept with the test and removed when the test is deleted; the retention purge, which works on attempts, codes and submissions, does not touch them.
 
 What it does and does not do:
 
-- It proves the person can read that mailbox. It does **not** prove who they are: a friend who reads a code out loud passes, and a throwaway mailbox works. It closes two gaps without it: a made-up name with a made-up email no longer gets the questions, and knowing someone else's address no longer lets you pick up their attempt.
+- It proves the person can read that mailbox. It does **not** prove who they are: a friend who reads a code out loud passes, and without an invited list a throwaway mailbox works. It closes two gaps without it: a made-up name with a made-up email no longer gets the questions, and knowing someone else's address no longer lets you pick up their attempt.
 - Anyone with the link can ask for codes to be sent to any address, up to the caps, and can use up an address's ten codes for an hour. It annoys; it cannot start the exam as them.
 - It needs a working SMTP relay (see [deployment.md](deployment.md)). With a broken one nobody can start the test, and the candidate is told the code could not be sent (502).
 - The name is still self-declared. The attempt keeps the name given at the first start.
@@ -108,6 +116,10 @@ Migration `0010` adds `tests.verify_candidate_email` (default off), the `exam_em
 
 Migration `0011` adds `exam_attempts.draft_answers` (JSON, empty by default) and `draft_saved_at`. Every existing attempt starts with nothing saved. It is additive and downgradable; downgrading discards the saved drafts and nothing else. An exam page opened before the upgrade keeps working and simply does not save to the server.
 
+## Upgrading to the invited list
+
+Migration `0013` adds `tests.invited_emails` (JSON, an empty list for every existing test, which keeps behaving as before: anyone with the link). It is additive and downgradable; downgrading discards the lists and nothing else. It builds on `0012` (the encrypted second-step secret), so that migration comes first.
+
 ## Possible next steps (not built)
 
-Letting the host open a draft, or accept it as the submission, for someone whose time ran out with the page closed (today the count is all they see; reading someone's unsubmitted answers is a privacy decision for the operator). A host-supplied list of invited addresses (so only those can ask for a code) would close the throwaway-mailbox gap above; it needs a data model of its own.
+Letting the host open a draft, or accept it as the submission, for someone whose time ran out with the page closed (today the count is all they see; reading someone's unsubmitted answers is a privacy decision for the operator, and `/privacy` currently promises the host sees only how many questions were answered, so it would also need new privacy text before it is built).

@@ -117,6 +117,8 @@ class Test(Base):
     shuffle: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
     # Public exam link only: the candidate must enter a code emailed to the address they give before the questions appear.
     verify_candidate_email: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
+    # With the email code on: the lower-case addresses allowed to ask for a code. Empty means anyone. Host-only: never in a public response.
+    invited_emails: Mapped[list[str]] = mapped_column(JSON, default=list, server_default="[]")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     questions: Mapped[list["TestQuestion"]] = relationship(cascade="all, delete-orphan", order_by="TestQuestion.position")
 

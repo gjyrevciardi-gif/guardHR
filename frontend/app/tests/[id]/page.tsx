@@ -6,6 +6,7 @@ import { useParams, useRouter } from "next/navigation";
 import { AlertTriangle, ArrowLeft, CheckCircle2, Clipboard, ClipboardList, Edit3, ExternalLink, Plus, Save, Trash2 } from "lucide-react";
 import { AppShell } from "@/components/AppShell";
 import { ExamOptions } from "@/components/ExamOptions";
+import { firstBadAddress, parseInvited } from "@/lib/invited";
 import { StatusBadge } from "@/components/StatusBadge";
 import { api } from "@/lib/api";
 import { dateTime, eventLabels, examSignalSummary, formatDuration, sessionStatusLabels, severityLabels, severityStyles } from "@/lib/format";
@@ -38,6 +39,7 @@ export default function TestDetailPage() {
   const [timeLimit, setTimeLimit] = useState("");
   const [shuffle, setShuffle] = useState(false);
   const [verifyEmail, setVerifyEmail] = useState(false);
+  const [invited, setInvited] = useState("");
   const [questions, setQuestions] = useState<DraftQuestion[]>([emptyQuestion(false)]);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
@@ -53,6 +55,7 @@ export default function TestDetailPage() {
     setTimeLimit(data.time_limit_minutes ? String(data.time_limit_minutes) : "");
     setShuffle(data.shuffle);
     setVerifyEmail(data.verify_candidate_email);
+    setInvited(data.invited_emails.join("\n"));
     setQuestions(data.questions.map((question) => ({
       id: question.id,
       question_type: question.question_type,
@@ -148,6 +151,9 @@ export default function TestDetailPage() {
     setError("");
     setMessage("");
     try {
+      const invitedList = !formMode && verifyEmail ? parseInvited(invited) : [];
+      const badAddress = firstBadAddress(invitedList);
+      if (badAddress) throw new Error(`“${badAddress}” nuk duket si adresë email. Kontrollo listën e të ftuarve.`);
       const payload = {
         title,
         description: description.trim() || null,
@@ -156,6 +162,7 @@ export default function TestDetailPage() {
         time_limit_minutes: formMode || !timeLimit.trim() ? null : Number(timeLimit),
         shuffle: !formMode && shuffle,
         verify_candidate_email: !formMode && verifyEmail,
+        invited_emails: invitedList,
         questions: questions.map((question) => ({
           id: question.id,
           question_type: question.question_type,
@@ -269,7 +276,7 @@ export default function TestDetailPage() {
           </div>
 
           {!formMode && (
-            <ExamOptions timeLimit={timeLimit} onTimeLimit={setTimeLimit} shuffle={shuffle} onShuffle={setShuffle} verifyEmail={verifyEmail} onVerifyEmail={setVerifyEmail} />
+            <ExamOptions timeLimit={timeLimit} onTimeLimit={setTimeLimit} shuffle={shuffle} onShuffle={setShuffle} verifyEmail={verifyEmail} onVerifyEmail={setVerifyEmail} invited={invited} onInvited={setInvited} />
           )}
 
           <div>
@@ -378,7 +385,7 @@ function ReviewPanel({ test, onRelease }: { test: TestDetail; onRelease: (attemp
         {!test.form_mode && <p className="text-sm text-muted">Sinjalet vijnë nga browser-i i kandidatit dhe janë për t&apos;u parë, jo një vendim. Mungesa e tyre nuk provon se nuk ndodhi asgjë: një browser i modifikuar mund t&apos;i heqë, dhe screenshot ose foto e ekranit nuk zbulohet.</p>}
         {!test.form_mode && (test.time_limit_minutes || test.shuffle || test.verify_candidate_email) && (
           <p className="text-sm text-muted">
-            {test.time_limit_minutes ? `Koha: ${test.time_limit_minutes} minuta nga nisja.` : ""} {test.shuffle ? "Pyetjet dhe opsionet përzihen për çdo kandidat." : ""} {test.verify_candidate_email ? "Email-i i kandidatit verifikohet me kod para pyetjeve." : ""}
+            {test.time_limit_minutes ? `Koha: ${test.time_limit_minutes} minuta nga nisja.` : ""} {test.shuffle ? "Pyetjet dhe opsionet përzihen për çdo kandidat." : ""} {test.verify_candidate_email ? "Email-i i kandidatit verifikohet me kod para pyetjeve." : ""} {test.invited_emails.length ? `Vetëm ${test.invited_emails.length} adresa të ftuara marrin kod.` : ""}
           </p>
         )}
         {test.unfinished_attempts.length > 0 && (

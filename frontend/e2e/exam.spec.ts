@@ -310,7 +310,9 @@ test("the create page saves the time limit, the shuffle and the email code", asy
     await page.locator("#test-title").fill("Created with options");
     await page.locator("#test-time-limit").fill("25");
     await page.getByLabel("Përzie pyetjet dhe opsionet").check();
+    await expect(page.locator("#test-invited")).toHaveCount(0); // the list only makes sense with the email code
     await page.getByLabel("Verifiko email-in e kandidatit me kod").check();
+    await page.locator("#test-invited").fill("Ardi@Example.com, bora@example.com\nardi@example.com");
     await page.locator("#question-0-prompt").fill("What is 2 + 2?");
     await page.getByLabel("Opsioni 1", { exact: true }).fill("Three");
     await page.getByLabel("Opsioni 2", { exact: true }).fill("Four");
@@ -318,8 +320,17 @@ test("the create page saves the time limit, the shuffle and the email code", asy
     await page.getByRole("button", { name: "Ruaj testin" }).click();
     await expect(page.getByText("Testi u krijua")).toBeVisible();
 
-    const tests: { title: string; time_limit_minutes: number | null; shuffle: boolean; verify_candidate_email: boolean }[] = await (await request.get(`${API}/tests`, { headers: host })).json();
-    expect(tests.find((created) => created.title === "Created with options")).toMatchObject({ time_limit_minutes: 25, shuffle: true, verify_candidate_email: true });
+    const tests: { id: string; public_token: string; title: string; time_limit_minutes: number | null; shuffle: boolean; verify_candidate_email: boolean }[] = await (await request.get(`${API}/tests`, { headers: host })).json();
+    const created = tests.find((test) => test.title === "Created with options");
+    expect(created).toMatchObject({ time_limit_minutes: 25, shuffle: true, verify_candidate_email: true });
+
+    // The invited list: stored lower case without repeats, only for the host, and an address off it is refused (and mailed nothing).
+    const detail = await (await request.get(`${API}/tests/${created!.id}`, { headers: host })).json();
+    expect(detail.invited_emails).toEqual(["ardi@example.com", "bora@example.com"]);
+    const publicView = await request.get(`${API}/public/tests/${created!.public_token}`);
+    expect(await publicView.text()).not.toContain("example.com");
+    const stranger = await request.post(`${API}/public/tests/${created!.public_token}/verification`, { data: { participant_email: "stranger@example.com" } });
+    expect(stranger.status()).toBe(403);
 
     // A form has no exam to protect: the options are not even offered for it.
     await page.goto("/tests/new");

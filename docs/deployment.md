@@ -120,6 +120,8 @@ Migration `0011` adds `exam_attempts.draft_answers` and `draft_saved_at`: the an
 
 Migration `0012` encrypts the two-step verification secrets already stored (see [account-security.md](account-security.md#encrypting-the-secret)). **Set `SECRETS_ENCRYPTION_KEY` before deploying it**: the production overlay will not start without one, and the migration encrypts with the key it finds. Back the key up apart from the database; losing it means every enrolled user needs a manual two-step reset. It is the one new required setting, and it adds one dependency (`cryptography`), so rebuild the backend image. Downgrading decrypts the secrets back to plain text and needs the key.
 
+Migration `0013` adds `tests.invited_emails`, the optional list of addresses allowed to take an exam that checks email (see [exam-protection.md](exam-protection.md#email-code-the-hosts-option)). Existing tests get an empty list and keep letting anyone with the link ask for a code. It is additive and downgradable. The list holds email addresses the host typed; it is kept with the test and deleted with it, so mention it in your own privacy notice if hosts will use it, and note that backups hold it until pruned.
+
 The interface has a light and a dark theme (a toggle in every header; the choice is kept in the browser's local storage). Nothing server-side changed for this, and no new environment variable is needed.
 
 ## Known limits (deliberate)

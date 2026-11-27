@@ -54,7 +54,7 @@ export interface TestStandaloneSubmission {
 }
 /** Someone who started a public exam and has not submitted. */
 export interface ExamAttempt { id: string; participant_name: string; participant_email: string; started_at: string; email_verified_at: string | null; answered: number; draft_saved_at: string | null; expired: boolean }
-export interface TestDetail extends Test { sessions: TestReviewSession[]; standalone_submissions: TestStandaloneSubmission[]; unfinished_attempts: ExamAttempt[]; questions: Required<TestQuestion>[] }
+export interface TestDetail extends Test { invited_emails: string[]; sessions: TestReviewSession[]; standalone_submissions: TestStandaloneSubmission[]; unfinished_attempts: ExamAttempt[]; questions: Required<TestQuestion>[] }
 export interface PublicTest { id: string; title: string; description: string | null; form_mode: boolean; question_count: number; questions: TestQuestion[] }
 export interface InterviewSession {
   id: string; title: string; public_token: string; status: string; review_status: ReviewStatus;

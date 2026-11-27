@@ -5,6 +5,7 @@ import Link from "next/link";
 import { ArrowLeft, Eye, FileUp, Plus, Save, Trash2 } from "lucide-react";
 import { AppShell } from "@/components/AppShell";
 import { ExamOptions } from "@/components/ExamOptions";
+import { firstBadAddress, parseInvited } from "@/lib/invited";
 import { api } from "@/lib/api";
 import { useRequireSession } from "@/lib/session";
 import { QuestionType, Test } from "@/lib/types";
@@ -30,6 +31,7 @@ export default function NewTestPage() {
   const [timeLimit, setTimeLimit] = useState("");
   const [shuffle, setShuffle] = useState(false);
   const [verifyEmail, setVerifyEmail] = useState(false);
+  const [invited, setInvited] = useState("");
   const [questions, setQuestions] = useState<DraftQuestion[]>([emptyQuestion(false)]);
   const [created, setCreated] = useState<Test | null>(null);
   const [error, setError] = useState("");
@@ -98,6 +100,9 @@ export default function NewTestPage() {
     setLoading(true);
     setError("");
     try {
+      const invitedList = !formMode && verifyEmail ? parseInvited(invited) : [];
+      const badAddress = firstBadAddress(invitedList);
+      if (badAddress) throw new Error(`“${badAddress}” nuk duket si adresë email. Kontrollo listën e të ftuarve.`);
       const payload = {
         title,
         description: description.trim() || null,
@@ -106,6 +111,7 @@ export default function NewTestPage() {
         time_limit_minutes: formMode || !timeLimit.trim() ? null : Number(timeLimit),
         shuffle: !formMode && shuffle,
         verify_candidate_email: !formMode && verifyEmail,
+        invited_emails: invitedList,
         questions: questions.map((question) => ({
           question_type: question.question_type,
           prompt: question.prompt,
@@ -216,7 +222,7 @@ export default function NewTestPage() {
                 <textarea id="test-description" className="input min-h-24" value={description} onChange={(event) => setDescription(event.target.value)} />
               </div>
 
-              {!formMode && <ExamOptions timeLimit={timeLimit} onTimeLimit={setTimeLimit} shuffle={shuffle} onShuffle={setShuffle} verifyEmail={verifyEmail} onVerifyEmail={setVerifyEmail} />}
+              {!formMode && <ExamOptions timeLimit={timeLimit} onTimeLimit={setTimeLimit} shuffle={shuffle} onShuffle={setShuffle} verifyEmail={verifyEmail} onVerifyEmail={setVerifyEmail} invited={invited} onInvited={setInvited} />}
 
               <div className="space-y-4">
                 {questions.map((question, questionIndex) => (
