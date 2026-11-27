@@ -161,7 +161,12 @@ npm run lint
 npm run typecheck
 npm run build
 
-# Një test smoke me Playwright (kandidati bën një provim, hosti sheh pikët dhe sinjalet). Duhen ndezur API-ja në :8100
+# Teste smoke me Playwright: kandidati bën një provim dhe hosti sheh pikët dhe sinjalet; një host dhe një kandidat
+# takohen në një call të vërtetë (dy browser-a, kamera dhe mikrofon të rremë, video në të dyja anët, ndarja e ekranit,
+# sinjalet live, shënimet e hostit, mbyllja; të dyja radhët e hyrjes). Nëse call-i dështon, raporti ka log-un WebRTC të secilës anë.
+# Rifreskimi i faqes së kandidatit në mes të call-it (lidhja e vjetër mbyllet dhe ndërtohet një e re) nuk ka test të
+# automatizuar: në provat Chrome me kamerë të rreme e mbyllte herë pas here vetë kamerën kur faqja riçelej dhe testi dështonte rreth gjysmën e herëve.
+# Duhen ndezur API-ja në :8100
 # dhe frontend-i në :3100 (p.sh. `node .next/standalone/server.js` me PORT=3100 pas `npm run build`).
 PW_CHANNEL=chrome npm run e2e               # me Chrome-in që ke (ose `npx playwright install chromium` dhe pa PW_CHANNEL)
                                             # vendos E2E_EMAIL / E2E_PASSWORD nëse admini nuk është hr@example.com
