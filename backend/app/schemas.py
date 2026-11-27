@@ -1,8 +1,8 @@
 import json
 from datetime import datetime
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 
-from pydantic import AliasChoices, BaseModel, ConfigDict, EmailStr, Field, computed_field, field_validator
+from pydantic import AfterValidator, AliasChoices, BaseModel, ConfigDict, EmailStr, Field, computed_field, field_validator
 
 from .config import get_settings
 from .enums import EventType, QuestionType, ReviewOutcome, ReviewStatus, UserRole
@@ -10,8 +10,17 @@ from .signals import Severity
 
 MAX_EVENT_METADATA_BYTES = 4096
 MAX_ANSWERS = 200
+MAX_INVITED_EMAILS = 500
 MAX_EXAM_EVENTS = 300
 EXAM_EVENT_TYPES = frozenset({EventType.tab_hidden, EventType.copy_paste})
+
+
+def _distinct_lowercase(addresses: list[EmailStr]) -> list[str]:
+    return list(dict.fromkeys(str(address).lower() for address in addresses))
+
+
+# Addresses are compared in lower case, as the exam code routes do; repeats are dropped, order is kept.
+InvitedEmails = Annotated[list[EmailStr], Field(max_length=MAX_INVITED_EMAILS), AfterValidator(_distinct_lowercase)]
 
 
 class LoginRequest(BaseModel):
@@ -113,6 +122,11 @@ class TestCreate(BaseModel):
     description: str | None = Field(default=None, max_length=2000)
     form_mode: bool = False
     is_public: bool = True
+    # Public exam link only; a plain form ignores both.
+    time_limit_minutes: int | None = Field(default=None, ge=1, le=480)
+    shuffle: bool = False
+    verify_candidate_email: bool = False
+    invited_emails: InvitedEmails = Field(default_factory=list)  # needs the email code; empty means anyone
     questions: list[TestQuestionCreate] = Field(min_length=1, max_length=100)
 
 
@@ -121,6 +135,10 @@ class TestUpdate(BaseModel):
     description: str | None = Field(default=None, max_length=2000)
     form_mode: bool = False
     is_public: bool = True
+    time_limit_minutes: int | None = Field(default=None, ge=1, le=480)
+    shuffle: bool = False
+    verify_candidate_email: bool = False
+    invited_emails: InvitedEmails = Field(default_factory=list)  # needs the email code; empty means anyone
     questions: list[TestQuestionUpdate] = Field(min_length=1, max_length=100)
 
 
@@ -144,6 +162,9 @@ class TestOut(BaseModel):
     description: str | None
     is_public: bool = True
     form_mode: bool = False
+    time_limit_minutes: int | None = None
+    shuffle: bool = False
+    verify_candidate_email: bool = False
     created_at: datetime
     question_count: int = 0
     questions: list[TestQuestionOut] = Field(default_factory=list)
@@ -158,6 +179,9 @@ class TestOut(BaseModel):
             description=test.description,
             is_public=test.is_public,
             form_mode=test.form_mode,
+            time_limit_minutes=test.time_limit_minutes,
+            shuffle=test.shuffle,
+            verify_candidate_email=test.verify_candidate_email,
             created_at=test.created_at,
             question_count=question_count if question_count is not None else len(test.questions),
             questions=[TestQuestionOut.model_validate(q) for q in test.questions] if include_questions else [],
@@ -232,10 +256,34 @@ class ExamStart(BaseModel):
     participant_email: EmailStr
 
 
+class ExamCodeRequest(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True)
+    participant_email: EmailStr
+
+
+class ExamCodeSent(BaseModel):
+    expires_in_seconds: int
+    resend_after_seconds: int
+
+
+class ExamCodeConfirm(ExamStart):
+    """The name and email as given when the code was asked for, and the code that came to that email."""
+
+    code: str = Field(pattern=r"^[0-9]{6}$")
+
+
+class ExamDraft(BaseModel):
+    answers: dict[str, Any] = Field(max_length=MAX_ANSWERS)
+
+
 class ExamStarted(BaseModel):
     attempt: str
     started_at: datetime
+    participant_name: str
+    seconds_left: int | None = None  # None: no time limit
     questions: list[TestQuestionOut]
+    # What this attempt had saved on the server, only for someone who proved the mailbox (empty otherwise).
+    draft: dict[str, int | str] = Field(default_factory=dict)
 
 
 class ExamEventOut(BaseModel):
@@ -290,7 +338,32 @@ class TestStandaloneSubmissionOut(BaseModel):
     total: int
     answers: dict[str, Any]
     events: list[ExamEventOut] = Field(default_factory=list, validation_alias=AliasChoices("integrity_events", "events"))
+    started_at: datetime | None = None
+    over_limit_seconds: int | None = None
+    email_verified_at: datetime | None = None
     submitted_at: datetime
+
+    @computed_field
+    @property
+    def duration_seconds(self) -> int | None:
+        if self.started_at is None:
+            return None
+        started = self.started_at if self.started_at.tzinfo else self.started_at.replace(tzinfo=self.submitted_at.tzinfo)  # SQLite drops the zone
+        return max(0, round((self.submitted_at - started).total_seconds()))
+
+
+class ExamAttemptOut(BaseModel):
+    """Someone who started a public exam and has not submitted. `id` is for the host's release action only."""
+
+    model_config = ConfigDict(from_attributes=True)
+    id: str
+    participant_name: str
+    participant_email: EmailStr
+    started_at: datetime
+    email_verified_at: datetime | None = None
+    answered: int = 0  # how many questions have an answer saved: the count only, never the answers
+    draft_saved_at: datetime | None = None
+    expired: bool = False  # past the time limit: they cannot get the questions again until the host releases them
 
 
 class TestDetailOut(BaseModel):
@@ -300,11 +373,16 @@ class TestDetailOut(BaseModel):
     description: str | None
     is_public: bool = True
     form_mode: bool = False
+    time_limit_minutes: int | None = None
+    shuffle: bool = False
+    verify_candidate_email: bool = False
+    invited_emails: list[str] = Field(default_factory=list)  # host only: TestOut is also what the public exam link returns
     created_at: datetime
     question_count: int = 0
     questions: list[TestQuestionHostOut] = Field(default_factory=list)
     sessions: list[TestReviewSessionOut] = Field(default_factory=list)
     standalone_submissions: list[TestStandaloneSubmissionOut] = Field(default_factory=list)
+    unfinished_attempts: list[ExamAttemptOut] = Field(default_factory=list)
 
 
 class CandidateOut(BaseModel):

@@ -1,6 +1,5 @@
 import pytest
 
-from app.security import create_access_token, create_exam_attempt
 from helpers import make_test, start_exam
 
 FORM = [{"question_type": "short_text", "prompt": "Team name", "options": [], "correct_option_index": None}]
@@ -50,24 +49,13 @@ def test_an_exam_cannot_be_submitted_without_starting_it(client, hr):
     created = make_test(client, hr)
     assert submit(client, created, None, participant_name="Ardi", participant_email="a@example.com").status_code == 400
     assert submit(client, created, "garbage").status_code == 400
+    assert submit(client, created, "8c8c3c3e-0d3b-4b4a-9a43-5f9d6b2f8e11").status_code == 400  # well-formed, but nobody started it
     assert client.get(f"/api/tests/{created['id']}", headers=hr).json()["standalone_submissions"] == []
 
 
 def test_an_attempt_works_only_for_the_test_it_was_started_on(client, hr):
     first, second = make_test(client, hr), make_test(client, hr)
     assert submit(client, second, start_exam(client, first)["attempt"]).status_code == 400
-
-
-def test_a_login_token_is_not_an_attempt(client, hr, make_user):
-    created = make_test(client, hr)
-    assert submit(client, created, create_access_token(make_user("other@example.com").id)).status_code == 400
-
-
-def test_an_expired_attempt_asks_to_start_again(client, hr):
-    created = make_test(client, hr)
-    expired = create_exam_attempt(created["id"], "Ardi", "ardi@example.com", hours=-1)
-    response = submit(client, created, expired)
-    assert response.status_code == 400 and "expired" in response.json()["detail"]
 
 
 def test_the_exam_is_recorded_for_who_started_it_whatever_the_body_says(client, hr):
@@ -87,11 +75,12 @@ def test_one_submission_per_email_is_refused_at_the_start_not_after_the_whole_ex
     assert submit(client, created, other["attempt"]).status_code == 201
 
 
-def test_two_attempts_started_before_either_is_submitted_still_give_one_submission(client, hr):
+def test_starting_again_picks_the_same_attempt_up_and_it_can_be_submitted_once(client, hr):
     created = make_test(client, hr)
-    first, second = start_exam(client, created)["attempt"], start_exam(client, created)["attempt"]
-    assert submit(client, created, first).status_code == 201
-    assert submit(client, created, second).status_code == 409
+    first, again = start_exam(client, created), start_exam(client, created, email="ARDI@example.com")
+    assert again["attempt"] == first["attempt"] and again["started_at"] == first["started_at"]
+    assert submit(client, created, first["attempt"]).status_code == 201
+    assert submit(client, created, first["attempt"]).status_code == 409
 
 
 def test_starting_is_limited(client, hr, settings, monkeypatch):

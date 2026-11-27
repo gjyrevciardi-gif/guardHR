@@ -29,7 +29,7 @@ Limits: 5 requests per hour per client IP, 3 per hour per address, 10 confirmati
 
 ## Two-step verification (TOTP)
 
-Standards-based (RFC 6238: HMAC-SHA-1, 30 s steps, 6 digits), so it works with Google Authenticator, Microsoft Authenticator, Aegis, 1Password and similar. Implemented with the standard library only (`app/mfa.py`); there is no new dependency.
+Standards-based (RFC 6238: HMAC-SHA-1, 30 s steps, 6 digits), so it works with Google Authenticator, Microsoft Authenticator, Aegis, 1Password and similar. The code arithmetic uses the standard library only (`app/mfa.py`); encrypting the stored secret uses `cryptography` (see below).
 
 **Enrolling** (Settings → Verifikimi në dy hapa): `POST /api/auth/mfa/setup` returns a fresh secret and an `otpauth://` URI; the page shows the secret in groups and the link. It only counts once `POST /api/auth/mfa/enable` has seen a valid code from it, and that call returns **eight single-use recovery codes, once**. Only their keyed hashes are stored.
 
@@ -43,15 +43,25 @@ Standards-based (RFC 6238: HMAC-SHA-1, 30 s steps, 6 digits), so it works with G
 
 `REQUIRE_ADMIN_MFA` (blank = on in production, off in development; `true`/`false` overrides) makes `require_admin` answer `403` until an administrator has two-step verification on. Today the only administrator-only route is `POST /api/auth/users`. `GET /api/auth/me` returns `mfa_enabled` and `mfa_setup_required` (an administrator who still has to enrol); the Settings page shows an explanation in that case. An administrator can always sign in and reach Settings, so the requirement cannot lock anyone out. HR users are never forced; they can turn it on themselves.
 
+## Encrypting the secret
+
+`users.mfa_secret` is stored as `enc1:` + a Fernet token (AES-128-CBC with an HMAC-SHA-256, from the `cryptography` package), written and read by `app/secrets_box.py` through the column type, so the rest of the code only ever sees the plain secret.
+
+- **Generate a key** once: `python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"`, and set it as `SECRETS_ENCRYPTION_KEY`. **In production the API refuses to start without one** (and with a malformed one). In development a blank key stores the secret as plain text, as before.
+- **Back the key up separately from the database backups** (a password manager or secret store). Without it nobody who enrolled can sign in with a code: the secret cannot be decrypted, and the API says so (`SECRETS_ENCRYPTION_KEY does not match…`) instead of treating the code as wrong. Recovery is the manual database edit described below.
+- **Rotating the key:** put the new key first and keep the old one after a comma (`NEW,OLD`), restart, run `python -m app.secrets_box` (re-encrypts every secret with the first key), then drop `OLD` and restart.
+- **Upgrading an existing database:** migration `0012` widens the column and encrypts every secret already stored, using the key in the environment the migration runs in (the backend container runs it on start, so set the key first). With no key it only widens the column; run `python -m app.secrets_box` once a key is set. Values written before the key existed stay readable until then. The migration is reversible: the downgrade decrypts back to plain text and needs the key.
+- Rotating `JWT_SECRET` does not affect this key, and changing this key does not sign anybody out.
+
 ## Known limits
 
-- **The TOTP secret is stored as is.** A code can only be checked with the secret, and the project has no encryption-at-rest dependency, so anyone who can read the `users` table can read it. A database leak therefore weakens the second factor (not the password, which is an Argon2 hash). Encrypting the column with a key kept outside the database is the upgrade path.
+- **The TOTP secret is encrypted, with a key that lives next to the app, not in the database.** A code can only be checked with the secret, so it has to be readable to the API: `SECRETS_ENCRYPTION_KEY` (a Fernet key, see [Encrypting the secret](#encrypting-the-secret)) is in the API's environment. A leaked dump, a stolen backup or read-only access to the `users` table no longer gives the secret; someone who can read the API's environment, or run code in it, still can. It does not protect the recovery codes (they are one-way hashes already) or the password (Argon2).
 - **No QR code.** Drawing one needs a dependency; the page shows the secret and an `otpauth://` link instead. Authenticator apps all support manual entry.
 - **No recovery-code regeneration** and no "which recovery codes are left" view. Turn two-step verification off and on again to get a new set.
 - **No administrator-initiated reset of someone else's second factor.** An HR user who loses both the phone and the recovery codes needs a database edit (clear `mfa_enabled`, `mfa_secret`, `mfa_recovery_hashes`).
 - **Rate limits are per API process** (in memory), like the login limits. Run one worker or move the counters to Redis (see `app/ratelimit.py`).
 - **Timing:** the reset request does slightly more work for an address that has an account than for one that does not (a database write, no mail wait). The per-address and per-IP limits make this impractical to exploit; it is not constant time.
-- Rotating `JWT_SECRET` invalidates sessions, outstanding reset links and every recovery code. Authenticator codes keep working.
+- Rotating `JWT_SECRET` invalidates sessions, outstanding reset links and every recovery code. Authenticator codes keep working (they depend on `SECRETS_ENCRYPTION_KEY`, not on `JWT_SECRET`).
 - Failed password attempts for a known account are not shown in that account's own audit log (they are recorded without an owner, as before) so that guessing cannot flood it.
 
 ## Tests

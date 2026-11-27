@@ -4,11 +4,14 @@ from pathlib import Path
 
 import pytest
 from alembic.config import Config
+from cryptography.fernet import Fernet
 from sqlalchemy import create_engine, text
 from sqlalchemy.engine import make_url
+from sqlalchemy.exc import IntegrityError
 
 from alembic import command
 from app.database import engine
+from app.secrets_box import PREFIX, decrypt
 
 pytestmark = pytest.mark.skipif(engine.dialect.name != "postgresql", reason="migrations are PostgreSQL-only")
 
@@ -50,7 +53,7 @@ def test_fresh_database_reaches_head(scratch_engine):
     with scratch_engine.connect() as connection:
         tables = {row[0] for row in connection.execute(text("SELECT table_name FROM information_schema.tables WHERE table_schema = 'public'"))}
         assert {"users", "candidates", "interview_sessions", "tests", "test_submissions", "alembic_version"} <= tables
-        assert connection.execute(text("SELECT version_num FROM alembic_version")).scalar() == "0008"
+        assert connection.execute(text("SELECT version_num FROM alembic_version")).scalar() == "0013"
     upgrade(scratch_engine)  # running again is a no-op
 
 
@@ -209,4 +212,135 @@ def test_existing_submissions_start_without_signals_and_the_exam_migration_downg
         columns = {row[0] for row in connection.execute(text("SELECT column_name FROM information_schema.columns WHERE table_name = 'test_submissions'"))}
         assert "integrity_events" not in columns and "answers" in columns
         assert connection.execute(text("SELECT count(*) FROM test_submissions")).scalar() == 1  # the answers survive
+    upgrade(scratch_engine)
+
+
+def test_existing_tests_keep_working_and_the_attempts_migration_downgrades_cleanly(scratch_engine):
+    upgrade(scratch_engine, "0008")
+    with scratch_engine.begin() as connection:
+        connection.execute(text("INSERT INTO users (id, email, password_hash, full_name) VALUES ('00000000-0000-0000-0000-000000000001', 'u@x.com', 'h', 'U')"))
+        connection.execute(text("INSERT INTO tests (id, created_by, public_token, title) VALUES ('00000000-0000-0000-0000-000000000004', '00000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000005', 'T')"))
+        connection.execute(text("INSERT INTO test_submissions (id, test_id, answers) VALUES ('00000000-0000-0000-0000-000000000006', '00000000-0000-0000-0000-000000000004', '{}')"))
+    upgrade(scratch_engine)
+    with scratch_engine.connect() as connection:
+        assert tuple(connection.execute(text("SELECT time_limit_minutes, shuffle FROM tests")).one()) == (None, False)  # nothing changes for an existing test
+        assert tuple(connection.execute(text("SELECT started_at, over_limit_seconds FROM test_submissions")).one()) == (None, None)
+
+    insert = "INSERT INTO exam_attempts (test_id, participant_name, participant_email) VALUES ('00000000-0000-0000-0000-000000000004', 'A', 'a@x.com')"
+    with scratch_engine.begin() as connection:
+        connection.execute(text(insert))
+    with pytest.raises(IntegrityError), scratch_engine.begin() as connection:
+        connection.execute(text(insert))  # one attempt per test and email
+    with pytest.raises(IntegrityError), scratch_engine.begin() as connection:
+        connection.execute(text("UPDATE tests SET time_limit_minutes = 0"))  # the limit has bounds
+
+    config = Config(str(BACKEND_DIR / "alembic.ini"))
+    config.set_main_option("script_location", str(BACKEND_DIR / "alembic"))
+    with scratch_engine.begin() as connection:
+        config.attributes["connection"] = connection
+        command.downgrade(config, "0008")
+    with scratch_engine.connect() as connection:
+        tables = {row[0] for row in connection.execute(text("SELECT table_name FROM information_schema.tables WHERE table_schema = 'public'"))}
+        columns = {row[0] for row in connection.execute(text("SELECT column_name FROM information_schema.columns WHERE table_name IN ('tests', 'test_submissions')"))}
+        assert "exam_attempts" not in tables and not {"time_limit_minutes", "shuffle", "over_limit_seconds"} & columns and "answers" in columns
+        assert connection.execute(text("SELECT count(*) FROM test_submissions")).scalar() == 1  # the answers survive
+    upgrade(scratch_engine)
+
+
+def test_the_email_code_migration_changes_nothing_for_existing_tests_and_downgrades_cleanly(scratch_engine):
+    upgrade(scratch_engine, "0009")
+    with scratch_engine.begin() as connection:
+        connection.execute(text("INSERT INTO users (id, email, password_hash, full_name) VALUES ('00000000-0000-0000-0000-000000000001', 'u@x.com', 'h', 'U')"))
+        connection.execute(text("INSERT INTO tests (id, created_by, public_token, title) VALUES ('00000000-0000-0000-0000-000000000004', '00000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000005', 'T')"))
+        connection.execute(text("INSERT INTO exam_attempts (test_id, participant_name, participant_email) VALUES ('00000000-0000-0000-0000-000000000004', 'A', 'a@x.com')"))
+    upgrade(scratch_engine)
+    with scratch_engine.connect() as connection:
+        assert connection.execute(text("SELECT verify_candidate_email FROM tests")).scalar() is False  # an existing test behaves as before
+        assert connection.execute(text("SELECT email_verified_at FROM exam_attempts")).scalar() is None
+
+    insert = "INSERT INTO exam_email_codes (test_id, email) VALUES ('00000000-0000-0000-0000-000000000004', 'a@x.com')"
+    with scratch_engine.begin() as connection:
+        connection.execute(text(insert))
+    with pytest.raises(IntegrityError), scratch_engine.begin() as connection:
+        connection.execute(text(insert))  # one code row per test and address
+
+    config = Config(str(BACKEND_DIR / "alembic.ini"))
+    config.set_main_option("script_location", str(BACKEND_DIR / "alembic"))
+    with scratch_engine.begin() as connection:
+        config.attributes["connection"] = connection
+        command.downgrade(config, "0009")
+    with scratch_engine.connect() as connection:
+        tables = {row[0] for row in connection.execute(text("SELECT table_name FROM information_schema.tables WHERE table_schema = 'public'"))}
+        columns = {row[0] for row in connection.execute(text("SELECT column_name FROM information_schema.columns WHERE table_name IN ('tests', 'exam_attempts', 'test_submissions')"))}
+        assert "exam_email_codes" not in tables and not {"verify_candidate_email", "email_verified_at"} & columns
+        assert connection.execute(text("SELECT count(*) FROM exam_attempts")).scalar() == 1  # the attempts survive
+    upgrade(scratch_engine)
+
+
+def test_the_draft_migration_gives_existing_attempts_an_empty_draft_and_downgrades_cleanly(scratch_engine):
+    upgrade(scratch_engine, "0010")
+    with scratch_engine.begin() as connection:
+        connection.execute(text("INSERT INTO users (id, email, password_hash, full_name) VALUES ('00000000-0000-0000-0000-000000000001', 'u@x.com', 'h', 'U')"))
+        connection.execute(text("INSERT INTO tests (id, created_by, public_token, title) VALUES ('00000000-0000-0000-0000-000000000004', '00000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000005', 'T')"))
+        connection.execute(text("INSERT INTO exam_attempts (test_id, participant_name, participant_email) VALUES ('00000000-0000-0000-0000-000000000004', 'A', 'a@x.com')"))
+    upgrade(scratch_engine)
+    with scratch_engine.connect() as connection:
+        draft, saved_at = connection.execute(text("SELECT draft_answers, draft_saved_at FROM exam_attempts")).one()
+        assert draft == {} and saved_at is None  # an attempt that began before the upgrade has nothing saved
+
+    config = Config(str(BACKEND_DIR / "alembic.ini"))
+    config.set_main_option("script_location", str(BACKEND_DIR / "alembic"))
+    with scratch_engine.begin() as connection:
+        config.attributes["connection"] = connection
+        command.downgrade(config, "0010")
+    with scratch_engine.connect() as connection:
+        columns = {row[0] for row in connection.execute(text("SELECT column_name FROM information_schema.columns WHERE table_name = 'exam_attempts'"))}
+        assert not {"draft_answers", "draft_saved_at"} & columns and "participant_email" in columns
+        assert connection.execute(text("SELECT count(*) FROM exam_attempts")).scalar() == 1  # the attempt itself survives
+    upgrade(scratch_engine)
+
+
+def test_the_secret_migration_encrypts_existing_second_step_secrets_and_downgrades_back_to_plain_text(scratch_engine, settings, monkeypatch):
+    upgrade(scratch_engine, "0011")
+    secret = "JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP"
+    with scratch_engine.begin() as connection:
+        connection.execute(text("INSERT INTO users (id, email, password_hash, full_name, mfa_secret) VALUES ('00000000-0000-0000-0000-000000000001', 'a@x.com', 'h', 'A', :secret)"), {"secret": secret})
+        connection.execute(text("INSERT INTO users (id, email, password_hash, full_name) VALUES ('00000000-0000-0000-0000-000000000002', 'b@x.com', 'h', 'B')"))
+    monkeypatch.setattr(settings, "secrets_encryption_key", Fernet.generate_key().decode())
+    upgrade(scratch_engine)
+    with scratch_engine.connect() as connection:
+        stored = dict(connection.execute(text("SELECT email, mfa_secret FROM users")).all())
+        assert stored["a@x.com"].startswith(PREFIX) and secret not in stored["a@x.com"] and decrypt(stored["a@x.com"]) == secret
+        assert stored["b@x.com"] is None  # an account without a second step stays without one
+        assert connection.execute(text("SELECT character_maximum_length FROM information_schema.columns WHERE table_name = 'users' AND column_name = 'mfa_secret'")).scalar() == 255
+
+    config = Config(str(BACKEND_DIR / "alembic.ini"))
+    config.set_main_option("script_location", str(BACKEND_DIR / "alembic"))
+    with scratch_engine.begin() as connection:
+        config.attributes["connection"] = connection
+        command.downgrade(config, "0011")
+    with scratch_engine.connect() as connection:
+        assert connection.execute(text("SELECT mfa_secret FROM users WHERE email = 'a@x.com'")).scalar() == secret
+        assert connection.execute(text("SELECT character_maximum_length FROM information_schema.columns WHERE table_name = 'users' AND column_name = 'mfa_secret'")).scalar() == 64
+    upgrade(scratch_engine)
+
+
+def test_the_invited_list_migration_gives_existing_tests_an_empty_list_and_downgrades_cleanly(scratch_engine):
+    upgrade(scratch_engine, "0012")
+    with scratch_engine.begin() as connection:
+        connection.execute(text("INSERT INTO users (id, email, password_hash, full_name) VALUES ('00000000-0000-0000-0000-000000000001', 'u@x.com', 'h', 'U')"))
+        connection.execute(text("INSERT INTO tests (id, created_by, public_token, title) VALUES ('00000000-0000-0000-0000-000000000004', '00000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000005', 'T')"))
+    upgrade(scratch_engine)
+    with scratch_engine.connect() as connection:
+        assert connection.execute(text("SELECT invited_emails FROM tests")).scalar() == []  # a test made before the upgrade stays open to anyone
+
+    config = Config(str(BACKEND_DIR / "alembic.ini"))
+    config.set_main_option("script_location", str(BACKEND_DIR / "alembic"))
+    with scratch_engine.begin() as connection:
+        config.attributes["connection"] = connection
+        command.downgrade(config, "0012")
+    with scratch_engine.connect() as connection:
+        columns = {row[0] for row in connection.execute(text("SELECT column_name FROM information_schema.columns WHERE table_name = 'tests'"))}
+        assert "invited_emails" not in columns and "verify_candidate_email" in columns
+        assert connection.execute(text("SELECT count(*) FROM tests")).scalar() == 1  # the test itself survives
     upgrade(scratch_engine)

@@ -2,6 +2,13 @@ from datetime import datetime, timezone
 
 PASSWORD = "StrongPass123!"
 ORIGIN = {"Origin": "http://localhost:3100"}
+PRODUCTION = {
+    "app_env": "production",
+    "jwt_secret": "x" * 40,
+    "secrets_encryption_key": "RxkcsUvH1-w3N1m3vUqYk0o4kVQxTq0uQ5wB8m7cX9s=",  # a throwaway Fernet key, only for tests
+    "initial_admin_password": "Another-Strong-1!",
+    "public_app_url": "https://hr.example.com",
+}
 
 
 def event_payload(**overrides) -> dict:

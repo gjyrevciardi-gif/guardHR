@@ -21,6 +21,8 @@ if [ -z "$health" ]; then bad "GET /api/health"; else
   echo "      frames: $(echo "$health" | sed 's/.*"frames"://')"
 fi
 
+check "/privacy names the operator (set OPERATOR_NAME and OPERATOR_CONTACT)" sh -c "curl -fsS --max-time 10 $URL/privacy | grep -q 'id=\"operator\"'"
+
 rtc=$(curl -fsS --max-time 10 "$URL/api/rtc-config" 2>/dev/null) || rtc=
 case $rtc in
   *'"username"'*) ok "/api/rtc-config offers a TURN relay with a temporary credential";;

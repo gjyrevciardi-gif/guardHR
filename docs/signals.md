@@ -15,6 +15,8 @@ Each event gets a severity when it is stored (`integrity_events.severity`: 0 inf
 | `fullscreen_exit`, `multiple_monitors` | low (`multiple_monitors` is false-positive prone: docks, mirrored displays) |
 | `window_resized`, `connection_interruption` | info |
 
+`camera_disabled` fires when the camera track ends by itself (another app took the device, or it was unplugged). The candidate's own screen also says so, with what to do (close the other app, refresh), so a dead camera is not discovered by the host first. Known gap: a track that arrives already ended fires no event, so the host gets no signal for it, only the candidate's message.
+
 ## Review queue
 
 A call moves from `No events detected` to `Requires review` when it has **one high**, **two medium** or **six low** signals (`REVIEW_HIGH`, `REVIEW_MEDIUM`, `REVIEW_LOW`). Info signals never count. This is an assumption, not a measured threshold: tune the constants. It only ever moves forward; a review the host has saved is never reset by later events.
