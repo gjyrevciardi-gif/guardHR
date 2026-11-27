@@ -247,3 +247,23 @@ for (const first of ["candidate", "host"] as const) {
     });
   });
 }
+
+// A camera another app takes, or that is unplugged, ends its track by itself. The candidate has to be told, not left sitting
+// in a call nobody can see. (Dispatching "ended" is what the browser does at that moment; the track itself stays live.)
+test("a camera that stops in the middle of a call tells the candidate", async ({ browser, request }) => {
+  test.setTimeout(90_000);
+  const { candidate, candidateJoins, run } = await openCall(browser, request, "camera");
+
+  await run(async () => {
+    await candidateJoins();
+    await expect(candidate.getByRole("alert").filter({ hasText: "Kamera ose mikrofoni u ndal" })).toHaveCount(0);
+    await expect
+      .poll(() => candidate.evaluate(() => [...document.querySelectorAll("video")].some((video) => ((video.srcObject as MediaStream | null)?.getVideoTracks().length ?? 0) > 0)), { timeout: 30_000 })
+      .toBe(true);
+    await candidate.evaluate(() => {
+      const [track] = [...document.querySelectorAll("video")].flatMap((video) => (video.srcObject as MediaStream | null)?.getVideoTracks() ?? []);
+      track.dispatchEvent(new Event("ended"));
+    });
+    await expect(candidate.getByRole("alert").filter({ hasText: "Kamera ose mikrofoni u ndal" })).toBeVisible();
+  });
+});
