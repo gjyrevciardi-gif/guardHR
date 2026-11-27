@@ -123,6 +123,29 @@ def send_verification_code(session: InterviewSession, code: str) -> None:
     deliver(message)
 
 
+def send_exam_code(email: str, test_title: str, code: str) -> None:
+    """Email the one-time code to whoever asked to start a public exam with that address. Raises on SMTP failure."""
+    minutes = CODE_TTL_SECONDS // 60
+    message = EmailMessage()
+    message["Subject"] = f"Kodi i verifikimit NemoGuardHR: {code}"
+    message["From"] = get_settings().smtp_from_email
+    message["To"] = email
+    message.set_content(
+        "\n".join(
+            [
+                "Përshëndetje,",
+                "",
+                f"Kodi yt i verifikimit për testin \"{test_title}\" është: {code}",
+                f"Vlen {minutes} minuta. Mos e jep te askush.",
+                "Nëse nuk ke kërkuar ti këtë kod, injoroje këtë email.",
+                "",
+                f"Your verification code for the test \"{test_title}\" is {code}. It is valid for {minutes} minutes. Ignore this email if you did not ask for it.",
+            ]
+        )
+    )
+    deliver(message)
+
+
 def build_password_reset(email: str, full_name: str, token: str) -> EmailMessage:
     """Albanian message with a short English line. The link is the only secret in it and works once."""
     link = f"{get_settings().public_app_url.rstrip('/')}/reset-password?token={token}"

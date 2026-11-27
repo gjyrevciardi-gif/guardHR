@@ -5,7 +5,7 @@ import pytest
 from app.api import public
 from app.database import SessionLocal
 from app.models import InterviewSession
-from helpers import event_payload, make_test
+from helpers import event_payload, make_test, start_exam
 
 
 def set_session(session_id: str, **fields) -> None:
@@ -185,7 +185,7 @@ def test_closed_or_malformed_public_tests_are_404(client, hr):
 
 def test_public_test_submissions_are_limited(client, hr, settings, monkeypatch):
     monkeypatch.setattr(settings, "rate_limit_enabled", True)
-    created = make_test(client, hr)
+    created = make_test(client, hr, form_mode=True, questions=[{"question_type": "short_text", "prompt": "Team name", "options": [], "correct_option_index": None}])
     url = f"/api/public/tests/{created['public_token']}/submissions"
     codes = [client.post(url, json={"answers": {}}).status_code for _ in range(12)]
     assert codes.count(201) == 10 and codes[-1] == 429
@@ -195,9 +195,9 @@ def test_public_test_submissions_are_limited(client, hr, settings, monkeypatch):
 @pytest.mark.parametrize("answer", [{"a": 1}, [1], "x" * 6000])
 def test_invalid_answers_are_rejected(client, hr, answer):
     created = make_test(client, hr)
-    questions = client.get(f"/api/public/tests/{created['public_token']}").json()["questions"]
-    question_id = questions[0]["id"] if not isinstance(answer, str) else questions[1]["id"]
-    assert client.post(f"/api/public/tests/{created['public_token']}/submissions", json={"answers": {question_id: answer}}).status_code == 422
+    started = start_exam(client, created)
+    question_id = started["questions"][0]["id"] if not isinstance(answer, str) else started["questions"][1]["id"]
+    assert client.post(f"/api/public/tests/{created['public_token']}/submissions", json={"attempt": started["attempt"], "answers": {question_id: answer}}).status_code == 422
 
 
 def test_analyze_frame_runs_off_the_event_loop(client, started_session, monkeypatch):

@@ -7,7 +7,7 @@ from app import retention
 from app.database import SessionLocal
 from app.main import app
 from app.models import AuditLog, IntegrityEvent, InterviewSession, TestSubmission
-from helpers import event_payload, make_test
+from helpers import event_payload, make_test, start_exam
 
 OLD = datetime.now(timezone.utc) - timedelta(days=40)  # default retention is 30 days
 
@@ -60,7 +60,8 @@ def test_purge_removes_old_submissions_but_only_for_the_caller(client, hr, other
     test = make_test(client, hr)
     other_test = make_test(client, other_hr)
     for created in (test, other_test):
-        client.post(f"/api/public/tests/{created['public_token']}/submissions", json={"participant_email": "p@example.com", "answers": {}})
+        attempt = start_exam(client, created, email="p@example.com")["attempt"]
+        client.post(f"/api/public/tests/{created['public_token']}/submissions", json={"attempt": attempt, "answers": {}})
     with SessionLocal() as db:
         for submission in db.query(TestSubmission):
             submission.submitted_at = OLD
