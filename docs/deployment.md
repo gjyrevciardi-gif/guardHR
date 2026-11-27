@@ -73,18 +73,16 @@ The room uses WebRTC. STUN alone fails for symmetric NATs and many corporate net
 - **Secrets are not in the dump.** Keep `.env` safe separately. Restoring with a different `JWT_SECRET` works, but invalidates sessions, reset links and recovery codes.
 - Video and audio are never stored, so there is nothing else to back up.
 
-**Restore drill.** Do this once before you rely on the backups and then every few months: restore the newest dump into a scratch database and compare it with the live one.
+**Restore drill.** Do this once before you rely on the backups and then every few months. `deploy/restore-drill.sh` restores the newest dump (or the one you name) into a scratch database, checks that it holds users and a migration version, prints it next to the live database, and drops the scratch copy again:
 
 ```bash
-C="docker compose -f docker-compose.yml -f docker-compose.prod.yml"
-dump=$(ls -t backups/nemoguard-*.dump | head -1)
-$C exec -T db sh -c 'createdb -U "$POSTGRES_USER" restore_check'
-$C exec -T db sh -c 'pg_restore --no-owner -U "$POSTGRES_USER" -d restore_check' < "$dump"
-$C exec -T db sh -c 'for d in "$POSTGRES_DB" restore_check; do psql -U "$POSTGRES_USER" -d "$d" -tAc "select current_database(), (select count(*) from users), (select version_num from alembic_version)"; done'
-$C exec -T db sh -c 'dropdb -U "$POSTGRES_USER" restore_check'
+./deploy/restore-drill.sh                                          # the newest dump in ./backups
+./deploy/restore-drill.sh backups/nemoguard-20260101T022300Z.dump  # or a specific one
 ```
 
-The counts should match the live database as of the dump (the two rows can differ by whatever changed since). **A real restore** after losing the database: start only `db`, `createdb` the (empty) database, `pg_restore --no-owner -d <db>` the dump as above, then start the rest; the backend runs `alembic upgrade head` on start, so a dump from an older release is migrated.
+It fails (non-zero) when there is no dump, when the newest dump is older than 36 hours (`MAX_AGE_HOURS`; the nightly backup has stopped, which is the thing worth finding out), when the restore errors, or when the restored copy is empty. It only reads the live database, and it refuses to run if `SCRATCH_DB` (default `restore_check`) is the live database's name. A dump that merely reads back (what `backup.sh` checks) is not the same as one that restores, which is why this exists.
+
+Verified here against a real PostgreSQL with a stand-in for `docker compose exec` (success, no dump, a stale newest dump, a corrupt dump, an empty dump, and the live-database refusal); not against your compose stack, so run it once there. The two rows printed can differ by whatever changed since the dump; a restored copy with far fewer users or sessions than you expect is the sign to look closer. **A real restore** after losing the database: start only `db`, `createdb` the (empty) database, `pg_restore --no-owner -d <db>` the dump as above, then start the rest; the backend runs `alembic upgrade head` on start, so a dump from an older release is migrated.
 
 ## Error reporting (Sentry)
 
