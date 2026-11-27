@@ -1,5 +1,61 @@
 # NemoGuardHR MVP
 
+[![CI](https://github.com/gjyrevciardi-gif/guardHR/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/gjyrevciardi-gif/guardHR/actions/workflows/ci.yml)
+[![E2E](https://github.com/gjyrevciardi-gif/guardHR/actions/workflows/e2e.yml/badge.svg?branch=main)](https://github.com/gjyrevciardi-gif/guardHR/actions/workflows/e2e.yml)
+[![Security audit](https://github.com/gjyrevciardi-gif/guardHR/actions/workflows/security.yml/badge.svg?branch=main)](https://github.com/gjyrevciardi-gif/guardHR/actions/workflows/security.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+
+## Overview
+
+A portfolio project: a web app for online job interviews and exams that records **integrity signals** (tab switches, a camera that stops, a phone or a second person in view) and shows them to the interviewer for **manual review**. It never decides anything itself: no automatic rejection, no emotion recognition, no lie detection, and no video or audio is stored.
+
+The interface and the README sections below are in Albanian; the design notes in `docs/` are in English. This section is the English summary.
+
+**What it does**
+
+- **Live interview call.** The host invites a candidate by link or email; the candidate gives explicit consent, checks their camera and microphone, and joins a WebRTC call with screen sharing. Signals reach the host live.
+- **Public exams and forms.** Tests can be typed in or generated from a PDF, DOCX, TXT or Markdown file. Options: a time limit, shuffled questions, an emailed code to prove the candidate can read their mailbox, and a list of invited addresses. Answers are saved on the server while the candidate works.
+- **Review.** Each signal has a severity; a call moves into a review queue by a simple rule; the host adds notes and a review outcome. The page also says how much of the call the monitor was actually running, so "no signals" is not read as "nothing happened" ([docs/signals.md](docs/signals.md)).
+- **Accounts and privacy.** HttpOnly cookie sessions, login throttling, password reset, two-step verification (TOTP, with the secret encrypted in the database and recovery codes), an audit log, and retention rules that delete candidate data after a period the host sets.
+
+**Stack.** Next.js 15 (React 19, TypeScript, Tailwind) · FastAPI, SQLAlchemy 2, Alembic · PostgreSQL · MediaPipe face detection in the browser · Ultralytics YOLO on the server for phone and extra-person detection (frames are analysed in memory and never stored) · Docker Compose with an Nginx overlay for production · coturn for the TURN relay.
+
+**Engineering worth a look**
+
+- **A real end-to-end call test.** Playwright opens a host and a candidate in two browsers with fake camera and microphone, and checks that video arrives on both sides, in both join orders. Writing it exposed three WebRTC negotiation bugs, which are fixed (`frontend/e2e/call.spec.ts`, `frontend/components/MeetingRoom.tsx`).
+- **Over 300 backend tests**, run on SQLite and on PostgreSQL, including tests that apply every Alembic migration to a database from the first release.
+- **CI** runs lint, type checks, the tests, the browser tests, and `pip-audit` / `npm audit` weekly; Dependabot opens pull requests for outdated dependencies.
+- **Operations scripts**: a backup with a read-back check, and a restore drill that restores into a scratch database and compares it with the live one ([docs/deployment.md](docs/deployment.md)).
+- **Design notes that say what was *not* done**: [docs/signals.md](docs/signals.md), [docs/exam-protection.md](docs/exam-protection.md), [docs/accessibility.md](docs/accessibility.md), [docs/account-security.md](docs/account-security.md).
+
+**Run it locally**
+
+```bash
+cp .env.example .env     # set JWT_SECRET and the initial password
+docker compose up --build
+```
+
+Open `http://localhost:3100` and sign in with the development account from `.env.example`. Sent emails appear in the local mail catcher at `http://localhost:8025`. Details, and how to run without Docker, are in the Albanian sections below.
+
+## Limits
+
+This is a portfolio project. It is **not deployed anywhere and has never been used with real candidates.** What that means:
+
+- **The signals are hints, not proof.** They come from the candidate's own browser, which the candidate controls, so anyone who can script requests can fake or switch them off. The app cannot see a second device or a person off camera. Absence of signals does not mean absence of cheating.
+- **The thresholds are assumptions.** The rule that moves a call into the review queue (one high, two medium or six low signals) was chosen by the developer and not calibrated on real calls.
+- **Never run on a real server.** The HTTPS certificate script, the TURN relay configuration, relayed media, YOLO timing under load, and the restore drill were checked against stand-ins and in CI, not on a live host. [docs/staging.md](docs/staging.md) lists what was and was not verified.
+- **One backend process.** Call rooms and rate limits live in memory, so it does not scale past one worker without adding Redis.
+- **Albanian only.** English and German are not implemented.
+- **No legal review.** The privacy page describes what the software does. It is not legal advice, and nobody has checked it against any law. Anyone using this with real people needs their own legal review.
+
+## License
+
+[MIT](LICENSE).
+
+---
+
+*Dokumentacioni më poshtë është shqip.*
+
 NemoGuardHR është një aplikacion HR për regjistrimin e sinjaleve të integritetit gjatë intervistave online. Sinjalet paraqiten për **shqyrtim manual**; sistemi nuk etiketon kandidatin si mashtrues dhe nuk merr vendime punësimi.
 
 ## Struktura
