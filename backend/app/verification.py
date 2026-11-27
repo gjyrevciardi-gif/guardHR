@@ -22,6 +22,8 @@ CODE_TTL_SECONDS = 600
 RESEND_COOLDOWN_SECONDS = 30
 MAX_ATTEMPTS = 5
 MAX_SENDS = 10
+# A public exam's codes are capped per address per hour, not for good (nobody is there to issue a new link).
+EXAM_SENDS_WINDOW_SECONDS = 3600
 
 
 def hash_code(session_id: str, code: str) -> str:
@@ -42,17 +44,22 @@ def issue_code(session: InterviewSession, now: datetime | None = None) -> str:
         raise HTTPException(status_code=409, detail="Email verification is not required for this call")
     if not session.consented_at:
         raise HTTPException(status_code=403, detail="Consent is required before verification")
-    if session.verification_sent_at:
-        wait = RESEND_COOLDOWN_SECONDS - (now - as_utc(session.verification_sent_at)).total_seconds()
+    return new_code(session, now, "Too many codes requested. Ask the host for a new link.")
+
+
+def new_code(holder, now: datetime, too_many: str) -> str:
+    """Respect the resend cooldown and the cap, then store a fresh code's hash on `holder` (a call, or an exam's code row)."""
+    if holder.verification_sent_at:
+        wait = RESEND_COOLDOWN_SECONDS - (now - as_utc(holder.verification_sent_at)).total_seconds()
         if wait > 0:
             raise HTTPException(status_code=429, detail="Wait before requesting another code", headers={"Retry-After": str(int(wait) + 1)})
-    if session.verification_sends >= MAX_SENDS:
-        raise HTTPException(status_code=429, detail="Too many codes requested. Ask the host for a new link.")
+    if holder.verification_sends >= MAX_SENDS:
+        raise HTTPException(status_code=429, detail=too_many)
     code = f"{secrets.randbelow(10**CODE_DIGITS):0{CODE_DIGITS}d}"
-    session.verification_code_hash = hash_code(session.id, code)
-    session.verification_sent_at = now
-    session.verification_sends += 1
-    session.verification_attempts = 0
+    holder.verification_code_hash = hash_code(holder.id, code)
+    holder.verification_sent_at = now
+    holder.verification_sends += 1
+    holder.verification_attempts = 0
     return code
 
 
