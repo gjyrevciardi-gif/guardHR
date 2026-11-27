@@ -53,7 +53,7 @@ def test_fresh_database_reaches_head(scratch_engine):
     with scratch_engine.connect() as connection:
         tables = {row[0] for row in connection.execute(text("SELECT table_name FROM information_schema.tables WHERE table_schema = 'public'"))}
         assert {"users", "candidates", "interview_sessions", "tests", "test_submissions", "alembic_version"} <= tables
-        assert connection.execute(text("SELECT version_num FROM alembic_version")).scalar() == "0012"
+        assert connection.execute(text("SELECT version_num FROM alembic_version")).scalar() == "0013"
     upgrade(scratch_engine)  # running again is a no-op
 
 
@@ -322,4 +322,25 @@ def test_the_secret_migration_encrypts_existing_second_step_secrets_and_downgrad
     with scratch_engine.connect() as connection:
         assert connection.execute(text("SELECT mfa_secret FROM users WHERE email = 'a@x.com'")).scalar() == secret
         assert connection.execute(text("SELECT character_maximum_length FROM information_schema.columns WHERE table_name = 'users' AND column_name = 'mfa_secret'")).scalar() == 64
+    upgrade(scratch_engine)
+
+
+def test_the_invited_list_migration_gives_existing_tests_an_empty_list_and_downgrades_cleanly(scratch_engine):
+    upgrade(scratch_engine, "0012")
+    with scratch_engine.begin() as connection:
+        connection.execute(text("INSERT INTO users (id, email, password_hash, full_name) VALUES ('00000000-0000-0000-0000-000000000001', 'u@x.com', 'h', 'U')"))
+        connection.execute(text("INSERT INTO tests (id, created_by, public_token, title) VALUES ('00000000-0000-0000-0000-000000000004', '00000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000005', 'T')"))
+    upgrade(scratch_engine)
+    with scratch_engine.connect() as connection:
+        assert connection.execute(text("SELECT invited_emails FROM tests")).scalar() == []  # a test made before the upgrade stays open to anyone
+
+    config = Config(str(BACKEND_DIR / "alembic.ini"))
+    config.set_main_option("script_location", str(BACKEND_DIR / "alembic"))
+    with scratch_engine.begin() as connection:
+        config.attributes["connection"] = connection
+        command.downgrade(config, "0012")
+    with scratch_engine.connect() as connection:
+        columns = {row[0] for row in connection.execute(text("SELECT column_name FROM information_schema.columns WHERE table_name = 'tests'"))}
+        assert "invited_emails" not in columns and "verify_candidate_email" in columns
+        assert connection.execute(text("SELECT count(*) FROM tests")).scalar() == 1  # the test itself survives
     upgrade(scratch_engine)

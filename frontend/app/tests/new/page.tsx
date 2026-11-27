@@ -5,6 +5,7 @@ import Link from "next/link";
 import { ArrowLeft, Eye, FileUp, Plus, Save, Trash2 } from "lucide-react";
 import { AppShell } from "@/components/AppShell";
 import { ExamOptions } from "@/components/ExamOptions";
+import { firstBadAddress, parseInvited } from "@/lib/invited";
 import { api } from "@/lib/api";
 import { useRequireSession } from "@/lib/session";
 import { QuestionType, Test } from "@/lib/types";
@@ -30,6 +31,7 @@ export default function NewTestPage() {
   const [timeLimit, setTimeLimit] = useState("");
   const [shuffle, setShuffle] = useState(false);
   const [verifyEmail, setVerifyEmail] = useState(false);
+  const [invited, setInvited] = useState("");
   const [questions, setQuestions] = useState<DraftQuestion[]>([emptyQuestion(false)]);
   const [created, setCreated] = useState<Test | null>(null);
   const [error, setError] = useState("");
@@ -77,6 +79,13 @@ export default function NewTestPage() {
     }));
   }
 
+  function invitedAddresses() {
+    const list = verifyEmail ? parseInvited(invited) : [];
+    const badAddress = firstBadAddress(list);
+    if (badAddress) throw new Error(`“${badAddress}” nuk duket si adresë email. Kontrollo listën e të ftuarve.`);
+    return list;
+  }
+
   async function generateFromFile(file: File | null) {
     if (!file) return;
     setUploading(true);
@@ -88,6 +97,7 @@ export default function NewTestPage() {
       if (timeLimit.trim()) formData.append("time_limit_minutes", timeLimit.trim());
       formData.append("shuffle", String(shuffle));
       formData.append("verify_candidate_email", String(verifyEmail));
+      invitedAddresses().forEach((address) => formData.append("invited_emails", address));
       setCreated(await api<Test>("/tests/generate-from-file", { method: "POST", body: formData }));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Testi nuk u krijua nga dokumenti");
@@ -101,6 +111,7 @@ export default function NewTestPage() {
     setLoading(true);
     setError("");
     try {
+      const invitedList = formMode ? [] : invitedAddresses();
       const payload = {
         title,
         description: description.trim() || null,
@@ -109,6 +120,7 @@ export default function NewTestPage() {
         time_limit_minutes: formMode || !timeLimit.trim() ? null : Number(timeLimit),
         shuffle: !formMode && shuffle,
         verify_candidate_email: !formMode && verifyEmail,
+        invited_emails: invitedList,
         questions: questions.map((question) => ({
           question_type: question.question_type,
           prompt: question.prompt,
@@ -175,7 +187,7 @@ export default function NewTestPage() {
 
             {!formMode && (
               <div className="mt-6">
-                <ExamOptions timeLimit={timeLimit} onTimeLimit={setTimeLimit} shuffle={shuffle} onShuffle={setShuffle} verifyEmail={verifyEmail} onVerifyEmail={setVerifyEmail} />
+                <ExamOptions timeLimit={timeLimit} onTimeLimit={setTimeLimit} shuffle={shuffle} onShuffle={setShuffle} verifyEmail={verifyEmail} onVerifyEmail={setVerifyEmail} invited={invited} onInvited={setInvited} />
               </div>
             )}
 
