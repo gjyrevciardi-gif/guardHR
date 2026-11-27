@@ -238,6 +238,9 @@ async def generate_test_from_file(
     request: Request,
     file: UploadFile = File(...),
     question_count: int = Form(10),
+    time_limit_minutes: int | None = Form(None, ge=1, le=480),
+    shuffle: bool = Form(False),
+    verify_candidate_email: bool = Form(False),
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
@@ -259,6 +262,9 @@ async def generate_test_from_file(
         description=f"Generated automatically from {file.filename}. Review questions before using in a live call.",
         form_mode=False,
         is_public=True,
+        time_limit_minutes=time_limit_minutes,
+        shuffle=shuffle,
+        verify_candidate_email=verify_candidate_email,
     )
     db.add(test)
     db.flush()

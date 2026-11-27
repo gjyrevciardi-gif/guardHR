@@ -85,6 +85,9 @@ export default function NewTestPage() {
       const formData = new FormData();
       formData.append("file", file);
       formData.append("question_count", String(questionCount));
+      if (timeLimit.trim()) formData.append("time_limit_minutes", timeLimit.trim());
+      formData.append("shuffle", String(shuffle));
+      formData.append("verify_candidate_email", String(verifyEmail));
       setCreated(await api<Test>("/tests/generate-from-file", { method: "POST", body: formData }));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Testi nuk u krijua nga dokumenti");
@@ -171,6 +174,12 @@ export default function NewTestPage() {
             </section>
 
             {!formMode && (
+              <div className="mt-6">
+                <ExamOptions timeLimit={timeLimit} onTimeLimit={setTimeLimit} shuffle={shuffle} onShuffle={setShuffle} verifyEmail={verifyEmail} onVerifyEmail={setVerifyEmail} />
+              </div>
+            )}
+
+            {!formMode && (
               <section className="card mt-6 p-7">
                 <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
                   <div className="flex items-center gap-3">
@@ -215,8 +224,6 @@ export default function NewTestPage() {
                 <label htmlFor="test-description" className="label">Përshkrimi ose udhëzimet</label>
                 <textarea id="test-description" className="input min-h-24" value={description} onChange={(event) => setDescription(event.target.value)} />
               </div>
-
-              {!formMode && <ExamOptions timeLimit={timeLimit} onTimeLimit={setTimeLimit} shuffle={shuffle} onShuffle={setShuffle} verifyEmail={verifyEmail} onVerifyEmail={setVerifyEmail} />}
 
               <div className="space-y-4">
                 {questions.map((question, questionIndex) => (

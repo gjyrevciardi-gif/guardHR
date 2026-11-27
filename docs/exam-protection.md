@@ -12,7 +12,7 @@ A **test** shared as a public link (`/forms/<link>`, `form_mode` off) is an exam
 
 ## Time limit
 
-`tests.time_limit_minutes` (1 to 480, empty = none), set under **Për linkun publik**, on the page that creates a test and in its editor. The clock starts at the attempt's start and is the server's: the page counts down from the seconds left the server reports, so a wrong clock on the candidate's device neither shortens nor stretches it.
+`tests.time_limit_minutes` (1 to 480, empty = none), set under **Për linkun publik**, on the page that creates a test (it applies to a test typed in by hand and to one made from an uploaded document) and in its editor. The clock starts at the attempt's start and is the server's: the page counts down from the seconds left the server reports, so a wrong clock on the candidate's device neither shortens nor stretches it.
 
 - At zero the page sends what has been answered so far, complete or not.
 - After the limit the server **does not hand out the questions again** (400 "Time is up"); the host sees the person under **Kanë nisur, pa dorëzuar** with "koha ka mbaruar".
