@@ -4,9 +4,20 @@ import { ShieldCheck } from "lucide-react";
 import { Wordmark } from "@/components/Wordmark";
 
 export const metadata: Metadata = { title: "Politika e privatësisë", robots: { index: false } };
+// The operator block below is read from the environment when the page is requested, not when the image is built.
+export const dynamic = "force-dynamic";
+
+// Who runs this deployment (docs/deployment.md, "Privacy page"). Shown only when a name and a contact are set; the legal
+// basis is the operator's own wording and is never invented here.
+function operatorDetails() {
+  const { OPERATOR_NAME, OPERATOR_CONTACT, OPERATOR_LEGAL_BASIS } = process.env;
+  const name = OPERATOR_NAME?.trim();
+  const contact = OPERATOR_CONTACT?.trim();
+  return name && contact ? { name, contact, legalBasis: OPERATOR_LEGAL_BASIS?.trim() } : null;
+}
 
 // Describes what the software does. The operator running this deployment is responsible for the data and
-// should add its legal entity and contact below (see docs/deployment.md, "Privacy page").
+// names itself through OPERATOR_NAME / OPERATOR_CONTACT / OPERATOR_LEGAL_BASIS (see docs/deployment.md, "Privacy page").
 const sections: Array<{ title: string; body: string[] }> = [
   {
     title: "Kush është përgjegjës",
@@ -46,6 +57,7 @@ const sections: Array<{ title: string; body: string[] }> = [
 ];
 
 export default function PrivacyPage() {
+  const operator = operatorDetails();
   return (
     <main id="main" className="min-h-screen bg-canvas px-5 py-10">
       <div className="mx-auto max-w-3xl">
@@ -56,6 +68,14 @@ export default function PrivacyPage() {
         <article className="card p-7 sm:p-9">
           <h1 className="text-3xl font-bold">Politika e privatësisë</h1>
           <p className="mt-3 text-slate-600">Çfarë bën ky sistem me të dhënat e tua gjatë një call-i ose testi.</p>
+          {operator && (
+            <section id="operator" className="mt-8">
+              <h2 className="text-lg font-bold">Operatori i këtij sistemi</h2>
+              <p className="mt-2 text-sm leading-6 text-slate-700">{operator.name}</p>
+              <p className="mt-2 text-sm leading-6 text-slate-700">Kontakti për të drejtat e tua (qasje, korrigjim, fshirje): {operator.contact}</p>
+              {operator.legalBasis && <p className="mt-2 text-sm leading-6 text-slate-700">Baza ligjore: {operator.legalBasis}</p>}
+            </section>
+          )}
           {sections.map((section) => (
             <section key={section.title} className="mt-8">
               <h2 className="text-lg font-bold">{section.title}</h2>

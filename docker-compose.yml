@@ -71,6 +71,10 @@ services:
         NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8100/api}
     environment:
       NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8100/api}
+      # Shown on /privacy (docs/deployment.md, "Privacy page"); read at request time, no rebuild needed.
+      OPERATOR_NAME: ${OPERATOR_NAME:-}
+      OPERATOR_CONTACT: ${OPERATOR_CONTACT:-}
+      OPERATOR_LEGAL_BASIS: ${OPERATOR_LEGAL_BASIS:-}
     ports:
       - "${FRONTEND_PORT:-3100}:3000"
     depends_on:

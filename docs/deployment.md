@@ -31,7 +31,14 @@ The development stack (`docker-compose.yml`) is not meant for the internet: it p
    ```
 
    The overlay removes every published port except Nginx (80 redirects to 443), serves the API under `/api` on the same origin as the UI, and enables `TRUST_PROXY_HEADERS` (Nginx *overwrites* `X-Forwarded-For`, so the value the backend sees is trustworthy).
-5. **First login** with the initial admin, **turn on two-step verification** in Settings (in production the API refuses administrator features until you do; see `docs/account-security.md`), then create HR accounts with `POST /api/auth/users` (`role: "hr"`). Public registration is closed in production unless you set `REGISTRATION_ENABLED=true`.
+5. **Test the mail relay.** Invitations, email codes and password resets depend on it, and a broken one only shows up as a candidate who never gets a code:
+
+   ```bash
+   docker compose -f docker-compose.yml -f docker-compose.prod.yml exec backend python -m app.mailcheck you@example.com
+   ```
+
+   It prints `OK` or the relay's own error and exits non-zero on failure. "Accepted" is not "delivered": check that the message arrived and was not filed as spam (set up SPF/DKIM for the `SMTP_FROM_EMAIL` domain with your provider).
+6. **First login** with the initial admin, **turn on two-step verification** in Settings (in production the API refuses administrator features until you do; see `docs/account-security.md`), then create HR accounts with `POST /api/auth/users` (`role: "hr"`). Public registration is closed in production unless you set `REGISTRATION_ENABLED=true`.
 
 With `APP_ENV=production` the backend **refuses to start** when `JWT_SECRET` is shorter than 32 characters or still a placeholder, when `SECRETS_ENCRYPTION_KEY` is missing or malformed, when `INITIAL_ADMIN_PASSWORD` is the default, or when `PUBLIC_APP_URL` is not https.
 
@@ -137,7 +144,15 @@ The interface has a light and a dark theme (a toggle in every header; the choice
 
 ## Privacy page
 
-`/privacy` describes what the software does. The consent page shows the host's name and the retention period from the database. Before real candidates use a deployment, the operator should add their own legal entity, contact address and legal basis to `frontend/app/privacy/page.tsx`: the page does not name an operator because the software cannot know it, and nothing in it is legal advice.
+`/privacy` describes what the software does. The consent page shows the host's name and the retention period from the database. Before real candidates use a deployment, name the operator in `.env` (no rebuild; restart the frontend):
+
+```env
+OPERATOR_NAME=Your Company L.L.C., Rr. Example 1, Ferizaj
+OPERATOR_CONTACT=privacy@example.com
+OPERATOR_LEGAL_BASIS=<your own wording: what lets you process this data, in Albanian>
+```
+
+With a name and a contact set, `/privacy` shows an "Operatori i këtij sistemi" section with them and with the legal basis, if you wrote one. Without them the section is absent, and `deploy/check-staging.sh` reports it. The software cannot know who you are or which legal basis applies, and it does not invent either: write the legal basis yourself, ideally with a lawyer, and list the providers that see candidate data (the SMTP relay, Sentry if you use it, and your TURN host). Nothing on the page is legal advice.
 
 The face-detection model and its WASM runtime are served from the app itself (`frontend/public/mediapipe/`, see the README there), so the candidate's browser makes no CDN request. Candidate pages load no third-party scripts; the only third party a candidate's IP reaches is the STUN/TURN server in `ICE_SERVERS` (Google STUN by default; point it at your own relay, as in [staging.md](staging.md), to remove even that).
 
