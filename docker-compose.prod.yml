@@ -53,7 +53,7 @@ services:
     restart: unless-stopped
 
   proxy:
-    image: nginx:1.27-alpine
+    image: nginx:1.29-alpine
     ports:
       - "80:80"
       - "443:443"
