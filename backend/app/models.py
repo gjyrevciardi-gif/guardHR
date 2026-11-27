@@ -6,6 +6,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .database import Base
 from .enums import EventType, QuestionType, ReviewOutcome, ReviewStatus, SessionStatus, UserRole, check_in
+from .secrets_box import EncryptedString
 
 
 def uuid4_str() -> str:
@@ -34,8 +35,9 @@ class User(Base):
     # Only the keyed hash of the emailed reset token is stored (app/security.py keyed_hash).
     password_reset_hash: Mapped[str | None] = mapped_column(String(64), unique=True)
     password_reset_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-    # Two-step verification (app/mfa.py). mfa_secret is set at setup and only counts once mfa_enabled is true.
-    mfa_secret: Mapped[str | None] = mapped_column(String(64))
+    # Two-step verification (app/mfa.py). mfa_secret is set at setup and only counts once mfa_enabled is true; it is
+    # encrypted at rest (app/secrets_box.py), so code here always sees the plain value.
+    mfa_secret: Mapped[str | None] = mapped_column(EncryptedString)
     mfa_enabled: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
     mfa_last_step: Mapped[int | None] = mapped_column(Integer)
     mfa_recovery_hashes: Mapped[list[str] | None] = mapped_column(JSON)

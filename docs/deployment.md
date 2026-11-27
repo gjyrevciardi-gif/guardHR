@@ -13,6 +13,7 @@ The development stack (`docker-compose.yml`) is not meant for the internet: it p
    PUBLIC_APP_URL=https://hr.example.com
    POSTGRES_PASSWORD=<strong>
    JWT_SECRET=<python -c "import secrets; print(secrets.token_hex(32))">
+   SECRETS_ENCRYPTION_KEY=<python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())">   # back it up apart from the database
    INITIAL_ADMIN_EMAIL=you@example.com
    INITIAL_ADMIN_PASSWORD=<strong, not ChangeMe123!>
    SMTP_HOST=smtp.example.com    # a real SMTP relay; there is no mail catcher in production
@@ -32,7 +33,7 @@ The development stack (`docker-compose.yml`) is not meant for the internet: it p
    The overlay removes every published port except Nginx (80 redirects to 443), serves the API under `/api` on the same origin as the UI, and enables `TRUST_PROXY_HEADERS` (Nginx *overwrites* `X-Forwarded-For`, so the value the backend sees is trustworthy).
 5. **First login** with the initial admin, **turn on two-step verification** in Settings (in production the API refuses administrator features until you do; see `docs/account-security.md`), then create HR accounts with `POST /api/auth/users` (`role: "hr"`). Public registration is closed in production unless you set `REGISTRATION_ENABLED=true`.
 
-With `APP_ENV=production` the backend **refuses to start** when `JWT_SECRET` is shorter than 32 characters or still a placeholder, when `INITIAL_ADMIN_PASSWORD` is the default, or when `PUBLIC_APP_URL` is not https.
+With `APP_ENV=production` the backend **refuses to start** when `JWT_SECRET` is shorter than 32 characters or still a placeholder, when `SECRETS_ENCRYPTION_KEY` is missing or malformed, when `INITIAL_ADMIN_PASSWORD` is the default, or when `PUBLIC_APP_URL` is not https.
 
 ## TURN (candidates behind strict NATs)
 
@@ -68,7 +69,7 @@ The room uses WebRTC. STUN alone fails for symmetric NATs and many corporate net
 ```
 
 - **A copy on the same server is not a backup.** Copy `backups/` to another machine or storage account (`rclone`, `rsync` over SSH), and alert if the newest file there is older than a day.
-- **A dump is as sensitive as the database.** It holds candidate names, emails, answers and review notes, and the TOTP secrets as stored (see [account-security.md](account-security.md)). Keep the off-host copy encrypted and readable only by the people who may restore it.
+- **A dump is as sensitive as the database.** It holds candidate names, emails, answers and review notes, and the two-step verification secrets, which are encrypted with a key the dump does not contain (see [account-security.md](account-security.md#encrypting-the-secret)); keep that key off the backup storage. Keep the off-host copy encrypted and readable only by the people who may restore it.
 - **Backups outlive the retention purge.** Retention and `DELETE /api/sessions/{id}` act on the live database at once; the same data stays in older dumps until they are pruned, up to `KEEP_DAYS` + 1 days. Say so in your privacy notice, and keep `KEEP_DAYS` no longer than you can justify. To erase one person from backups sooner you must delete those dumps (or restore one, delete the person, and dump again).
 - **Secrets are not in the dump.** Keep `.env` safe separately. Restoring with a different `JWT_SECRET` works, but invalidates sessions, reset links and recovery codes.
 - Video and audio are never stored, so there is nothing else to back up.
@@ -117,13 +118,15 @@ Migration `0010` adds the email code for public exams: `tests.verify_candidate_e
 
 Migration `0011` adds `exam_attempts.draft_answers` and `draft_saved_at`: the answers a candidate has written so far, saved while they work and emptied on submit (see [exam-protection.md](exam-protection.md#saved-answers)). It is additive and downgradable. A candidate who never submits leaves a partial draft in their attempt; it is removed with the attempt by the retention purge, so say so in your own privacy notice, and note that backups hold it until pruned.
 
+Migration `0012` encrypts the two-step verification secrets already stored (see [account-security.md](account-security.md#encrypting-the-secret)). **Set `SECRETS_ENCRYPTION_KEY` before deploying it**: the production overlay will not start without one, and the migration encrypts with the key it finds. Back the key up apart from the database; losing it means every enrolled user needs a manual two-step reset. It is the one new required setting, and it adds one dependency (`cryptography`), so rebuild the backend image. Downgrading decrypts the secrets back to plain text and needs the key.
+
 The interface has a light and a dark theme (a toggle in every header; the choice is kept in the browser's local storage). Nothing server-side changed for this, and no new environment variable is needed.
 
 ## Known limits (deliberate)
 
 - **One backend worker.** WebSocket rooms and rate-limit counters live in process memory, and the Dockerfile pins `--workers 1`. Running several workers or replicas needs Redis pub/sub for signaling and shared rate-limit counters, or sticky routing by room token.
 - **Rate limits are per client IP**, so behind a proxy `TRUST_PROXY_HEADERS` must be on (the production overlay does this); otherwise every client shares the proxy's address.
-- **Sessions are stateless JWTs.** Logging out clears the cookie but does not revoke a token that was copied before; tokens expire after `JWT_EXPIRE_MINUTES` (default 480).
+- **Sessions are stateless JWTs.** Plain logging out clears the cookie but does not revoke a token that was copied before; tokens expire after `JWT_EXPIRE_MINUTES` (default 480). "Dil nga të gjitha pajisjet", a password change and a password reset do revoke every token at once (`docs/account-security.md`).
 - **A running call stays valid after `expires_at`.** The expiry only blocks starting; an in-progress session continues until it finishes.
 - **Duplicate public submissions** to a plain form are prevented per email with an application check, not a database constraint, so two simultaneous submissions with the same email can both succeed. A public exam is stricter: one attempt per test and email is a database constraint, and submitting locks the attempt row.
 - **The in-progress retention job runs in the API process.** With several replicas it would run on each; it is idempotent, but a single cron is cleaner at that point.
