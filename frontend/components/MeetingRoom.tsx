@@ -130,7 +130,8 @@ export function MeetingRoom({ token, role, session, onFinish, sessionId, backHre
   const localSpeaking = useSpeaking(localStream, micEnabled);
   const remoteSpeaking = useSpeaking(remoteAudioStream, true);
   const mediaBlockedByBrowser = typeof window !== "undefined" && !window.isSecureContext;
-  const mediaBlockedMessage = "Kamera, mikrofoni dhe screen share nuk aktivizohen ne HTTP me IP lokale. Monitoring per nderrim faqeje punon prape. Per kamera nga dy pajisje duhet HTTPS/tunnel, ose hapeni ne localhost ne te njejtin PC.";
+  const cameraLostMessage = "Kamera ose mikrofoni u ndal: ose e mori një aplikacion tjetër, ose u shkëput. Mbyll aplikacionet që e përdorin (Teams, Zoom) dhe rifresko faqen.";
+  const mediaBlockedMessage ="Kamera, mikrofoni dhe screen share nuk aktivizohen ne HTTP me IP lokale. Monitoring per nderrim faqeje punon prape. Per kamera nga dy pajisje duhet HTTPS/tunnel, ose hapeni ne localhost ne te njejtin PC.";
 
   const pushRoomAlert = useCallback((alert: { id: string; title: string; message: string }) => {
     setRoomAlerts((current) => [alert, ...current.filter((item) => item.id !== alert.id)].slice(0, 4));
@@ -381,6 +382,12 @@ export function MeetingRoom({ token, role, session, onFinish, sessionId, backHre
       }
 
       localStreamRef.current = camera;
+      // A device another app took or that was unplugged ends its track by itself (stop() from here does not fire this), and a
+      // track can even arrive already ended. Without a word the candidate just sits in a call nobody can see.
+      camera.getTracks().forEach((track) => {
+        if (track.readyState === "ended") setError(cameraLostMessage);
+        else track.addEventListener("ended", () => setError(cameraLostMessage));
+      });
       setLocalStream(camera);
       setCameraEnabled(camera.getVideoTracks().some((track) => track.enabled));
       setMicEnabled(camera.getAudioTracks().some((track) => track.enabled));
